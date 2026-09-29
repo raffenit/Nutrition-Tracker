@@ -1,0 +1,53 @@
+:root {
+  color-scheme: dark;
+  --bg: #101412;
+  --raise: #1a221e;
+  --line: #2c3832;
+  --text: #f4f7f5;
+  --muted: #a8bbb2;
+  --accent: #8fd0a8;
+  --ink: #102117;
+  --water: #7ec8e3;
+  --protein: #f08a7a;
+  --fat: #e6b15c;
+  --carb: #8fb7e8;
+  --fiber: #c3d37a;
+  --danger: #e07a7a;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+button, input, select { font: inherit; color: inherit; }
+button { min-height: 44px; border: 0; border-radius: 12px; background: var(--raise); padding: 0 14px; }
+button.primary { background: var(--accent); color: var(--ink); font-weight: 650; }
+button.danger { color: var(--danger); }
+a { color: var(--accent); }
+.app { max-width: 1100px; margin: 0 auto; padding: 16px 16px 96px; }
+.top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--accent); font-weight: 700; }
+.helix { display: block; }
+.nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.nav a, .datebar button { text-decoration: none; }
+.nav a[aria-current="page"] { background: var(--accent); color: var(--ink); }
+.grid { display: grid; gap: 14px; }
+.card { background: var(--raise); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.card h2, .card h3 { margin: 0 0 8px; font-size: 1rem; }
+.muted { color: var(--muted); }
+.notice { color: var(--fat); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+label { display: grid; gap: 6px; margin: 10px 0; }
+input, select { min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: #121816; padding: 0 12px; }
+.bar { height: 10px; background: #121816; border-radius: 99px; overflow: hidden; }
+.bar span { display: block; height: 100%; }
+.share { display: flex; height: 14px; border-radius: 99px; overflow: hidden; background: #121816; }
+.glasses { display: flex; gap: 8px; }
+.glass { width: 28px; height: 44px; border: 2px solid var(--water); border-radius: 0 0 10px 10px; position: relative; overflow: hidden; }
+.glass i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--water); }
+.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.list li, .hit { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.stack { display: grid; gap: 8px; }
+@media (min-width: 900px) {
+  .split { grid-template-columns: 1.2fr 0.8fr; }
+  .app { padding-bottom: 32px; }
+}

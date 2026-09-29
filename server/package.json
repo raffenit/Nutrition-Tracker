@@ -1,0 +1,25 @@
+{
+  "name": "nutrition-tracker-server",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/domain/*.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "busboy": "1.6.0",
+    "pdf-parse": "2.4.5",
+    "tesseract.js": "7.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/busboy": "1.5.4",
+    "@types/node": "26.6.3",
+    "typescript": "7.0.2"
+  }
+}

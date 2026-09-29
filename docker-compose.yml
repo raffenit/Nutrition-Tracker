@@ -1,0 +1,20 @@
+services:
+  nutrition:
+    build: .
+    container_name: nutrition-tracker
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Chicago}
+      USDA_API_KEY: ${USDA_API_KEY:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      PORT: 3010
+      DATA_DIR: /data
+      PUBLIC_DIR: /app/public
+    volumes:
+      - ./data:/data
+    networks:
+      - media-network
+
+networks:
+  media-network:
+    external: true
