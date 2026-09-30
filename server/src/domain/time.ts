@@ -20,6 +20,18 @@ export function readLocalDate(value: string | null, timeZone: string): string {
   return todayLocal(timeZone);
 }
 
+export function shiftLocalDate(localDate: string, days: number): string {
+  const [year, month, day] = localDate.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+export function weekdayShort(localDate: string): string {
+  const [year, month, day] = localDate.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(year, month - 1, day)),
+  );
+}
+
 export function localDate(iso: string, timeZone: string): string {
   const parts = dateParts(new Date(iso), timeZone);
   return `${parts.year}-${parts.month}-${parts.day}`;

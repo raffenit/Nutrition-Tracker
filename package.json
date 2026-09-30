@@ -1,0 +1,9 @@
+{
+  "name": "nutrition-tracker",
+  "private": true,
+  "scripts": {
+    "test": "npm --prefix server test && npm --prefix web run check",
+    "build": "npm --prefix web run build && npm --prefix server run build",
+    "check": "npm test"
+  }
+}

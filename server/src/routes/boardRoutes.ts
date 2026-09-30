@@ -1,5 +1,6 @@
 import { hydrationTotal, listHydration, listMeals } from '../db/logs.js';
 import { getTargets, listUsers } from '../db/users.js';
+import { glassVolumeMl } from '../domain/units.js';
 import { dayTotals } from '../domain/day.js';
 import { toFamilyBoard } from '../domain/familyView.js';
 import { DEFAULT_TARGETS } from '../domain/nutrients.js';
@@ -9,6 +10,8 @@ import { sendJson } from '../http/respond.js';
 import { route, type Ctx, type Route } from '../http/router.js';
 import { householdZone } from './household.js';
 import { personalWeight } from './weightStatus.js';
+import { buildTrendSeries } from '../domain/trends.js';
+import { finiteNumber } from '../domain/guards.js';
 
 export function boardRoutes(): Route[] {
   return [
@@ -17,12 +20,15 @@ export function boardRoutes(): Route[] {
       const zone = householdZone(ctx);
       const today = todayLocal(zone);
       const date = readLocalDate(ctx.url.searchParams.get('date'), zone);
+      const targets = getTargets(ctx.db, user.id) ?? DEFAULT_TARGETS;
+      const days = trendDays(ctx.url.searchParams.get('days'));
       sendJson(ctx.res, 200, {
         ...dayFor(ctx, user.id, date, zone),
         today,
-        glassMl: ctx.config.glassMl,
-        targets: getTargets(ctx.db, user.id) ?? DEFAULT_TARGETS,
+        glassMl: glassVolumeMl(targets.units),
+        targets,
         weight: personalWeight(ctx.db, user.id, today),
+        trends: buildTrendSeries(ctx.db, user.id, date, days),
       });
     }),
     route('GET', '/api/family', familyBoard),
@@ -45,12 +51,19 @@ function familyBoard(ctx: Ctx): Promise<void> {
   return Promise.resolve();
 }
 
+function trendDays(value: string | null): number {
+  const days = finiteNumber(value);
+  return days === null ? 7 : days;
+}
+
 function dayFor(ctx: Ctx, userId: string, date: string, zone: string) {
   const logs = listMeals(ctx.db, userId, date, zone);
   const hydration = listHydration(ctx.db, userId, date, zone);
   const user = listUsers(ctx.db).find((person) => person.id === userId);
+  const targets = getTargets(ctx.db, userId) ?? DEFAULT_TARGETS;
   return {
     user: user ?? { id: userId, name: 'Someone', role: 'member' as const },
+    units: targets.units,
     date,
     totals: dayTotals(logs, hydrationTotal(hydration)),
     logs,

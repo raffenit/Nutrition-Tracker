@@ -3,8 +3,11 @@ import { api } from '../api/client';
 import { DateBar } from '../components/DateBar';
 import { DayLog } from '../components/DayLog';
 import { HydrationMeter } from '../components/HydrationMeter';
-import { MacroBars } from '../components/MacroBars';
-import { navigate, nowLocalInput } from '../nav';
+import { GoalCards } from '../components/GoalCards';
+import { MacroPieChart } from '../components/MacroPieChart';
+import { LogFab } from '../components/LogFab';
+import { TrendsPanel, type TrendDay, type TrendWeightPoint } from '../components/TrendsPanel';
+import { nowLocalInput } from '../nav';
 import type { DayTotals, MealLog, Targets, WeightStatus } from '../types';
 
 type Dashboard = {
@@ -15,34 +18,48 @@ type Dashboard = {
   logs: MealLog[];
   targets: Targets;
   weight: WeightStatus;
+  trends: { days: number; endDate: string; points: TrendDay[]; weight: TrendWeightPoint[] };
 };
 
 export function DashboardPage() {
   const [day, setDay] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trendDays, setTrendDays] = useState(7);
   const date = new URLSearchParams(window.location.search).get('date');
-  async function load(): Promise<void> {
-    setDay(await api<Dashboard>(`/api/dashboard${date ? `?date=${date}` : ''}`));
+  async function load(days = trendDays): Promise<void> {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    params.set('days', String(days));
+    const query = params.toString();
+    setDay(await api<Dashboard>(`/api/dashboard${query ? `?${query}` : ''}`));
   }
-  useEffect(() => { void load().catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not load today')); }, [date]);
+  useEffect(() => { void load().catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not load today')); }, [date, trendDays]);
   if (!day) return <p>{error ?? 'Loading today…'}</p>;
   return (
+    <>
     <div className="stack">
       <DateBar path="/" date={day.date} today={day.today} />
       {error && <p className="notice">{error}</p>}
       {day.weight.enabled && day.weight.reminderDue && <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />}
-      <div className="grid split">
-        <MacroBars totals={day.totals} targets={day.targets} />
-        <HydrationMeter
-          amountMl={day.totals.hydrationMl}
-          targetMl={day.targets.hydrationMl}
-          onAdd={() => void api('/api/hydration', { method: 'POST', body: JSON.stringify({ amountMl: day.glassMl, loggedAt: nowLocalInput() }) }).then(load)}
-          onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(load).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
-        />
-      </div>
-      <DayLog logs={day.logs} onRemove={(id) => void api(`/api/logs/${id}`, { method: 'DELETE' }).then(load)} />
-      <button className="primary" type="button" onClick={() => navigate('/add')}>Log food or a drink</button>
+      <MacroPieChart totals={day.totals} />
+      <GoalCards totals={day.totals} targets={day.targets} />
+      <HydrationMeter
+        amountMl={day.totals.hydrationMl}
+        targetMl={day.targets.hydrationMl}
+        units={day.targets.units}
+        onAdd={() => void api('/api/hydration', { method: 'POST', body: JSON.stringify({ amountMl: day.glassMl, loggedAt: nowLocalInput() }) }).then(() => load())}
+        onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
+      />
+      <DayLog logs={day.logs} onRemove={(id) => void api(`/api/logs/${id}`, { method: 'DELETE' }).then(() => load())} />
+      <TrendsPanel
+        trends={day.trends}
+        units={day.targets.units}
+        weightEnabled={day.weight.enabled}
+        onDaysChange={(days) => setTrendDays(days)}
+      />
     </div>
+    <LogFab />
+    </>
   );
 }
 

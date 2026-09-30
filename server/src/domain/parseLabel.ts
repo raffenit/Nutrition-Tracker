@@ -36,7 +36,8 @@ function amount(text: string, label: string, unit: string): number | null {
 }
 
 function servingSize(text: string): string | null {
-  const match = text.match(/serving size\s*:?\s*(.+?)\s+calories\b/i);
+  const match = text.match(/serving size\s*:?\s*(.+?)\s+amount per serving/i)
+    ?? text.match(/serving size\s*:?\s*(.+?)\s+calories\b/i);
   if (!match) return null;
   const label = match[1].trim();
   return label.slice(0, 80) || null;

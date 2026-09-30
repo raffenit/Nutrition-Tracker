@@ -22,8 +22,8 @@ export function LoginPage({ onReady }: LoginPageProps) {
     }
   }
   return (
-    <main className="app">
-      <div className="brand"><HelixMark size={48} /><h1>Nutrition</h1></div>
+    <main className="app auth-screen">
+      <div className="brand"><HelixMark size={56} /></div>
       <form className="card" onSubmit={(event) => { event.preventDefault(); void submit(new FormData(event.currentTarget)); }}>
         <label>Name<input name="name" required /></label>
         <label>Password<input name="password" type="password" required /></label>

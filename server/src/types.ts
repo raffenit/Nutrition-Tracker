@@ -29,6 +29,8 @@ export type MacroShares = {
   carbs: number;
 };
 
+export type Units = 'metric' | 'imperial';
+
 export type Targets = {
   calories: number;
   protein: number;
@@ -37,6 +39,7 @@ export type Targets = {
   carbs: number;
   sodium: number | null;
   hydrationMl: number;
+  units: Units;
   extras: ExtraNutrient[];
 };
 

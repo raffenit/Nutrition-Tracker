@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
 import { navigate } from '../nav';
 import { HelixMark } from './HelixMark';
+import { IconFamily, IconLibrary, IconSettings, IconSignIn, IconToday } from './NavIcons';
 
 const LINKS = [
-  ['/', 'Today'],
-  ['/add', 'Log'],
-  ['/library', 'Library'],
-  ['/family', 'Family'],
-  ['/settings', 'Settings'],
+  { href: '/', label: 'Today', Icon: IconToday },
+  { href: '/library', label: 'Library', Icon: IconLibrary },
+  { href: '/family', label: 'Family', Icon: IconFamily },
+  { href: '/settings', label: 'Settings', Icon: IconSettings },
 ] as const;
 
 type AppShellProps = { path: string; kiosk: boolean; children: ReactNode };
@@ -17,15 +17,33 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand"><HelixMark /><span>Nutrition</span></div>
-        <nav className="nav">
-          {links.map(([href, label]) => (
-            <a key={href} href={href} aria-current={path === href ? 'page' : undefined} onClick={(event) => { event.preventDefault(); navigate(href); }}>{label}</a>
-          ))}
-          {kiosk && <a href="/login" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>Sign in</a>}
-        </nav>
+        <div className="brand" aria-label="Home"><HelixMark size={32} /></div>
       </header>
-      {children}
+      <main className="main">{children}</main>
+      {links.length > 0 && (
+        <nav className="tabbar" aria-label="Main">
+          {links.map(({ href, label, Icon }) => (
+            <a
+              key={href}
+              href={href}
+              className="tab"
+              aria-current={path === href ? 'page' : undefined}
+              aria-label={label}
+              title={label}
+              onClick={(event) => { event.preventDefault(); navigate(href); }}
+            >
+              <Icon className="tab-icon" />
+            </a>
+          ))}
+        </nav>
+      )}
+      {kiosk && (
+        <nav className="tabbar kiosk-bar" aria-label="Kiosk">
+          <a href="/login" className="tab" aria-label="Sign in" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>
+            <IconSignIn className="tab-icon" />
+          </a>
+        </nav>
+      )}
     </div>
   );
 }

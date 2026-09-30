@@ -33,6 +33,7 @@ export function AddLogPage() {
   }
   return (
     <div className="stack">
+      <button type="button" className="back-link" onClick={() => navigate('/')}>← Today</button>
       <div className="row">{SLOTS.map((item) => <button type="button" className={item === slot ? 'primary' : ''} key={item} onClick={() => setSlot(item)}>{item}</button>)}</div>
       <div className="row">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search foods" />

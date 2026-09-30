@@ -20,6 +20,7 @@ type TargetSql = {
   carbs: number;
   sodium: number | null;
   hydration_ml: number;
+  units: 'metric' | 'imperial' | null;
   extras_json: string;
 };
 
@@ -89,8 +90,8 @@ export function saveKioskHash(db: AppDatabase, hash: string): void {
 
 export function saveTargets(db: AppDatabase, userId: string, targets: Targets): void {
   db.prepare(
-    `INSERT INTO targets (user_id, calories, protein, fiber, fat, carbs, sodium, hydration_ml, extras_json)
-     VALUES (@userId, @calories, @protein, @fiber, @fat, @carbs, @sodium, @hydrationMl, @extras)
+    `INSERT INTO targets (user_id, calories, protein, fiber, fat, carbs, sodium, hydration_ml, units, extras_json)
+     VALUES (@userId, @calories, @protein, @fiber, @fat, @carbs, @sodium, @hydrationMl, @units, @extras)
      ON CONFLICT(user_id) DO UPDATE SET
        calories = excluded.calories,
        protein = excluded.protein,
@@ -99,13 +100,14 @@ export function saveTargets(db: AppDatabase, userId: string, targets: Targets): 
        carbs = excluded.carbs,
        sodium = excluded.sodium,
        hydration_ml = excluded.hydration_ml,
+       units = excluded.units,
        extras_json = excluded.extras_json`,
   ).run({ userId, ...targetParams(targets) });
 }
 
 export function getTargets(db: AppDatabase, userId: string): Targets | null {
   const row = db.prepare(
-    `SELECT calories, protein, fiber, fat, carbs, sodium, hydration_ml, extras_json
+    `SELECT calories, protein, fiber, fat, carbs, sodium, hydration_ml, units, extras_json
      FROM targets WHERE user_id = ?`,
   ).get(userId) as TargetSql | undefined;
   if (!row) return null;
@@ -117,6 +119,7 @@ export function getTargets(db: AppDatabase, userId: string): Targets | null {
     carbs: row.carbs,
     sodium: row.sodium,
     hydrationMl: row.hydration_ml,
+    units: row.units === 'metric' ? 'metric' : 'imperial',
     extras: parseStoredExtras(row.extras_json),
   };
 }
@@ -130,6 +133,7 @@ function targetParams(targets: Targets): Record<string, string | number | null> 
     carbs: targets.carbs,
     sodium: targets.sodium,
     hydrationMl: targets.hydrationMl,
+    units: targets.units,
     extras: JSON.stringify(targets.extras),
   };
 }

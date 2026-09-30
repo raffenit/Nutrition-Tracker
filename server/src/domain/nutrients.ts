@@ -10,6 +10,7 @@ export const DEFAULT_TARGETS: Targets = {
   carbs: 250,
   sodium: 2300,
   hydrationMl: 2000,
+  units: 'imperial',
   extras: [],
 };
 
@@ -74,6 +75,7 @@ export function readTargets(value: unknown): Targets {
     carbs: nonNegative(requiredNumber(value.carbs, 'Carbs'), 'Carbs'),
     sodium,
     hydrationMl: nonNegative(requiredNumber(value.hydrationMl, 'Hydration'), 'Hydration'),
+    units: value.units === 'metric' ? 'metric' : 'imperial',
     extras: readExtras(value.extras),
   };
 }

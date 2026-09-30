@@ -3,5 +3,9 @@ dist/
 dist-test/
 data/
 .env
+.env.local
 *.log
 .DS_Store
+
+# Host-specific paths, URLs, and deploy overrides (see local.example/)
+local/

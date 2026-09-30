@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS targets (
   carbs REAL NOT NULL,
   sodium REAL,
   hydration_ml REAL NOT NULL,
+  units TEXT NOT NULL DEFAULT 'imperial' CHECK (units IN ('metric', 'imperial')),
   extras_json TEXT NOT NULL
 );
 
@@ -144,5 +145,13 @@ export function openDatabase(file: string): AppDatabase {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+function migrate(db: AppDatabase): void {
+  const columns = db.prepare('PRAGMA table_info(targets)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'units')) {
+    db.exec(`ALTER TABLE targets ADD COLUMN units TEXT NOT NULL DEFAULT 'imperial' CHECK (units IN ('metric', 'imperial'))`);
+  }
 }

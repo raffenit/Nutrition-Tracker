@@ -8,6 +8,8 @@ export type Nutrients = {
   extras: Array<{ key: string; label: string; amount: number; unit: string }>;
 };
 
+export type Units = 'metric' | 'imperial';
+
 export type Targets = {
   calories: number;
   protein: number;
@@ -16,6 +18,7 @@ export type Targets = {
   carbs: number;
   sodium: number | null;
   hydrationMl: number;
+  units: Units;
   extras: Nutrients['extras'];
 };
 

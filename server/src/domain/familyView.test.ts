@@ -14,6 +14,7 @@ test('family view drops weight even if a personal record is passed in', () => {
     members: [
       {
         user: { id: 'u1', name: 'Rachael', role: 'admin' },
+        units: 'imperial' as const,
         totals,
         logs: [],
         hydration: [],

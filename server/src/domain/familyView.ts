@@ -1,7 +1,8 @@
-import type { DayTotals, HydrationEntry, MealLog, UserPublic } from '../types.js';
+import type { DayTotals, HydrationEntry, MealLog, Units, UserPublic } from '../types.js';
 
 export type FamilyMember = {
   user: UserPublic;
+  units: Units;
   totals: DayTotals;
   logs: MealLog[];
   hydration: HydrationEntry[];
@@ -46,9 +47,10 @@ export function assertFamilyBoardIsPublic(value: unknown): void {
   }
 }
 
-function toFamilyMember(source: MemberSource): FamilyMember {
+function toFamilyMember(source: MemberSource & { units: Units }): FamilyMember {
   return {
     user: { id: source.user.id, name: source.user.name, role: source.user.role },
+    units: source.units,
     totals: source.totals,
     logs: source.logs,
     hydration: source.hydration,
