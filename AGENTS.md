@@ -1,6 +1,8 @@
 # Nutrition Tracker
 
-Server code lives in `server/`. The web app lives in `web/`. Household data stays in `data/` and is not committed.
+TypeScript only: API in `server/` (Node 22), UI in `web/` (React 19 + Vite). Household data stays in `data/` and is not committed.
+
+Default server release: `./deploy.sh -m "message"` (tests → commit/push if needed → Docker). Test log: `local/test-last-run.log`.
 
 Read `docs/ARCHITECTURE.md` before structural changes. Planned work is in `docs/ROADMAP.md` (phases: quick log, meal servings UI, weight view, goal alerts, PDF workflow).
 

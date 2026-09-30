@@ -20,7 +20,7 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
   }, [date]);
   if (!board) return <p>Loading the household…</p>;
   return (
-    <div className="stack">
+    <div className="page">
       <h1>{board.householdName}</h1>
       {!kiosk && <DateBar path="/family" date={board.date} today={board.today} />}
       <div className="grid">

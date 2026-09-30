@@ -13,7 +13,7 @@ type Goal = {
 type GoalCardsProps = { totals: DayTotals; targets: Targets };
 
 const CORE: Array<{ key: keyof Targets; label: string; unit: string; color: string; optional?: boolean }> = [
-  { key: 'calories', label: 'Calories', unit: 'kcal', color: 'var(--accent-soft)' },
+  { key: 'calories', label: 'Calories', unit: 'kcal', color: 'var(--calories)' },
   { key: 'protein', label: 'Protein', unit: 'g', color: 'var(--protein)' },
   { key: 'fiber', label: 'Fiber', unit: 'g', color: 'var(--fiber)' },
   { key: 'fat', label: 'Fat', unit: 'g', color: 'var(--fat)' },
@@ -60,7 +60,7 @@ function buildGoals(totals: DayTotals, targets: Targets): Goal[] {
       amount: totals.sodium,
       target: targets.sodium,
       unit: 'mg',
-      color: 'var(--muted)',
+      color: 'var(--sodium)',
     });
   }
   for (const extra of targets.extras) {

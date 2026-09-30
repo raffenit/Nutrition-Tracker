@@ -34,6 +34,13 @@ export type MealLog = {
   drinkMl: number | null;
 };
 
+export type IngredientLine = {
+  name: string;
+  servings: number;
+  sourceRef: string | null;
+  childFoodId: string | null;
+};
+
 export type Food = {
   id: string;
   name: string;
@@ -47,6 +54,7 @@ export type Food = {
   makesServings: number;
   source: string;
   sourceRef: string | null;
+  ingredients: IngredientLine[];
 };
 
 export type SearchHit = {

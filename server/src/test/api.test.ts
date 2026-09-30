@@ -70,6 +70,54 @@ test('health, setup, dashboard, family privacy, and trends', async () => {
   });
 });
 
+test('custom recipes return ingredient lines for editing', async () => {
+  await withTestServer(async ({ port }) => {
+    const setup = await api<{ user: { name: string } }>(port, '/api/setup', {
+      method: 'POST',
+      body: { name: 'Rachael', password: 'password1', householdName: 'Home' },
+    });
+    assert.equal(setup.status, 200);
+
+    const yogurt = await api<{ food: { id: string } }>(port, '/api/foods', {
+      method: 'POST',
+      cookie: setup.cookie,
+      body: {
+        name: 'Greek yogurt',
+        brand: null,
+        kind: 'packaged',
+        servingLabel: '1 cup',
+        nutrients: { calories: 150, protein: 15, fiber: 0, fat: 4, carbs: 12, sodium: 80, extras: [] },
+        isFavorite: false,
+        isDrink: false,
+        drinkMl: null,
+        source: 'manual',
+      },
+    });
+    assert.equal(yogurt.status, 201);
+
+    const recipe = await api<{ food: { id: string } }>(port, '/api/foods/compose', {
+      method: 'POST',
+      cookie: setup.cookie,
+      body: {
+        name: 'Yogurt bowl',
+        makesServings: 2,
+        ingredients: [{ foodId: yogurt.body.food.id, servings: 1 }],
+      },
+    });
+    assert.equal(recipe.status, 201);
+
+    const loaded = await api<{
+      food: { name: string; makesServings: number; ingredients: Array<{ name: string; servings: number; childFoodId: string | null }> };
+    }>(port, `/api/foods/${recipe.body.food.id}`, { cookie: setup.cookie });
+    assert.equal(loaded.status, 200);
+    assert.equal(loaded.body.food.name, 'Yogurt bowl');
+    assert.equal(loaded.body.food.makesServings, 2);
+    assert.equal(loaded.body.food.ingredients.length, 1);
+    assert.equal(loaded.body.food.ingredients[0]?.name, 'Greek yogurt');
+    assert.equal(loaded.body.food.ingredients[0]?.childFoodId, yogurt.body.food.id);
+  });
+});
+
 test('weight stays off the family board when check-ins are enabled', async () => {
   await withTestServer(async ({ port }) => {
     const setup = await api<{ user: { id: string } }>(port, '/api/setup', {

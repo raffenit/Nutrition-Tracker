@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="16" fill="#140c0a"/>
-  <path d="M32 6C46 11 46 17 32 22C18 27 18 33 32 38C46 43 46 49 32 58" stroke="#f8ece6" stroke-width="4.5" stroke-linecap="round"/>
-  <path d="M32 6C18 11 18 17 32 22C46 27 46 33 32 38C18 43 18 49 32 58" stroke="#e86a3a" stroke-width="4.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nutrition Tracker">
+  <rect width="64" height="64" rx="16" fill="#100c14"/>
+  <path d="M32 6C46 11 46 17 32 22C18 27 18 33 32 38C46 43 46 49 32 58" stroke="#f4eef8" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M32 6C18 11 18 17 32 22C46 27 46 33 32 38C18 43 18 49 32 58" stroke="#a978e8" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M32 6C46 11 46 17 32 22C18 27 18 33 32 38" stroke="#d94d72" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
 </svg>

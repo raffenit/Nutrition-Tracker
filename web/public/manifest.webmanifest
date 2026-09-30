@@ -3,8 +3,8 @@
   "short_name": "Nutrition",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#140c0a",
-  "theme_color": "#140c0a",
+  "background_color": "#100c14",
+  "theme_color": "#100c14",
   "icons": [
     {
       "src": "/icon.svg",

@@ -15,6 +15,7 @@ import type { Session } from './types';
 export function App() {
   const href = usePath();
   const path = href.split('?')[0] ?? '/';
+  const editId = new URLSearchParams(href.includes('?') ? href.split('?')[1] : '').get('id');
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => {
     void api<Session>('/api/session').then(setSession).catch(() => setSession(null));
@@ -31,7 +32,8 @@ export function App() {
       {path === '/add' && <AddLogPage />}
       {path === '/library' && <LibraryPage />}
       {path === '/settings' && session.user && <SettingsPage user={session.user} household={session.household} />}
-      {(path === '/foods/new' || path === '/foods/custom') && <FoodPage custom={path === '/foods/custom'} />}
+      {(path === '/foods/new' || path === '/foods/edit') && <FoodPage editId={path === '/foods/edit' ? editId : null} />}
+      {(path === '/recipes/new' || path === '/recipes/edit') && <FoodPage custom editId={path === '/recipes/edit' ? editId : null} />}
       {path === '/' && <DashboardPage />}
       {path === '/login' && <LoginPage onReady={setSession} />}
     </AppShell>

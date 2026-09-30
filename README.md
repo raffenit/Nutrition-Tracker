@@ -6,6 +6,20 @@ The mark is a simplified protein alpha helix.
 
 ---
 
+## Technology
+
+The whole product is **TypeScript** end to end — no separate Python, Ruby, or mobile native app.
+
+| Part | Stack |
+| --- | --- |
+| **`web/`** | **React 19** SPA, **Vite**, `.tsx` pages and components; typechecked with `tsc` |
+| **`server/`** | **Node.js 22+** API (ESM), compiled with `tsc`; SQLite, OCR, PDF, and import logic live here |
+| **Shipped image** | Multi-stage **Docker** build: Vite bundles the UI; Node serves static files and `/api/*` |
+
+Household data is **SQLite** on disk under `data/` (not in git). See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for routes, data model, and privacy rules.
+
+---
+
 ## After setup — how you open the app
 
 Replace `YOUR_SERVER_TAILSCALE_IP` with your home server’s Tailscale address (see [Tailscale](#step-1--tailscale-remote-access-from-phones) below).
@@ -138,6 +152,7 @@ cp local.example/deploy.env.example local/deploy.env
 | `REMOTE_BASE_URL` | Optional | Printed at end of `./deploy.sh` (e.g. `http://YOUR_SERVER_TAILSCALE_IP:3010`) |
 | `INFRA_COMPOSE_DIR` | Usually **no** | Only if infrastructure is **not** at `../infrastructure` next to this repo. Used when you run `./deploy.sh --infra`. |
 | `NUTRITION_PORT` | Optional | Default `3010` if you proxy a different host port |
+| `DEPLOY_COMMIT_MSG` | Optional | Default commit message when `./deploy.sh` finds uncommitted changes (overridden by `-m`) |
 
 Typical sibling layout (`…/infrastructure` and `…/Nutrition-Tracker`) needs **no** `INFRA_COMPOSE_DIR`. App-only updates do **not** require `./deploy.sh --infra` unless you changed the infrastructure Caddyfile or its published ports.
 
@@ -149,11 +164,27 @@ On the server, from this directory:
 ./deploy.sh
 ```
 
-`deploy.sh` checks that `media-network` exists, builds the image, starts the container, and waits for `GET /api/health`. It reads optional overrides from `local/deploy.env`.
+`deploy.sh` is the full release path on the server (see [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md#deploy-script) for detail):
+
+1. **`npm test`** — server tests (Node test runner) + web **TypeScript** check (~2 minutes on first run).
+2. **Git** — commit if the tree is dirty (message required), then **push** if you are ahead of `origin`.
+3. **Docker Compose** — build image, start container, **`GET /api/health`** on port `3010`.
+
+Test output is also written to **`local/test-last-run.log`** (gitignored). If deploy stops at tests, open that file instead of copy-pasting the terminal.
+
+**Node/npm and git** must be on the server for the default path (SSH key or credential helper for `git push`). One-time on the host: `npm install` in the repo root, `server/`, and `web/`. Optional overrides: `local/deploy.env`.
+
+Typical release from the server after editing:
+
+```bash
+./deploy.sh -m "Describe what changed"
+```
 
 Useful flags:
 
-- `./deploy.sh --test` — run `npm test` on the host first (requires Node/npm there)
+- `./deploy.sh -m "message"` — required when there are uncommitted changes (or set `DEPLOY_COMMIT_MSG` in `local/deploy.env`)
+- `./deploy.sh --skip-git` — deploy without commit or push (e.g. you already pushed from another machine)
+- `./deploy.sh --skip-test` — deploy without running tests (avoid except emergencies; tests need ~2 minutes on first run)
 - `./deploy.sh --infra` — also restart the **infrastructure** stack (Caddy). Use after Caddyfile or infra compose changes, not for routine app updates.
 - `./deploy.sh --down` — tear down this stack before redeploying
 
@@ -217,11 +248,13 @@ docker compose logs -f
 
 ## Updates
 
-After pulling or syncing new code on the server:
+After editing on the server (or syncing new code):
 
 ```bash
-./deploy.sh
+./deploy.sh -m "Short description of the change"
 ```
+
+Use `--skip-git` if you already committed and pushed elsewhere; use `--skip-test` only in an emergency.
 
 ---
 
@@ -232,6 +265,8 @@ After pulling or syncing new code on the server:
 ```bash
 npm test
 ```
+
+Each run overwrites **`local/test-last-run.log`** (gitignored) with the full console output. The log ends with a **Summary** line for **Server tests** and **Web typecheck** — both must say PASS (server test counts alone are not enough).
 
 **Production build:**
 
@@ -267,8 +302,9 @@ GitHub: `https://github.com/raffenit/Nutrition-Tracker`
 
 ## Layout
 
-- `server/` — Node API, SQLite, label and PDF reading
-- `web/` — React app
+- `server/` — TypeScript API, SQLite, label/PDF/OCR, menu import
+- `web/` — React 19 + TypeScript UI
+- `scripts/run-tests.sh` — used by root `npm test`; writes `local/test-last-run.log`
 - `docs/` — architecture and roadmap
 - `local.example/` — copy into gitignored `local/` for your server
 - `deploy.sh` — deploy + health check

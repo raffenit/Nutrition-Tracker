@@ -3,13 +3,14 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import Busboy from 'busboy';
 import { attachUpload, findUpload, insertUpload } from '../db/uploads.js';
-import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood } from '../db/foods.js';
+import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood, type FoodShelf } from '../db/foods.js';
 import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
-import { menuCandidates, parseNutritionLabel } from '../domain/parseLabel.js';
+import { buildNutritionImport } from '../domain/nutritionImport.js';
 import { extractImageText, extractPdfText } from '../integrations/extractText.js';
+import { importNutritionFromUrl } from '../integrations/importUrl.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
 import { searchUsda } from '../integrations/usda.js';
 import { HttpError } from '../http/errors.js';
@@ -24,7 +25,7 @@ export function foodRoutes(): Route[] {
   return [
     route('GET', '/api/foods', async (ctx) => {
       requireUser(ctx.auth);
-      sendJson(ctx.res, 200, { foods: listFoods(ctx.db, ctx.url.searchParams.get('q')?.trim() ?? '') });
+      sendJson(ctx.res, 200, { foods: listFoods(ctx.db, ctx.url.searchParams.get('q')?.trim() ?? '', readShelf(ctx.url.searchParams.get('shelf'))) });
     }),
     route('GET', '/api/foods/:id', async (ctx) => {
       requireUser(ctx.auth);
@@ -42,6 +43,7 @@ export function foodRoutes(): Route[] {
     route('POST', '/api/foods/compose', composeFood),
     route('GET', '/api/ingredients/search', searchIngredients),
     route('POST', '/api/uploads', receiveUpload),
+    route('POST', '/api/import-url', importFromUrl),
   ];
 }
 
@@ -58,9 +60,15 @@ async function patchFood(ctx: Ctx): Promise<void> {
   const user = requireUser(ctx.auth);
   const body = await readJson(ctx.req);
   const favorite = favoriteOnly(body);
-  const food = favorite === null
-    ? updateFood(ctx.db, ctx.params.id, readFoodInput(body, user.id))
-    : setFavorite(ctx.db, ctx.params.id, favorite);
+  if (favorite !== null) {
+    const food = setFavorite(ctx.db, ctx.params.id, favorite);
+    if (!food) throw new HttpError(404, 'Food not found');
+    sendJson(ctx.res, 200, { food });
+    return;
+  }
+  let input = readFoodInput(body, user.id);
+  input = recomputeRecipeNutrients(ctx, body, input);
+  const food = updateFood(ctx.db, ctx.params.id, input);
   if (!food) throw new HttpError(404, 'Food not found');
   sendJson(ctx.res, 200, { food });
 }
@@ -100,7 +108,8 @@ async function searchIngredients(ctx: Ctx): Promise<void> {
     sendJson(ctx.res, 200, { results: [], usda: usdaState });
     return;
   }
-  const results = [...libraryHits(ctx, query), ...await remoteHits(ctx, query)];
+  const libraryOnly = ctx.url.searchParams.get('library') === '1';
+  const results = [...libraryHits(ctx, query, libraryOnly), ...await remoteHits(ctx, query)];
   sendJson(ctx.res, 200, { results, usda: usdaState });
 }
 
@@ -112,7 +121,8 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
   await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
   const extracted = await readExtractedText(kind, file.bytes, ctx.config.tessdataDir);
-  const parsed = parseNutritionLabel(extracted.text);
+  const built = buildNutritionImport(extracted.text, kind);
+  const warning = extracted.warning ?? built.warning;
   const saved = insertUpload(ctx.db, {
     kind,
     originalName: path.basename(file.filename).slice(0, 180) || 'upload',
@@ -123,18 +133,28 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   sendJson(ctx.res, 200, {
     uploadId: saved.id,
     kind,
-    warning: extracted.warning,
-    draft: {
-      name: '',
-      brand: null,
-      kind: kind === 'pdf' && !parsed.looksLikeLabel ? 'restaurant' : 'packaged',
-      servingLabel: parsed.servingLabel ?? '1 serving',
-      nutrients: parsed.nutrients,
-      isDrink: false,
-      drinkMl: null,
-      source: kind,
-    },
-    candidates: parsed.looksLikeLabel ? [] : menuCandidates(extracted.text),
+    warning,
+    draft: { ...built.draft, source: kind },
+    candidates: built.candidates,
+    menuItems: built.menuItems,
+  });
+}
+
+async function importFromUrl(ctx: Ctx): Promise<void> {
+  requireUser(ctx.auth);
+  const body = await readJson(ctx.req);
+  if (!isRecord(body)) throw new HttpError(400, 'Expected a URL');
+  const url = requiredText(body.url, 'URL');
+  const fetched = await importNutritionFromUrl(url);
+  const built = buildNutritionImport(fetched.text, fetched.kind, fetched.html);
+  sendJson(ctx.res, 200, {
+    uploadId: null,
+    kind: fetched.kind,
+    finalUrl: fetched.finalUrl,
+    warning: built.warning,
+    draft: built.draft,
+    candidates: built.candidates,
+    menuItems: built.menuItems,
   });
 }
 
@@ -163,8 +183,23 @@ function ingredientLine(ctx: Ctx, value: unknown): { name: string; servings: num
   };
 }
 
-function libraryHits(ctx: Ctx, query: string): SearchHit[] {
-  return listFoods(ctx.db, query).slice(0, 6).map(foodHit);
+function libraryHits(ctx: Ctx, query: string, ingredientsOnly: boolean): SearchHit[] {
+  const shelf: FoodShelf = ingredientsOnly ? 'foods' : 'all';
+  return listFoods(ctx.db, query, shelf).slice(0, 8).map(foodHit);
+}
+
+function readShelf(value: string | null): FoodShelf {
+  if (value === 'foods' || value === 'recipes' || value === 'all') return value;
+  return 'all';
+}
+
+function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typeof readFoodInput>): ReturnType<typeof readFoodInput> {
+  if (input.kind !== 'custom' || !isRecord(body) || !Array.isArray(body.ingredients) || body.ingredients.length === 0) {
+    return input;
+  }
+  const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
+  const nutrients = roundNutrients(perServing(sumIngredientNutrients(lines), input.makesServings));
+  return { ...input, nutrients, ingredients: lines.map(({ name, servings, sourceRef, childFoodId }) => ({ name, servings, sourceRef, childFoodId })) };
 }
 
 async function remoteHits(ctx: Ctx, query: string): Promise<SearchHit[]> {

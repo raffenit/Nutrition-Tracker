@@ -20,7 +20,7 @@ export function SettingsPage({ user, household }: SettingsPageProps) {
   }, []);
   if (!targets || !weight) return <p>Loading settings…</p>;
   return (
-    <div className="stack">
+    <div className="page">
       <UnitsToggle
         units={targets.units}
         onChange={async (units) => {

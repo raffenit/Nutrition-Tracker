@@ -90,14 +90,21 @@ export function getFood(db: AppDatabase, id: string): Food | null {
   return row ? toFood(row, ingredientsFor(db, id)) : null;
 }
 
-export function listFoods(db: AppDatabase, query: string): Food[] {
+export type FoodShelf = 'all' | 'foods' | 'recipes';
+
+export function listFoods(db: AppDatabase, query: string, shelf: FoodShelf = 'all'): Food[] {
+  const shelfSql = shelf === 'foods'
+    ? " AND kind != 'custom'"
+    : shelf === 'recipes'
+      ? " AND kind = 'custom'"
+      : '';
   const rows = query
     ? db.prepare(
         `${FOOD_COLUMNS} FROM foods
-         WHERE name LIKE ? ESCAPE '\\' OR IFNULL(brand, '') LIKE ? ESCAPE '\\'
+         WHERE (name LIKE ? ESCAPE '\\' OR IFNULL(brand, '') LIKE ? ESCAPE '\\')${shelfSql}
          ORDER BY is_favorite DESC, name COLLATE NOCASE LIMIT 200`,
       ).all(likeTerm(query), likeTerm(query)) as FoodSql[]
-    : db.prepare(`${FOOD_COLUMNS} FROM foods ORDER BY is_favorite DESC, name COLLATE NOCASE LIMIT 200`).all() as FoodSql[];
+    : db.prepare(`${FOOD_COLUMNS} FROM foods WHERE 1=1${shelfSql} ORDER BY is_favorite DESC, name COLLATE NOCASE LIMIT 200`).all() as FoodSql[];
   return rows.map((row) => toFood(row, []));
 }
 
