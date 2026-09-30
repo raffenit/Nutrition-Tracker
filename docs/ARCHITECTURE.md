@@ -38,7 +38,13 @@ Docker container (Nutrition-Tracker/Dockerfile)
 - **Caddy:** port `3010` must be defined in your infrastructure `Caddyfile` and published on the Caddy container.
 - **Host-specific paths/URLs:** `local/deploy.env` (gitignored; see `local.example/`).
 
-Environment (see `.env.example`): `USDA_API_KEY`, `PUBLIC_URL` (kiosk links), `TZ` (household day boundaries).
+Environment (see `.env.example`, server admin only — not per user):
+
+- `TZ` — household day boundaries
+- `PUBLIC_URL` — kiosk link generation in Settings
+- `USDA_API_KEY` — optional; enables USDA hits in `/api/ingredients/search` (Open Food Facts + library still work without it)
+
+Deploy-only overrides (`REMOTE_BASE_URL`, `INFRA_COMPOSE_DIR`) live in gitignored `local/deploy.env`; see `local.example/`.
 
 ## Repository layout
 

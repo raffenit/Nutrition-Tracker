@@ -40,11 +40,13 @@ Example layout (your paths may differ):
 └── Nutrition-Tracker/  ← this app
 ```
 
-**Host-specific values** (real paths, Tailscale IP, infra location) go in `local/` — that folder is gitignored. Copy from `local.example/`:
+**Recommended before first deploy** (both gitignored on the server):
 
 ```bash
+cp .env.example .env
+mkdir -p local
 cp local.example/deploy.env.example local/deploy.env
-# edit local/deploy.env — e.g. REMOTE_BASE_URL, INFRA_COMPOSE_DIR
+# edit both files — see "Configuration" below
 ```
 
 ### Step 1 — Tailscale (remote access from phones)
@@ -98,22 +100,46 @@ cd /path/to/infrastructure
 docker compose up -d
 ```
 
-If infrastructure is not at `../infrastructure` relative to this repo, set `INFRA_COMPOSE_DIR` in `local/deploy.env`.
+### Step 3 — Configuration
 
-### Step 3 — Configure this app (optional `.env`)
+Two optional files, different jobs:
+
+| File | Read by | Purpose |
+| --- | --- | --- |
+| **`.env`** | Docker Compose → app container | Runtime: timezone, kiosk base URL, USDA key |
+| **`local/deploy.env`** | `./deploy.sh` only | Deploy hints: print your Tailscale URL; optional infra path |
+
+Neither file is committed. Skip both and the app still runs; you lose kiosk URL accuracy, USDA search, and friendly deploy output.
+
+#### `.env` (app)
 
 ```bash
 cd /path/to/Nutrition-Tracker
 cp .env.example .env
 ```
 
-| Variable | Purpose |
-| --- | --- |
-| `TZ` | Household timezone for “today” and logs (default `America/Chicago`) |
-| `USDA_API_KEY` | Optional — ingredient search in custom meals ([USDA FoodData Central](https://fdc.nal.usda.gov/api-key-signup.html)) |
-| `PUBLIC_URL` | Base URL for **family kiosk links** in Settings, e.g. `http://YOUR_SERVER_TAILSCALE_IP:3010` |
+| Variable | Who sets it | Purpose |
+| --- | --- | --- |
+| `TZ` | Server admin (once) | Household timezone for “today” and logs (default `America/Chicago`) |
+| `PUBLIC_URL` | Server admin (once) | Base URL for **family kiosk links** in Settings, e.g. `http://YOUR_SERVER_TAILSCALE_IP:3010` |
+| `USDA_API_KEY` | Server admin (once, optional) | Extra ingredient source when building **custom meals** |
 
-If you skip `.env`, defaults still work; set `PUBLIC_URL` if you use the Home Assistant / kiosk display link.
+**USDA API key — not per app user.** One free key per **server deployment** is enough for the whole household. Members never enter a key in the app. Sign up at [USDA FoodData Central API key signup](https://fdc.nal.usda.gov/api-key-signup.html), paste the key into `.env`, then redeploy. If you leave it empty, custom-meal search still uses your **library** and **Open Food Facts**; only USDA-backed suggestions are omitted.
+
+#### `local/deploy.env` (deploy script)
+
+```bash
+mkdir -p local
+cp local.example/deploy.env.example local/deploy.env
+```
+
+| Variable | Required? | Purpose |
+| --- | --- | --- |
+| `REMOTE_BASE_URL` | Optional | Printed at end of `./deploy.sh` (e.g. `http://YOUR_SERVER_TAILSCALE_IP:3010`) |
+| `INFRA_COMPOSE_DIR` | Usually **no** | Only if infrastructure is **not** at `../infrastructure` next to this repo. Used when you run `./deploy.sh --infra`. |
+| `NUTRITION_PORT` | Optional | Default `3010` if you proxy a different host port |
+
+Typical sibling layout (`…/infrastructure` and `…/Nutrition-Tracker`) needs **no** `INFRA_COMPOSE_DIR`. App-only updates do **not** require `./deploy.sh --infra` unless you changed the infrastructure Caddyfile or its published ports.
 
 ### Step 4 — Deploy Nutrition Tracker
 
@@ -128,8 +154,10 @@ On the server, from this directory:
 Useful flags:
 
 - `./deploy.sh --test` — run `npm test` on the host first (requires Node/npm there)
-- `./deploy.sh --infra` — also run `docker compose up -d` in your infrastructure directory
+- `./deploy.sh --infra` — also restart the **infrastructure** stack (Caddy). Use after Caddyfile or infra compose changes, not for routine app updates.
 - `./deploy.sh --down` — tear down this stack before redeploying
+
+After changing **`.env`** (e.g. adding `USDA_API_KEY`), run `./deploy.sh` again so the container picks up new values.
 
 Manual equivalent:
 
