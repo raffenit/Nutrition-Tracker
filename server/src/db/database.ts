@@ -154,4 +154,8 @@ function migrate(db: AppDatabase): void {
   if (!columns.some((column) => column.name === 'units')) {
     db.exec(`ALTER TABLE targets ADD COLUMN units TEXT NOT NULL DEFAULT 'imperial' CHECK (units IN ('metric', 'imperial'))`);
   }
+  const columnsAfter = db.prepare('PRAGMA table_info(targets)').all() as Array<{ name: string }>;
+  if (!columnsAfter.some((column) => column.name === 'date_format')) {
+    db.exec(`ALTER TABLE targets ADD COLUMN date_format TEXT NOT NULL DEFAULT 'mdy_long'`);
+  }
 }

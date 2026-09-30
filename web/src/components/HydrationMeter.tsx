@@ -12,7 +12,7 @@ type HydrationMeterProps = {
 export function HydrationMeter({ amountMl, targetMl, units, onAdd, onRemove }: HydrationMeterProps) {
   const level = targetMl > 0 ? amountMl / targetMl : 0;
   return (
-    <section className="card">
+    <section className="card hydration-card">
       <h2>Hydration</h2>
       <p>{formatVolume(amountMl, units)} of {formatVolume(targetMl, units)}</p>
       <div className="glasses" aria-hidden="true">

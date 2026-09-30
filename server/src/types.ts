@@ -31,6 +31,8 @@ export type MacroShares = {
 
 export type Units = 'metric' | 'imperial';
 
+export type DateFormat = 'iso' | 'mdy' | 'mdy_long' | 'dmy' | 'dmy_long';
+
 export type Targets = {
   calories: number;
   protein: number;
@@ -40,8 +42,11 @@ export type Targets = {
   sodium: number | null;
   hydrationMl: number;
   units: Units;
+  dateFormat: DateFormat;
   extras: ExtraNutrient[];
 };
+
+export type FamilyMemberTargets = Pick<Targets, 'calories' | 'protein' | 'fiber' | 'hydrationMl' | 'units'>;
 
 export type UserPublic = {
   id: string;

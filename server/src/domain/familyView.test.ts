@@ -11,10 +11,12 @@ test('family view drops weight even if a personal record is passed in', () => {
     date: '2026-09-29',
     today: '2026-09-29',
     householdName: 'Home',
+    dateFormat: 'mdy_long',
     members: [
       {
         user: { id: 'u1', name: 'Rachael', role: 'admin' },
         units: 'imperial' as const,
+        targets: { calories: 2000, protein: 100, fiber: 25, hydrationMl: 2000, units: 'imperial' as const },
         totals,
         logs: [],
         hydration: [],

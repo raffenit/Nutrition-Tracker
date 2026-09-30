@@ -31,7 +31,7 @@ export function TrendsPanel({ trends, units, weightEnabled, onDaysChange }: Tren
   const average = values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
 
   return (
-    <section className="card trends">
+    <section className={`card trends trends-panel${metric === 'hydration' ? ' metric-hydration' : ''}`}>
       <div className="row trends-head">
         <h2>Trends</h2>
         <div className="segmented compact" role="group" aria-label="Trend range">

@@ -37,8 +37,8 @@ export function DashboardPage() {
   if (!day) return <p>{error ?? 'Loading today…'}</p>;
   return (
     <>
-    <div className="stack">
-      <DateBar path="/" date={day.date} today={day.today} />
+    <div className="stack page-head">
+      <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
       {error && <p className="notice">{error}</p>}
       {day.weight.enabled && day.weight.reminderDue && <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />}
       <MacroPieChart totals={day.totals} />

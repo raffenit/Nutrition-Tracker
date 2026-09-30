@@ -1,5 +1,6 @@
 import { HttpError } from '../http/errors.js';
 import type { ExtraNutrient, MacroShares, Nutrients, Targets } from '../types.js';
+import { DEFAULT_DATE_FORMAT, parseDateFormat } from './dateFormat.js';
 import { isRecord, nonNegative, optionalText, requiredNumber, requiredText } from './guards.js';
 
 export const DEFAULT_TARGETS: Targets = {
@@ -11,6 +12,7 @@ export const DEFAULT_TARGETS: Targets = {
   sodium: 2300,
   hydrationMl: 2000,
   units: 'imperial',
+  dateFormat: DEFAULT_DATE_FORMAT,
   extras: [],
 };
 
@@ -76,6 +78,7 @@ export function readTargets(value: unknown): Targets {
     sodium,
     hydrationMl: nonNegative(requiredNumber(value.hydrationMl, 'Hydration'), 'Hydration'),
     units: value.units === 'metric' ? 'metric' : 'imperial',
+    dateFormat: parseDateFormat(value.dateFormat),
     extras: readExtras(value.extras),
   };
 }

@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { navigate } from '../nav';
 import { HelixMark } from './HelixMark';
-import { IconFamily, IconLibrary, IconSettings, IconSignIn, IconToday } from './NavIcons';
+import { IconFamily, IconHome, IconLibrary, IconSettings, IconSignIn } from './NavIcons';
 
 const LINKS = [
-  { href: '/', label: 'Today', Icon: IconToday },
+  { href: '/', label: 'Home', Icon: IconHome },
   { href: '/library', label: 'Library', Icon: IconLibrary },
   { href: '/family', label: 'Family', Icon: IconFamily },
   { href: '/settings', label: 'Settings', Icon: IconSettings },
@@ -17,7 +17,7 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand" aria-label="Home"><HelixMark size={32} /></div>
+        <div className="brand" aria-label="Home"><HelixMark size={28} /></div>
       </header>
       <main className="main">{children}</main>
       {links.length > 0 && (

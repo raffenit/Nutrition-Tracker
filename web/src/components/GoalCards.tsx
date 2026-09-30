@@ -72,7 +72,7 @@ function buildGoals(totals: DayTotals, targets: Targets): Goal[] {
       amount: logged,
       target: extra.amount,
       unit: extra.unit,
-      color: 'var(--accent-soft)',
+      color: 'var(--accent-warm)',
     });
   }
   return goals;

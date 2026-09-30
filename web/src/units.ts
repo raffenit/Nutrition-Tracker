@@ -11,7 +11,26 @@ export function formatVolume(ml: number, units: Units): string {
 }
 
 export function hydrationTargetLabel(units: Units): string {
-  return units === 'imperial' ? 'Daily hydration goal (ml)' : 'Daily hydration goal (ml)';
+  return units === 'imperial' ? 'Daily hydration goal (oz)' : 'Daily hydration goal (ml)';
+}
+
+export function mlToFlOz(ml: number): number {
+  return ml / ML_PER_FL_OZ;
+}
+
+export function flOzToMl(oz: number): number {
+  return Math.round(oz * ML_PER_FL_OZ);
+}
+
+/** Whole fluid ounces for hydration goal inputs. */
+export function hydrationGoalInputValue(ml: number, units: Units): number {
+  if (units === 'imperial') return Math.round(mlToFlOz(ml));
+  return Math.round(ml);
+}
+
+export function hydrationGoalFromInput(value: number, units: Units): number {
+  if (units === 'imperial') return flOzToMl(value);
+  return Math.round(value);
 }
 
 export function glassLabel(units: Units): string {

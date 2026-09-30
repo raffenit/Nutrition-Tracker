@@ -1,8 +1,9 @@
-import type { DayTotals, HydrationEntry, MealLog, Units, UserPublic } from '../types.js';
+import type { DateFormat, DayTotals, FamilyMemberTargets, HydrationEntry, MealLog, Units, UserPublic } from '../types.js';
 
 export type FamilyMember = {
   user: UserPublic;
   units: Units;
+  targets: FamilyMemberTargets;
   totals: DayTotals;
   logs: MealLog[];
   hydration: HydrationEntry[];
@@ -12,10 +13,12 @@ export type FamilyBoard = {
   date: string;
   today: string;
   householdName: string;
+  dateFormat: DateFormat;
   members: FamilyMember[];
 };
 
-type MemberSource = FamilyMember & {
+type MemberSource = Omit<FamilyMember, 'user'> & {
+  user: UserPublic;
   weight?: unknown;
 };
 
@@ -23,12 +26,14 @@ export function toFamilyBoard(input: {
   date: string;
   today: string;
   householdName: string;
+  dateFormat: DateFormat;
   members: MemberSource[];
 }): FamilyBoard {
   const board = {
     date: input.date,
     today: input.today,
     householdName: input.householdName,
+    dateFormat: input.dateFormat,
     members: input.members.map(toFamilyMember),
   };
   assertFamilyBoardIsPublic(board);
@@ -47,10 +52,11 @@ export function assertFamilyBoardIsPublic(value: unknown): void {
   }
 }
 
-function toFamilyMember(source: MemberSource & { units: Units }): FamilyMember {
+function toFamilyMember(source: MemberSource): FamilyMember {
   return {
     user: { id: source.user.id, name: source.user.name, role: source.user.role },
     units: source.units,
+    targets: source.targets,
     totals: source.totals,
     logs: source.logs,
     hydration: source.hydration,

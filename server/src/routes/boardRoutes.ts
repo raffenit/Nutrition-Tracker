@@ -5,7 +5,9 @@ import { dayTotals } from '../domain/day.js';
 import { toFamilyBoard } from '../domain/familyView.js';
 import { DEFAULT_TARGETS } from '../domain/nutrients.js';
 import { readLocalDate, todayLocal } from '../domain/time.js';
+import { DEFAULT_DATE_FORMAT, type DateFormat } from '../domain/dateFormat.js';
 import { requireReader, requireUser } from '../http/access.js';
+import type { Auth } from '../http/router.js';
 import { sendJson } from '../http/respond.js';
 import { route, type Ctx, type Route } from '../http/router.js';
 import { householdZone } from './household.js';
@@ -45,6 +47,7 @@ function familyBoard(ctx: Ctx): Promise<void> {
     date,
     today,
     householdName: household?.name ?? 'Household',
+    dateFormat: readerDateFormat(ctx.auth, ctx.db),
     members: listUsers(ctx.db).map((user) => dayFor(ctx, user.id, date, zone)),
   });
   sendJson(ctx.res, 200, board);
@@ -64,9 +67,21 @@ function dayFor(ctx: Ctx, userId: string, date: string, zone: string) {
   return {
     user: user ?? { id: userId, name: 'Someone', role: 'member' as const },
     units: targets.units,
+    targets: {
+      calories: targets.calories,
+      protein: targets.protein,
+      fiber: targets.fiber,
+      hydrationMl: targets.hydrationMl,
+      units: targets.units,
+    },
     date,
     totals: dayTotals(logs, hydrationTotal(hydration)),
     logs,
     hydration,
   };
+}
+
+function readerDateFormat(auth: Auth, db: Parameters<typeof getTargets>[0]): DateFormat {
+  if (auth.kind !== 'user') return DEFAULT_DATE_FORMAT;
+  return getTargets(db, auth.user.id)?.dateFormat ?? DEFAULT_DATE_FORMAT;
 }

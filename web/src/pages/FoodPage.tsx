@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { navigate } from '../nav';
 import { CORE_NUTRIENT_FIELDS, removeExtraAt, setCoreNutrient, setExtraAt } from '../nutrientFields';
-import { EMPTY_NUTRIENTS, type Food, type Nutrients, type SearchHit } from '../types';
+import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
+import { EMPTY_NUTRIENTS, type Food, type Nutrients } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
 
@@ -100,7 +101,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       } else {
         await api('/api/foods', { method: 'POST', body: JSON.stringify(payload) });
       }
-      navigate('/library');
+      navigate('/library?shelf=foods');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save');
     }
@@ -109,38 +110,59 @@ function FoodEditor({ editId }: { editId: string | null }) {
   if (loading) return <p className="page">Loading…</p>;
 
   return (
-    <form className="card page" onSubmit={(event) => { void save(event); }}>
-      <button type="button" className="back-link" onClick={() => navigate('/library')}>← Library</button>
-      <h2>{editId ? 'Edit food' : 'Add food'}</h2>
-      <label>Scan nutrition facts<input type="file" accept="image/*,.pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></label>
-      <div className="row">
-        <input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="Or paste a PDF or nutrition page URL" />
-        <button type="button" onClick={() => void importLink()}>Import link</button>
-      </div>
-      <p className="muted">Works best with direct PDF links or HTML pages that include Nutrition Facts in the page source. App-only pages may not load.</p>
-      {menuItems.length > 0 && (
-        <ul className="list card menu-pick-list">
-          {menuItems.map((item) => (
-            <li key={item.name}>
-              <button type="button" className="library-row-open" onClick={() => pickMenuItem(item)}>
-                <span className="library-row-title">{item.name}</span>
-                <span className="library-row-meta">{item.servingLabel} · {Math.round(item.nutrients.calories)} kcal · {Math.round(item.nutrients.protein)} g protein</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {menuItems.length === 0 && (
-        <div className="row">{candidates.map((item) => <button type="button" key={item} onClick={() => setName(item)}>{item}</button>)}</div>
-      )}
-      <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-      <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
-      <label>Serving<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
-      <NutrientFields nutrients={nutrients} onChange={setNutrients} />
-      <label><span>This is a drink</span><input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} /></label>
-      {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
+    <form className="page food-form" onSubmit={(event) => { void save(event); }}>
+      <header className="form-head">
+        <button type="button" className="back-link" onClick={() => navigate('/library?shelf=foods')}>← Foods</button>
+        <h1>{editId ? 'Edit food' : 'Add food'}</h1>
+      </header>
+
+      <section className="card form-section">
+        <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required autoFocus={!editId} /></label>
+        <div className="form-row-2">
+          <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
+          <label>Serving<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
+        </div>
+        <label className="checkbox-inline">
+          <input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} />
+          <span>Counts as a drink (hydration)</span>
+        </label>
+        {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
+      </section>
+
+      <details className="card form-section import-panel">
+        <summary>Import from photo, PDF, or link</summary>
+        <label className="import-file">Choose file<input type="file" accept="image/*,.pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></label>
+        <div className="import-url-row">
+          <input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="PDF or nutrition page URL" />
+          <button type="button" onClick={() => void importLink()}>Import</button>
+        </div>
+        <p className="muted import-hint">Direct PDF/HTML links work best; in-app-only menus may not load.</p>
+        {menuItems.length > 0 && (
+          <ul className="library-list compact-list menu-pick-list">
+            {menuItems.map((item) => (
+              <li key={item.name}>
+                <button type="button" className="library-item" onClick={() => pickMenuItem(item)}>
+                  <span className="library-item-text">
+                    <span className="library-item-title">{item.name}</span>
+                    <span className="library-item-meta">{item.servingLabel} · {Math.round(item.nutrients.protein)} g protein</span>
+                  </span>
+                  <span className="library-item-kcal">{Math.round(item.nutrients.calories)} kcal</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {menuItems.length === 0 && candidates.length > 0 && (
+          <div className="chip-row">{candidates.map((item) => <button type="button" className="chip" key={item} onClick={() => setName(item)}>{item}</button>)}</div>
+        )}
+      </details>
+
+      <section className="card form-section">
+        <NutrientFields nutrients={nutrients} onChange={setNutrients} />
+      </section>
+
       {error && <p className="notice">{error}</p>}
-      <button className="primary" type="submit">Save food</button>
+      <button className="primary form-save" type="submit">Save food</button>
     </form>
   );
 }
@@ -148,8 +170,6 @@ function FoodEditor({ editId }: { editId: string | null }) {
 function RecipeEditor({ editId }: { editId: string | null }) {
   const [name, setName] = useState('');
   const [makesServings, setMakesServings] = useState('1');
-  const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<SearchHit[]>([]);
   const [lines, setLines] = useState<Array<{ foodId: string | null; name: string; servings: number; servingLabel: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(editId));
@@ -172,9 +192,18 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     }).catch(() => setError('Could not load this recipe'));
   }, [editId]);
 
-  async function search(): Promise<void> {
-    const result = await api<{ results: SearchHit[] }>(`/api/ingredients/search?q=${encodeURIComponent(query)}&library=1`);
-    setHits(result.results.filter((hit) => hit.source === 'library'));
+  const excludeIds = editId ? new Set([editId]) : undefined;
+
+  function addLibraryIngredient(food: Food): void {
+    setLines((prev) => {
+      const index = prev.findIndex((line) => line.foodId === food.id);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = { ...next[index], servings: next[index].servings + 1 };
+        return next;
+      }
+      return [...prev, { foodId: food.id, name: food.name, servings: 1, servingLabel: food.servingLabel }];
+    });
   }
 
   async function save(): Promise<void> {
@@ -200,7 +229,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       } else {
         await api('/api/foods/compose', { method: 'POST', body: JSON.stringify(payload) });
       }
-      navigate('/library');
+      navigate('/library?shelf=recipes');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save');
     }
@@ -209,52 +238,57 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   if (loading) return <p className="page">Loading…</p>;
 
   return (
-    <div className="page">
-      <button type="button" className="back-link" onClick={() => navigate('/library')}>← Library</button>
-      <h2>{editId ? 'Edit recipe' : 'New recipe'}</h2>
-      <p className="muted">Pick foods from your library. Totals are divided by how many servings the recipe makes.</p>
-      <label>Recipe name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-      <label>Recipe makes (servings)<input type="number" min="1" step="1" value={makesServings} onChange={(event) => setMakesServings(event.target.value)} required /></label>
-      <div className="row">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search library foods" />
-        <button type="button" onClick={() => void search()}>Search</button>
-      </div>
-      <ul className="list card">
-        {hits.map((hit) => (
-          <li key={hit.foodId ?? hit.name}>
-            <button type="button" className="library-row-open" onClick={() => {
-              if (!hit.foodId) return;
-              setLines([...lines, { foodId: hit.foodId, name: hit.name, servings: 1, servingLabel: hit.servingLabel }]);
-            }}>
-              {hit.name} · {hit.servingLabel}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <ul className="list card">
-        {lines.map((line, index) => (
-          <li key={`${line.foodId ?? line.name}-${index}`} className="recipe-line">
-            <span>{line.name} ({line.servingLabel})</span>
-            <label className="recipe-qty">
-              Servings used
-              <input
-                type="number"
-                min="0.25"
-                step="0.25"
-                value={line.servings}
-                onChange={(event) => {
-                  const next = [...lines];
-                  next[index] = { ...line, servings: Number(event.target.value) };
-                  setLines(next);
-                }}
-              />
-            </label>
-            <button type="button" onClick={() => setLines(lines.filter((_, i) => i !== index))}>Remove</button>
-          </li>
-        ))}
-      </ul>
+    <div className="page food-form">
+      <header className="form-head">
+        <button type="button" className="back-link" onClick={() => navigate('/library?shelf=recipes')}>← Recipes</button>
+        <h1>{editId ? 'Edit recipe' : 'New recipe'}</h1>
+      </header>
+
+      <section className="card form-section">
+        <div className="form-row-2">
+          <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required autoFocus={!editId} /></label>
+          <label>Makes (servings)<input type="number" min="1" step="1" value={makesServings} onChange={(event) => setMakesServings(event.target.value)} required /></label>
+        </div>
+      </section>
+
+      <section className="card form-section">
+        <h2 className="form-section-title">Add from food library</h2>
+        <p className="muted">Tap a food to add it as an ingredient. Search or scroll the list.</p>
+        <FoodLibraryPicker shelf="foods" onSelect={addLibraryIngredient} excludeIds={excludeIds} />
+        <button type="button" className="linkish" onClick={() => navigate('/foods/new')}>New food from label</button>
+      </section>
+
+      <section className="card form-section">
+        <h2 className="form-section-title">Ingredients {lines.length > 0 ? `(${lines.length})` : ''}</h2>
+        {lines.length === 0 && <p className="muted">Search above and tap a food to add it.</p>}
+        <ul className="recipe-ingredients">
+          {lines.map((line, index) => (
+            <li key={`${line.foodId ?? line.name}-${index}`} className="recipe-ingredient">
+              <span className="recipe-ingredient-name">{line.name}</span>
+              <label className="recipe-ingredient-qty">
+                <span className="sr-only">Servings of {line.name}</span>
+                <input
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  value={line.servings}
+                  aria-label={`Servings of ${line.name}`}
+                  onChange={(event) => {
+                    const next = [...lines];
+                    next[index] = { ...line, servings: Number(event.target.value) };
+                    setLines(next);
+                  }}
+                />
+                <span className="muted">× {line.servingLabel}</span>
+              </label>
+              <button type="button" className="recipe-ingredient-remove" aria-label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))}>×</button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       {error && <p className="notice">{error}</p>}
-      <button className="primary" type="button" onClick={() => void save()}>Save recipe</button>
+      <button className="primary form-save" type="button" onClick={() => void save()} disabled={lines.length === 0}>Save recipe</button>
     </div>
   );
 }

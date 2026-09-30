@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import { hydrationTargetLabel, type Units } from '../units';
+import { DATE_FORMAT_OPTIONS, type DateFormat } from '../dateFormat';
+import {
+  hydrationGoalFromInput,
+  hydrationGoalInputValue,
+  hydrationTargetLabel,
+  type Units,
+} from '../units';
 import type { Targets, User, WeightStatus } from '../types';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -21,10 +27,11 @@ export function SettingsPage({ user, household }: SettingsPageProps) {
   if (!targets || !weight) return <p>Loading settings…</p>;
   return (
     <div className="page">
-      <UnitsToggle
+      <DisplayPreferences
         units={targets.units}
-        onChange={async (units) => {
-          const next = { ...targets, units };
+        dateFormat={targets.dateFormat}
+        onChange={async (patch) => {
+          const next = { ...targets, ...patch };
           const result = await api<{ targets: Targets }>('/api/targets', { method: 'PUT', body: JSON.stringify(next) });
           setTargets(result.targets);
         }}
@@ -47,14 +54,34 @@ export function SettingsPage({ user, household }: SettingsPageProps) {
   );
 }
 
-function UnitsToggle({ units, onChange }: { units: Units; onChange: (units: Units) => Promise<void> }) {
+function DisplayPreferences({
+  units,
+  dateFormat,
+  onChange,
+}: {
+  units: Units;
+  dateFormat: DateFormat;
+  onChange: (patch: Partial<Pick<Targets, 'units' | 'dateFormat'>>) => Promise<void>;
+}) {
   return (
     <section className="card">
-      <h2>Units</h2>
+      <h2>Display</h2>
+      <p className="muted">Personal preferences for dates and units on Home and Family.</p>
+      <label>
+        Date format
+        <select
+          value={dateFormat}
+          onChange={(event) => void onChange({ dateFormat: event.target.value as DateFormat })}
+        >
+          {DATE_FORMAT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.example}</option>
+          ))}
+        </select>
+      </label>
       <p className="muted">Hydration uses fluid ounces in imperial mode and milliliters in metric mode.</p>
       <div className="segmented" role="group" aria-label="Measurement units">
-        <button type="button" className={units === 'imperial' ? 'active' : ''} onClick={() => void onChange('imperial')}>Imperial</button>
-        <button type="button" className={units === 'metric' ? 'active' : ''} onClick={() => void onChange('metric')}>Metric</button>
+        <button type="button" className={units === 'imperial' ? 'active' : ''} onClick={() => void onChange({ units: 'imperial' })}>Imperial</button>
+        <button type="button" className={units === 'metric' ? 'active' : ''} onClick={() => void onChange({ units: 'metric' })}>Metric</button>
       </div>
     </section>
   );
@@ -70,8 +97,24 @@ function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: T
       {(['calories', 'protein', 'fiber', 'fat', 'carbs'] as const).map((key) => (
         <label key={key}>{key}<input value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: Number(event.target.value) })} /></label>
       ))}
-      <label>{hydrationTargetLabel(draft.units)}<input value={draft.hydrationMl} onChange={(event) => setDraft({ ...draft, hydrationMl: Number(event.target.value) })} /></label>
-      <p className="muted">Enter the goal in ml. The dashboard shows oz when imperial is selected.</p>
+      <label>
+        {hydrationTargetLabel(draft.units)}
+        <input
+          type="number"
+          min={0}
+          step={draft.units === 'imperial' ? 1 : 50}
+          value={hydrationGoalInputValue(draft.hydrationMl, draft.units)}
+          onChange={(event) => {
+            const raw = event.target.value === '' ? 0 : Number(event.target.value);
+            setDraft({ ...draft, hydrationMl: hydrationGoalFromInput(raw, draft.units) });
+          }}
+        />
+      </label>
+      {draft.units === 'imperial' ? (
+        <p className="muted">Fluid ounces; Add/remove water on Today uses 8 oz per glass.</p>
+      ) : (
+        <p className="muted">Milliliters; Add/remove water on Today uses one 250 ml glass.</p>
+      )}
       <label>Sodium target, blank to hide<input value={draft.sodium ?? ''} onChange={(event) => setDraft({ ...draft, sodium: event.target.value === '' ? null : Number(event.target.value) })} /></label>
       <ExtraGoalsEditor
         extras={draft.extras}
