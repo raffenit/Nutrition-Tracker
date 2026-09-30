@@ -40,6 +40,10 @@ export type Targets = {
   fat: number;
   carbs: number;
   sodium: number | null;
+  /** When true, sodium is a daily ceiling (stay at or below). */
+  sodiumIsLimit: boolean;
+  /** When true, carbs are a daily ceiling (stay at or below). */
+  carbsIsLimit: boolean;
   hydrationMl: number;
   units: Units;
   dateFormat: DateFormat;

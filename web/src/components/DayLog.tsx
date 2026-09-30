@@ -1,12 +1,14 @@
 import type { MealLog } from '../types';
 
-type DayLogProps = { logs: MealLog[]; onRemove?: (id: string) => void };
+type DayLogProps = { logs: MealLog[]; onRemove?: (id: string) => void; isToday?: boolean };
 
-export function DayLog({ logs, onRemove }: DayLogProps) {
+export function DayLog({ logs, onRemove, isToday = true }: DayLogProps) {
   return (
     <section className="card">
       <h2>Log</h2>
-      {logs.length === 0 && <p className="muted">Nothing logged yet today.</p>}
+      {logs.length === 0 && (
+        <p className="muted">{isToday ? 'Nothing logged yet today.' : 'Nothing logged on this day.'}</p>
+      )}
       <ul className="list">
         {logs.map((log) => (
           <li key={log.id}>

@@ -21,11 +21,17 @@ export function DateBar({ path, date, today, dateFormat }: DateBarProps) {
           ›
         </button>
       </div>
-      {!isToday && (
-        <button type="button" className="datebar-jump" onClick={() => navigate(path)}>
-          Jump to today
-        </button>
-      )}
+      <div className="datebar-footer">
+        {isToday ? (
+          <span className="datebar-jump datebar-jump-spacer" aria-hidden="true">
+            Jump to today
+          </span>
+        ) : (
+          <button type="button" className="datebar-jump" onClick={() => navigate(path)}>
+            Jump to today
+          </button>
+        )}
+      </div>
     </header>
   );
 }

@@ -37,7 +37,8 @@ export function DashboardPage() {
   if (!day) return <p>{error ?? 'Loading today…'}</p>;
   return (
     <>
-    <div className="stack page-head">
+    <div className="page">
+    <div className="stack">
       <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
       {error && <p className="notice">{error}</p>}
       {day.weight.enabled && day.weight.reminderDue && <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />}
@@ -50,13 +51,18 @@ export function DashboardPage() {
         onAdd={() => void api('/api/hydration', { method: 'POST', body: JSON.stringify({ amountMl: day.glassMl, loggedAt: nowLocalInput() }) }).then(() => load())}
         onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
       />
-      <DayLog logs={day.logs} onRemove={(id) => void api(`/api/logs/${id}`, { method: 'DELETE' }).then(() => load())} />
+      <DayLog
+        logs={day.logs}
+        isToday={day.date === day.today}
+        onRemove={(id) => void api(`/api/logs/${id}`, { method: 'DELETE' }).then(() => load())}
+      />
       <TrendsPanel
         trends={day.trends}
         units={day.targets.units}
         weightEnabled={day.weight.enabled}
         onDaysChange={(days) => setTrendDays(days)}
       />
+    </div>
     </div>
     <LogFab />
     </>

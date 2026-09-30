@@ -42,6 +42,15 @@ export function IconLibrary({ className }: IconProps) {
   );
 }
 
+export function IconPlan({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path {...stroke} d="M8 2v4M16 2v4M4 9h16" />
+      <path {...stroke} d="M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+    </svg>
+  );
+}
+
 export function IconFamily({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">

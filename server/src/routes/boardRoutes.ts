@@ -2,6 +2,7 @@ import { hydrationTotal, listHydration, listMeals } from '../db/logs.js';
 import { getTargets, listUsers } from '../db/users.js';
 import { glassVolumeMl } from '../domain/units.js';
 import { dayTotals } from '../domain/day.js';
+import { buildMemberInsights } from '../domain/familyInsights.js';
 import { toFamilyBoard } from '../domain/familyView.js';
 import { DEFAULT_TARGETS } from '../domain/nutrients.js';
 import { readLocalDate, todayLocal } from '../domain/time.js';
@@ -48,7 +49,7 @@ function familyBoard(ctx: Ctx): Promise<void> {
     today,
     householdName: household?.name ?? 'Household',
     dateFormat: readerDateFormat(ctx.auth, ctx.db),
-    members: listUsers(ctx.db).map((user) => dayFor(ctx, user.id, date, zone)),
+    members: listUsers(ctx.db).map((user) => familyMemberFor(ctx, user.id, date, zone)),
   });
   sendJson(ctx.res, 200, board);
   return Promise.resolve();
@@ -57,6 +58,15 @@ function familyBoard(ctx: Ctx): Promise<void> {
 function trendDays(value: string | null): number {
   const days = finiteNumber(value);
   return days === null ? 7 : days;
+}
+
+function familyMemberFor(ctx: Ctx, userId: string, date: string, zone: string) {
+  const day = dayFor(ctx, userId, date, zone);
+  const targets = getTargets(ctx.db, userId) ?? DEFAULT_TARGETS;
+  return {
+    ...day,
+    insights: buildMemberInsights(ctx.db, userId, targets, date, zone, day.totals),
+  };
 }
 
 function dayFor(ctx: Ctx, userId: string, date: string, zone: string) {

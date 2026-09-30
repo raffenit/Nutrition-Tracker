@@ -22,6 +22,7 @@ import { clearSessionCookie, readCookie, sessionCookie, SESSION_COOKIE } from '.
 import { requireAdmin, requireUser } from '../http/access.js';
 import { readJson, sendJson } from '../http/respond.js';
 import { route, type Route } from '../http/router.js';
+import { applyDietPreset, dietPresetById, listDietPresetsPublic } from '../domain/dietPresets.js';
 import { readTargets } from '../domain/nutrients.js';
 
 export function authRoutes(): Route[] {
@@ -52,6 +53,11 @@ export function authRoutes(): Route[] {
       sendJson(ctx.res, 200, { targets: getTargets(ctx.db, user.id) ?? DEFAULT_TARGETS });
     }),
     route('PUT', '/api/targets', saveUserTargets),
+    route('GET', '/api/diet-presets', async (ctx) => {
+      requireUser(ctx.auth);
+      sendJson(ctx.res, 200, { presets: listDietPresetsPublic() });
+    }),
+    route('POST', '/api/targets/apply-preset', applyTargetsPreset),
     route('PUT', '/api/household', saveHouseholdSettings),
     route('POST', '/api/household/kiosk', createKioskLink),
   ];
@@ -109,6 +115,17 @@ async function removeMember(ctx: Parameters<Route['handler']>[0]): Promise<void>
   if (target.role === 'admin' && countAdmins(ctx.db) <= 1) throw new HttpError(400, 'Keep at least one admin');
   deleteUser(ctx.db, target.id);
   sendJson(ctx.res, 200, { ok: true });
+}
+
+async function applyTargetsPreset(ctx: Parameters<Route['handler']>[0]): Promise<void> {
+  const user = requireUser(ctx.auth);
+  const body = await readJson(ctx.req);
+  if (!isRecord(body)) throw new HttpError(400, 'Expected a preset id');
+  const preset = dietPresetById(requiredText(body.presetId, 'Preset'));
+  if (!preset) throw new HttpError(404, 'Unknown diet preset');
+  const current = getTargets(ctx.db, user.id) ?? DEFAULT_TARGETS;
+  saveTargets(ctx.db, user.id, applyDietPreset(current, preset));
+  sendJson(ctx.res, 200, { targets: getTargets(ctx.db, user.id) });
 }
 
 async function saveUserTargets(ctx: Parameters<Route['handler']>[0]): Promise<void> {

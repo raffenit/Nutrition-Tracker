@@ -138,6 +138,18 @@ CREATE TABLE IF NOT EXISTS weight_dismissals (
 );
 
 CREATE INDEX IF NOT EXISTS weight_entries_user_date ON weight_entries(user_id, local_date);
+
+CREATE TABLE IF NOT EXISTS meal_plan_entries (
+  id TEXT PRIMARY KEY,
+  week_start TEXT NOT NULL,
+  local_date TEXT NOT NULL,
+  slot TEXT NOT NULL CHECK (slot IN ('meal', 'snack', 'dessert', 'drink')),
+  food_id TEXT NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+  servings REAL NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS meal_plan_week ON meal_plan_entries(week_start);
 `;
 
 export function openDatabase(file: string): AppDatabase {
@@ -157,5 +169,13 @@ function migrate(db: AppDatabase): void {
   const columnsAfter = db.prepare('PRAGMA table_info(targets)').all() as Array<{ name: string }>;
   if (!columnsAfter.some((column) => column.name === 'date_format')) {
     db.exec(`ALTER TABLE targets ADD COLUMN date_format TEXT NOT NULL DEFAULT 'mdy_long'`);
+  }
+  let columnsLimits = db.prepare('PRAGMA table_info(targets)').all() as Array<{ name: string }>;
+  if (!columnsLimits.some((column) => column.name === 'sodium_is_limit')) {
+    db.exec(`ALTER TABLE targets ADD COLUMN sodium_is_limit INTEGER NOT NULL DEFAULT 0`);
+    columnsLimits = db.prepare('PRAGMA table_info(targets)').all() as Array<{ name: string }>;
+  }
+  if (!columnsLimits.some((column) => column.name === 'carbs_is_limit')) {
+    db.exec(`ALTER TABLE targets ADD COLUMN carbs_is_limit INTEGER NOT NULL DEFAULT 0`);
   }
 }

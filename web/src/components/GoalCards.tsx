@@ -8,11 +8,12 @@ type Goal = {
   target: number;
   unit: string;
   color: string;
+  isLimit: boolean;
 };
 
 type GoalCardsProps = { totals: DayTotals; targets: Targets };
 
-const CORE: Array<{ key: keyof Targets; label: string; unit: string; color: string; optional?: boolean }> = [
+const CORE: Array<{ key: keyof Targets; label: string; unit: string; color: string }> = [
   { key: 'calories', label: 'Calories', unit: 'kcal', color: 'var(--calories)' },
   { key: 'protein', label: 'Protein', unit: 'g', color: 'var(--protein)' },
   { key: 'fiber', label: 'Fiber', unit: 'g', color: 'var(--fiber)' },
@@ -26,12 +27,14 @@ export function GoalCards({ totals, targets }: GoalCardsProps) {
   return (
     <section className="goal-cards" aria-label="Nutrient goals">
       {goals.map((goal) => (
-        <article className="goal-card card" key={goal.key}>
+        <article className={`goal-card card${goal.isLimit && goal.amount > goal.target ? ' goal-over' : ''}`} key={goal.key}>
           <header className="goal-head">
             <strong>{goal.label}</strong>
-            <span>{formatAmount(goal.amount, goal.unit)} / {formatAmount(goal.target, goal.unit)}</span>
+            <span>
+              {formatAmount(goal.amount, goal.unit)} / {goal.isLimit ? '≤' : ''}{formatAmount(goal.target, goal.unit)}
+            </span>
           </header>
-          <div className="bar"><span style={{ width: `${progress(goal.amount, goal.target)}%`, background: goal.color }} /></div>
+          <div className="bar"><span style={{ width: `${progress(goal.amount, goal.target, goal.isLimit)}%`, background: goal.color }} /></div>
         </article>
       ))}
     </section>
@@ -42,6 +45,7 @@ function buildGoals(totals: DayTotals, targets: Targets): Goal[] {
   const goals: Goal[] = [];
   for (const row of CORE) {
     if (row.key === 'sodium' || row.key === 'hydrationMl' || row.key === 'units' || row.key === 'extras') continue;
+    if (row.key === 'sodiumIsLimit' || row.key === 'carbsIsLimit' || row.key === 'dateFormat') continue;
     const target = targets[row.key] as number;
     if (target <= 0) continue;
     goals.push({
@@ -51,6 +55,7 @@ function buildGoals(totals: DayTotals, targets: Targets): Goal[] {
       target,
       unit: row.unit,
       color: row.color,
+      isLimit: row.key === 'carbs' && targets.carbsIsLimit,
     });
   }
   if (targets.sodium !== null && targets.sodium > 0) {
@@ -61,6 +66,7 @@ function buildGoals(totals: DayTotals, targets: Targets): Goal[] {
       target: targets.sodium,
       unit: 'mg',
       color: 'var(--sodium)',
+      isLimit: targets.sodiumIsLimit,
     });
   }
   for (const extra of targets.extras) {
@@ -73,12 +79,14 @@ function buildGoals(totals: DayTotals, targets: Targets): Goal[] {
       target: extra.amount,
       unit: extra.unit,
       color: 'var(--accent-warm)',
+      isLimit: false,
     });
   }
   return goals;
 }
 
-function progress(amount: number, target: number): number {
+function progress(amount: number, target: number, isLimit: boolean): number {
   if (target <= 0) return 0;
+  if (isLimit) return Math.min(amount / target, 1) * 100;
   return Math.min(amount / target, 1) * 100;
 }

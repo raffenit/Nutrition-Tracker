@@ -20,6 +20,8 @@ type TargetSql = {
   fat: number;
   carbs: number;
   sodium: number | null;
+  sodium_is_limit: number;
+  carbs_is_limit: number;
   hydration_ml: number;
   units: 'metric' | 'imperial' | null;
   date_format: string | null;
@@ -92,8 +94,8 @@ export function saveKioskHash(db: AppDatabase, hash: string): void {
 
 export function saveTargets(db: AppDatabase, userId: string, targets: Targets): void {
   db.prepare(
-    `INSERT INTO targets (user_id, calories, protein, fiber, fat, carbs, sodium, hydration_ml, units, date_format, extras_json)
-     VALUES (@userId, @calories, @protein, @fiber, @fat, @carbs, @sodium, @hydrationMl, @units, @dateFormat, @extras)
+    `INSERT INTO targets (user_id, calories, protein, fiber, fat, carbs, sodium, sodium_is_limit, carbs_is_limit, hydration_ml, units, date_format, extras_json)
+     VALUES (@userId, @calories, @protein, @fiber, @fat, @carbs, @sodium, @sodiumIsLimit, @carbsIsLimit, @hydrationMl, @units, @dateFormat, @extras)
      ON CONFLICT(user_id) DO UPDATE SET
        calories = excluded.calories,
        protein = excluded.protein,
@@ -101,6 +103,8 @@ export function saveTargets(db: AppDatabase, userId: string, targets: Targets): 
        fat = excluded.fat,
        carbs = excluded.carbs,
        sodium = excluded.sodium,
+       sodium_is_limit = excluded.sodium_is_limit,
+       carbs_is_limit = excluded.carbs_is_limit,
        hydration_ml = excluded.hydration_ml,
        units = excluded.units,
        date_format = excluded.date_format,
@@ -110,7 +114,7 @@ export function saveTargets(db: AppDatabase, userId: string, targets: Targets): 
 
 export function getTargets(db: AppDatabase, userId: string): Targets | null {
   const row = db.prepare(
-    `SELECT calories, protein, fiber, fat, carbs, sodium, hydration_ml, units, date_format, extras_json
+    `SELECT calories, protein, fiber, fat, carbs, sodium, sodium_is_limit, carbs_is_limit, hydration_ml, units, date_format, extras_json
      FROM targets WHERE user_id = ?`,
   ).get(userId) as TargetSql | undefined;
   if (!row) return null;
@@ -121,6 +125,8 @@ export function getTargets(db: AppDatabase, userId: string): Targets | null {
     fat: row.fat,
     carbs: row.carbs,
     sodium: row.sodium,
+    sodiumIsLimit: (row.sodium_is_limit ?? 0) === 1,
+    carbsIsLimit: (row.carbs_is_limit ?? 0) === 1,
     hydrationMl: row.hydration_ml,
     units: row.units === 'metric' ? 'metric' : 'imperial',
     dateFormat: parseDateFormat(row.date_format ?? undefined),
@@ -136,6 +142,8 @@ function targetParams(targets: Targets): Record<string, string | number | null> 
     fat: targets.fat,
     carbs: targets.carbs,
     sodium: targets.sodium,
+    sodiumIsLimit: targets.sodiumIsLimit ? 1 : 0,
+    carbsIsLimit: targets.carbsIsLimit ? 1 : 0,
     hydrationMl: targets.hydrationMl,
     units: targets.units,
     dateFormat: targets.dateFormat,

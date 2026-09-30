@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { FoodPage } from './pages/FoodPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { PlanPage } from './pages/PlanPage';
 import { LoginPage } from './pages/LoginPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SetupPage } from './pages/SetupPage';
@@ -30,6 +31,7 @@ export function App() {
     <AppShell path={path} kiosk={session.mode === 'kiosk'}>
       {path === '/family' && <FamilyPage kiosk={session.mode === 'kiosk'} />}
       {path === '/add' && <AddLogPage />}
+      {path === '/plan' && <PlanPage />}
       {path === '/library' && <LibraryPage />}
       {path === '/settings' && session.user && <SettingsPage user={session.user} household={session.household} />}
       {(path === '/foods/new' || path === '/foods/edit') && <FoodPage editId={path === '/foods/edit' ? editId : null} />}

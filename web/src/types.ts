@@ -19,18 +19,30 @@ export type Targets = {
   fat: number;
   carbs: number;
   sodium: number | null;
+  sodiumIsLimit: boolean;
+  carbsIsLimit: boolean;
   hydrationMl: number;
   units: Units;
   dateFormat: DateFormat;
   extras: Nutrients['extras'];
 };
 
+export type DietPresetPublic = {
+  id: string;
+  name: string;
+  summary: string;
+  sourceLabel: string;
+  sourceUrl: string;
+};
+
 export type User = { id: string; name: string; role: 'admin' | 'member' };
+
+export type MealSlot = 'meal' | 'snack' | 'dessert' | 'drink';
 
 export type MealLog = {
   id: string;
   name: string;
-  slot: 'meal' | 'snack' | 'dessert' | 'drink';
+  slot: MealSlot;
   timeLabel: string;
   servings: number;
   nutrients: Nutrients;

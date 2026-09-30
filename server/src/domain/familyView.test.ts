@@ -20,6 +20,12 @@ test('family view drops weight even if a personal record is passed in', () => {
         totals,
         logs: [],
         hydration: [],
+        insights: {
+          hasGoals: true,
+          goalDays: { met: 0, daysInMonth: 29, monthLabel: 'September 2026' },
+          usualMealTimes: [],
+          selectedDayMetGoals: false,
+        },
         weight: { entries: [{ weight: 187.4, unit: 'lb' }] },
       },
     ],

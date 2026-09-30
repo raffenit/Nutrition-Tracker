@@ -7,7 +7,7 @@ import {
   hydrationTargetLabel,
   type Units,
 } from '../units';
-import type { Targets, User, WeightStatus } from '../types';
+import type { DietPresetPublic, Targets, User, WeightStatus } from '../types';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -34,6 +34,11 @@ export function SettingsPage({ user, household }: SettingsPageProps) {
           const next = { ...targets, ...patch };
           const result = await api<{ targets: Targets }>('/api/targets', { method: 'PUT', body: JSON.stringify(next) });
           setTargets(result.targets);
+        }}
+      />
+      <DietPresetPicker
+        onApplied={async (next) => {
+          setTargets(next);
         }}
       />
       <TargetForm targets={targets} onSave={async (next) => {
@@ -87,6 +92,61 @@ function DisplayPreferences({
   );
 }
 
+function DietPresetPicker({ onApplied }: { onApplied: (targets: Targets) => Promise<void> }) {
+  const [presets, setPresets] = useState<DietPresetPublic[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void api<{ presets: DietPresetPublic[] }>('/api/diet-presets').then((result) => setPresets(result.presets));
+  }, []);
+  const selected = presets.find((preset) => preset.id === selectedId) ?? null;
+  return (
+    <section className="card diet-presets">
+      <h2>Diet templates</h2>
+      <p className="muted">
+        Starting points from public nutrition guidelines (NIH, USDA, ADA, and similar). Not medical advice—adjust with your care team.
+      </p>
+      <label>
+        Template
+        <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setError(null); }}>
+          <option value="">Choose a pattern…</option>
+          {presets.map((preset) => (
+            <option key={preset.id} value={preset.id}>{preset.name}</option>
+          ))}
+        </select>
+      </label>
+      {selected && (
+        <div className="diet-preset-detail">
+          <p>{selected.summary}</p>
+          <p className="muted">
+            Source:{' '}
+            <a href={selected.sourceUrl} target="_blank" rel="noreferrer noopener">{selected.sourceLabel}</a>
+          </p>
+        </div>
+      )}
+      {error && <p className="notice">{error}</p>}
+      <button
+        type="button"
+        className="primary"
+        disabled={!selectedId || busy}
+        onClick={() => {
+          setBusy(true);
+          void api<{ targets: Targets }>('/api/targets/apply-preset', {
+            method: 'POST',
+            body: JSON.stringify({ presetId: selectedId }),
+          })
+            .then((result) => onApplied(result.targets))
+            .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not apply template'))
+            .finally(() => setBusy(false));
+        }}
+      >
+        Apply template to my targets
+      </button>
+    </section>
+  );
+}
+
 function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: Targets) => Promise<void> }) {
   const [draft, setDraft] = useState(targets);
   useEffect(() => setDraft(targets), [targets]);
@@ -95,7 +155,10 @@ function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: T
       <h2>Daily targets</h2>
       <p className="muted">Personal goals, not medical advice.</p>
       {(['calories', 'protein', 'fiber', 'fat', 'carbs'] as const).map((key) => (
-        <label key={key}>{key}<input value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: Number(event.target.value) })} /></label>
+        <label key={key}>
+          {key}{draft.carbsIsLimit && key === 'carbs' ? ' (daily max)' : ''}
+          <input value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: Number(event.target.value) })} />
+        </label>
       ))}
       <label>
         {hydrationTargetLabel(draft.units)}
@@ -115,7 +178,18 @@ function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: T
       ) : (
         <p className="muted">Milliliters; Add/remove water on Today uses one 250 ml glass.</p>
       )}
-      <label>Sodium target, blank to hide<input value={draft.sodium ?? ''} onChange={(event) => setDraft({ ...draft, sodium: event.target.value === '' ? null : Number(event.target.value) })} /></label>
+      <label>
+        Sodium {draft.sodiumIsLimit ? 'limit (mg)' : 'target (mg)'}, blank to hide
+        <input value={draft.sodium ?? ''} onChange={(event) => setDraft({ ...draft, sodium: event.target.value === '' ? null : Number(event.target.value) })} />
+      </label>
+      <label className="checkbox-row">
+        <input type="checkbox" checked={draft.sodiumIsLimit} onChange={(event) => setDraft({ ...draft, sodiumIsLimit: event.target.checked })} />
+        Treat sodium as a daily limit (stay at or below)
+      </label>
+      <label className="checkbox-row">
+        <input type="checkbox" checked={draft.carbsIsLimit} onChange={(event) => setDraft({ ...draft, carbsIsLimit: event.target.checked })} />
+        Treat carbs as a daily limit (stay at or below)
+      </label>
       <ExtraGoalsEditor
         extras={draft.extras}
         onChange={(extras) => setDraft({ ...draft, extras })}

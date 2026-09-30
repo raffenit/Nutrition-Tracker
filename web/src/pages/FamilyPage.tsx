@@ -4,6 +4,7 @@ import { DateBar } from '../components/DateBar';
 import { DayLog } from '../components/DayLog';
 import { FamilySummary } from '../components/FamilySummary';
 import { MemberDaySummary } from '../components/MemberDaySummary';
+import type { FamilyMemberInsights } from '../components/FamilySummary';
 import type { DateFormat } from '../dateFormat';
 import type { DayTotals, MealLog, Targets, User } from '../types';
 import type { Units } from '../units';
@@ -19,6 +20,7 @@ type Family = {
     targets: Pick<Targets, 'calories' | 'protein' | 'fiber' | 'hydrationMl' | 'units'>;
     totals: DayTotals;
     logs: MealLog[];
+    insights: FamilyMemberInsights;
   }>;
 };
 
@@ -30,19 +32,22 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
   }, [date]);
   if (!board) return <p>Loading the household…</p>;
 
-  const displayUnits = board.members[0]?.units ?? 'imperial';
-
   return (
     <div className="page">
       <DateBar path="/family" date={board.date} today={board.today} dateFormat={board.dateFormat} />
       <h1 className="page-title">{board.householdName}</h1>
-      <FamilySummary members={board.members} displayUnits={displayUnits} />
+      <FamilySummary members={board.members} />
       <div className="grid">
         {board.members.map((member) => (
           <section className="card" key={member.user.id}>
             <h2>{member.user.name}</h2>
+            {member.insights.hasGoals && (
+              <p className="member-day-goals muted">
+                {member.insights.selectedDayMetGoals ? 'Goals met on this day' : 'Goals not yet met on this day'}
+              </p>
+            )}
             <MemberDaySummary totals={member.totals} targets={member.targets} units={member.units} />
-            <DayLog logs={member.logs} />
+            <DayLog logs={member.logs} isToday={board.date === board.today} />
           </section>
         ))}
       </div>

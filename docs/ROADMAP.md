@@ -171,7 +171,28 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ---
 
-## Phase 7 — Polish and client handoff
+## Phase 7 — OpenCookbook v1 (meal plan + grocery)
+
+**Status:** In progress (Plan tab, household week, Markdown export).
+
+**Goal:** Plan → shop → log loop without third-party grocery APIs.
+
+**Shipped / in tree**
+
+- Household **meal plan** (Mon–Sun) with recipes from Library.
+- **Aggregated grocery list** (Instacart-shaped `lineItems`: name, quantity, unit).
+- **Shopping list UI** with checkboxes + **Copy Markdown**.
+- **Log from plan** → Today for that day.
+
+**Next**
+
+- Plan packaged foods / single ingredients, not only recipes.
+- Pantry (“already have”) toggles on grocery lines.
+- Optional Instacart IDP export when/if partner access is available.
+
+---
+
+## Phase 8 — Polish and client handoff
 
 - **Barcode scan:** native camera barcode → Open Food Facts lookup (stretch; not in original MVP table).
 - **README client section:** link spec → feature matrix (arch doc table).

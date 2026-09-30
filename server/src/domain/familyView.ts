@@ -1,3 +1,4 @@
+import type { FamilyMemberInsights } from './familyInsights.js';
 import type { DateFormat, DayTotals, FamilyMemberTargets, HydrationEntry, MealLog, Units, UserPublic } from '../types.js';
 
 export type FamilyMember = {
@@ -7,6 +8,7 @@ export type FamilyMember = {
   totals: DayTotals;
   logs: MealLog[];
   hydration: HydrationEntry[];
+  insights: FamilyMemberInsights;
 };
 
 export type FamilyBoard = {
@@ -20,6 +22,7 @@ export type FamilyBoard = {
 type MemberSource = Omit<FamilyMember, 'user'> & {
   user: UserPublic;
   weight?: unknown;
+  insights: FamilyMemberInsights;
 };
 
 export function toFamilyBoard(input: {
@@ -60,5 +63,6 @@ function toFamilyMember(source: MemberSource): FamilyMember {
     totals: source.totals,
     logs: source.logs,
     hydration: source.hydration,
+    insights: source.insights,
   };
 }

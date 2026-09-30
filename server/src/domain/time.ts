@@ -25,6 +25,18 @@ export function shiftLocalDate(localDate: string, days: number): string {
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
+/** Monday-start week containing localDate. */
+export function weekStartMonday(localDate: string): string {
+  const [year, month, day] = localDate.split('-').map(Number);
+  const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const daysFromMonday = (dow + 6) % 7;
+  return shiftLocalDate(localDate, -daysFromMonday);
+}
+
+export function weekEndSunday(weekStart: string): string {
+  return shiftLocalDate(weekStart, 6);
+}
+
 export function weekdayShort(localDate: string): string {
   const [year, month, day] = localDate.split('-').map(Number);
   return new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(
