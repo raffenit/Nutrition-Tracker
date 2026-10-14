@@ -178,4 +178,50 @@ function migrate(db: AppDatabase): void {
   if (!columnsLimits.some((column) => column.name === 'carbs_is_limit')) {
     db.exec(`ALTER TABLE targets ADD COLUMN carbs_is_limit INTEGER NOT NULL DEFAULT 0`);
   }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alert_dismissals (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      local_date TEXT NOT NULL,
+      alert_key TEXT NOT NULL,
+      PRIMARY KEY (user_id, local_date, alert_key)
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS push_preferences (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      enabled INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alert_push_sent (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      local_date TEXT NOT NULL,
+      alert_key TEXT NOT NULL,
+      PRIMARY KEY (user_id, local_date, alert_key)
+    );
+  `);
+  const mealColumns = db.prepare('PRAGMA table_info(meal_logs)').all() as Array<{ name: string }>;
+  if (!mealColumns.some((column) => column.name === 'client_mutation_id')) {
+    db.exec(`ALTER TABLE meal_logs ADD COLUMN client_mutation_id TEXT`);
+    db.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS meal_logs_client_mutation ON meal_logs(user_id, client_mutation_id) WHERE client_mutation_id IS NOT NULL`,
+    );
+  }
+  const hydrationColumns = db.prepare('PRAGMA table_info(hydration_logs)').all() as Array<{ name: string }>;
+  if (!hydrationColumns.some((column) => column.name === 'client_mutation_id')) {
+    db.exec(`ALTER TABLE hydration_logs ADD COLUMN client_mutation_id TEXT`);
+    db.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS hydration_logs_client_mutation ON hydration_logs(user_id, client_mutation_id) WHERE client_mutation_id IS NOT NULL`,
+    );
+  }
 }

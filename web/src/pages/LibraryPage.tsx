@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
+import { mergeFoodsCache } from '../offline/db';
 import { FavoriteStar } from '../components/FavoriteStar';
 import { LIBRARY_SORTS, readLibrarySort, sortLibraryFoods, type LibrarySort } from '../librarySort';
 import { navigate, usePath } from '../nav';
@@ -24,10 +25,17 @@ export function LibraryPage() {
     setError(null);
     try {
       const result = await api<{ foods: Food[] }>(`/api/foods?q=${encodeURIComponent(next)}&shelf=${nextShelf}`);
+      void mergeFoodsCache(result.foods);
       setFoods(result.foods);
     } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : 'Could not load library');
-      setFoods([]);
+      if (!navigator.onLine) {
+        const { filterFoodsForShelf } = await import('../offline/libraryCache');
+        setFoods(await filterFoodsForShelf(nextShelf, next));
+        setError(null);
+      } else {
+        setError(caught instanceof Error ? caught.message : 'Could not load library');
+        setFoods([]);
+      }
     } finally {
       setLoading(false);
     }

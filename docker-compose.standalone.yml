@@ -1,0 +1,28 @@
+# Merge with docker-compose.yml when CADDY_STYLE=STANDALONE:
+#   docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --build
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: nutrition-caddy
+    restart: unless-stopped
+    ports:
+      - "${NUTRITION_PORT:-3010}:3010"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - nutrition_caddy_data:/data
+      - nutrition_caddy_config:/config
+    networks:
+      - media-network
+    depends_on:
+      - nutrition
+
+volumes:
+  nutrition_caddy_data:
+  nutrition_caddy_config:
+
+networks:
+  media-network:
+    name: media-network
+    driver: bridge
+    external: false

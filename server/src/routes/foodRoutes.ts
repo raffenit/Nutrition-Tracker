@@ -34,6 +34,7 @@ export function foodRoutes(): Route[] {
       sendJson(ctx.res, 200, { food });
     }),
     route('POST', '/api/foods', saveNewFood),
+    route('POST', '/api/foods/stubs', createStubFoods),
     route('PATCH', '/api/foods/:id', patchFood),
     route('DELETE', '/api/foods/:id', async (ctx) => {
       requireUser(ctx.auth);
@@ -54,6 +55,45 @@ async function saveNewFood(ctx: Ctx): Promise<void> {
   const uploadId = isRecord(body) ? body.uploadId : null;
   if (typeof uploadId === 'string') attachOwnedUpload(ctx, uploadId, food.id);
   sendJson(ctx.res, 201, { food });
+}
+
+async function createStubFoods(ctx: Ctx): Promise<void> {
+  const user = requireUser(ctx.auth);
+  const body = await readJson(ctx.req);
+  if (!isRecord(body) || !Array.isArray(body.names)) throw new HttpError(400, 'Expected a list of names');
+  const names = body.names
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (names.length === 0) throw new HttpError(400, 'Choose at least one name');
+  if (names.length > 40) throw new HttpError(400, 'At most 40 placeholders at once');
+  const source = body.source === 'pdf' ? 'pdf' : 'manual';
+  const foods: Food[] = [];
+  for (const name of names) {
+    const food = insertFood(ctx.db, {
+      createdBy: user.id,
+      name,
+      brand: null,
+      kind: 'restaurant',
+      servingLabel: '1 serving',
+      nutrients: emptyStubNutrients(),
+      isFavorite: false,
+      isDrink: false,
+      drinkMl: null,
+      makesServings: 1,
+      source,
+      sourceRef: null,
+      ingredients: [],
+    });
+    foods.push(food);
+  }
+  const uploadId = body.uploadId;
+  if (typeof uploadId === 'string' && foods[0]) attachOwnedUpload(ctx, uploadId, foods[0].id);
+  sendJson(ctx.res, 201, { foods, count: foods.length });
+}
+
+function emptyStubNutrients(): Food['nutrients'] {
+  return { calories: 0, protein: 0, fiber: 0, fat: 0, carbs: 0, sodium: 0, extras: [] };
 }
 
 async function patchFood(ctx: Ctx): Promise<void> {
@@ -134,6 +174,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
     uploadId: saved.id,
     kind,
     warning,
+    textPreview: previewExtractedText(extracted.text),
     draft: { ...built.draft, source: kind },
     candidates: built.candidates,
     menuItems: built.menuItems,
@@ -152,10 +193,17 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
     kind: fetched.kind,
     finalUrl: fetched.finalUrl,
     warning: built.warning,
+    textPreview: previewExtractedText(fetched.text),
     draft: built.draft,
     candidates: built.candidates,
     menuItems: built.menuItems,
   });
+}
+
+function previewExtractedText(text: string): string | null {
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (!trimmed) return null;
+  return trimmed.length > 2400 ? `${trimmed.slice(0, 2400)}…` : trimmed;
 }
 
 function attachOwnedUpload(ctx: Ctx, uploadId: string, foodId: string): void {

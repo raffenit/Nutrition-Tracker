@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { navigate } from '../nav';
 import { formatVolume, type Units } from '../units';
 
 export type TrendDay = {
@@ -68,8 +69,13 @@ export function TrendsPanel({ trends, units, weightEnabled, onDaysChange }: Tren
           </div>
         ))}
       </div>
-      {weightEnabled && trends.weight.length > 0 && (
-        <WeightTrend points={trends.weight} />
+      {weightEnabled && (
+        <div className="weight-trend">
+          {trends.weight.length > 0 && <WeightTrend points={trends.weight} />}
+          <button type="button" className="linkish weight-see-all" onClick={() => navigate('/weight')}>
+            {trends.weight.length > 0 ? 'See all weight history' : 'Open weight history'}
+          </button>
+        </div>
       )}
     </section>
   );
@@ -82,7 +88,7 @@ function WeightTrend({ points }: { points: TrendWeightPoint[] }) {
   const span = Math.max(max - min, 1);
   const unit = points[0]?.unit ?? 'lb';
   return (
-    <div className="weight-trend">
+    <>
       <h3>Weight check-ins</h3>
       <div className="weight-spark" aria-hidden="true">
         {points.map((point) => (
@@ -93,8 +99,7 @@ function WeightTrend({ points }: { points: TrendWeightPoint[] }) {
           />
         ))}
       </div>
-      <p className="muted">Only you see this chart.</p>
-    </div>
+    </>
   );
 }
 

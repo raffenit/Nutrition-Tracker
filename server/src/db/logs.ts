@@ -6,7 +6,7 @@ import type { AppDatabase } from './database.js';
 
 export type NewMeal = {
   userId: string;
-  foodId: string;
+  foodId: string | null;
   name: string;
   slot: MealSlot;
   eatenAt: string;
@@ -14,7 +14,19 @@ export type NewMeal = {
   servings: number;
   nutrients: Nutrients;
   drinkMl: number | null;
+  clientMutationId?: string | null;
 };
+
+export function findMealIdByClientMutation(
+  db: AppDatabase,
+  userId: string,
+  clientMutationId: string,
+): string | null {
+  const row = db.prepare(
+    'SELECT id FROM meal_logs WHERE user_id = ? AND client_mutation_id = ?',
+  ).get(userId, clientMutationId) as { id: string } | undefined;
+  return row?.id ?? null;
+}
 
 type MealSql = {
   id: string;
@@ -41,15 +53,19 @@ type HydrationSql = {
 };
 
 export function insertMeal(db: AppDatabase, meal: NewMeal): string {
+  if (meal.clientMutationId) {
+    const existing = findMealIdByClientMutation(db, meal.userId, meal.clientMutationId);
+    if (existing) return existing;
+  }
   const id = randomUUID();
   const save = db.transaction(() => {
     db.prepare(
       `INSERT INTO meal_logs (
         id, user_id, food_id, name, slot, eaten_at, local_date, servings,
-        calories, protein, fiber, fat, carbs, sodium, extras_json, drink_ml, created_at
+        calories, protein, fiber, fat, carbs, sodium, extras_json, drink_ml, client_mutation_id, created_at
       ) VALUES (
         @id, @userId, @foodId, @name, @slot, @eatenAt, @localDate, @servings,
-        @calories, @protein, @fiber, @fat, @carbs, @sodium, @extras, @drinkMl, @createdAt
+        @calories, @protein, @fiber, @fat, @carbs, @sodium, @extras, @drinkMl, @clientMutationId, @createdAt
       )`,
     ).run({
       id,
@@ -68,6 +84,7 @@ export function insertMeal(db: AppDatabase, meal: NewMeal): string {
       sodium: meal.nutrients.sodium,
       extras: JSON.stringify(meal.nutrients.extras),
       drinkMl: meal.drinkMl,
+      clientMutationId: meal.clientMutationId ?? null,
       createdAt: new Date().toISOString(),
     });
     if (meal.drinkMl && meal.drinkMl > 0) insertHydrationRow(db, meal, id);
@@ -88,11 +105,35 @@ export function deleteMeal(db: AppDatabase, userId: string, id: string): boolean
   return db.prepare('DELETE FROM meal_logs WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
 }
 
-export function insertWater(db: AppDatabase, userId: string, amountMl: number, loggedAt: string, localDate: string): void {
+export function findWaterIdByClientMutation(
+  db: AppDatabase,
+  userId: string,
+  clientMutationId: string,
+): string | null {
+  const row = db.prepare(
+    'SELECT id FROM hydration_logs WHERE user_id = ? AND client_mutation_id = ?',
+  ).get(userId, clientMutationId) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+export function insertWater(
+  db: AppDatabase,
+  userId: string,
+  amountMl: number,
+  loggedAt: string,
+  localDate: string,
+  clientMutationId?: string | null,
+): string {
+  if (clientMutationId) {
+    const existing = findWaterIdByClientMutation(db, userId, clientMutationId);
+    if (existing) return existing;
+  }
+  const id = randomUUID();
   db.prepare(
-    `INSERT INTO hydration_logs (id, user_id, logged_at, local_date, amount_ml, source, meal_log_id)
-     VALUES (?, ?, ?, ?, ?, 'water', NULL)`,
-  ).run(randomUUID(), userId, loggedAt, localDate, amountMl);
+    `INSERT INTO hydration_logs (id, user_id, logged_at, local_date, amount_ml, source, meal_log_id, client_mutation_id)
+     VALUES (?, ?, ?, ?, ?, 'water', NULL, ?)`,
+  ).run(id, userId, loggedAt, localDate, amountMl, clientMutationId ?? null);
+  return id;
 }
 
 export function listHydration(db: AppDatabase, userId: string, localDate: string, timeZone: string): HydrationEntry[] {

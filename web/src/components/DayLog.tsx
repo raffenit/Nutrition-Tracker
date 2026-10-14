@@ -1,11 +1,22 @@
+import { navigate } from '../nav';
 import type { MealLog } from '../types';
 
 type DayLogProps = { logs: MealLog[]; onRemove?: (id: string) => void; isToday?: boolean };
 
 export function DayLog({ logs, onRemove, isToday = true }: DayLogProps) {
   return (
-    <section className="card">
-      <h2>Log</h2>
+    <section className="card" aria-label="Meals">
+      <header className="card-head">
+        <h2>Meals</h2>
+        <button
+          type="button"
+          className="round-add-btn"
+          aria-label="Log food or drink"
+          onClick={() => navigate('/add')}
+        >
+          +
+        </button>
+      </header>
       {logs.length === 0 && (
         <p className="muted">{isToday ? 'Nothing logged yet today.' : 'Nothing logged on this day.'}</p>
       )}

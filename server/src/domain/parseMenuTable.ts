@@ -14,6 +14,7 @@ export function parseMenuFromSource(text: string, html: string | null): MenuItem
   const items: MenuItemDraft[] = [];
   if (html) items.push(...parseHtmlTables(html));
   items.push(...parseDelimitedTables(text));
+  items.push(...parseWhitespaceMenuTables(text));
   return capItems(items);
 }
 
@@ -25,6 +26,28 @@ export function parseNutritionixHtml(html: string): MenuItemDraft[] {
 /** @deprecated Use parseMenuFromSource; kept for tests. */
 export function parsePipeTableText(text: string): MenuItemDraft[] {
   return parseDelimitedTables(text);
+}
+
+/** PDF/plain-text menus: multi-space or tab columns, or "Name 520 12 45 …" rows. */
+function parseWhitespaceMenuTables(text: string): MenuItemDraft[] {
+  const rows: string[][] = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.length < 6) continue;
+    let cells = trimmed.split(/\t+/).map((cell) => cell.trim()).filter(Boolean);
+    if (cells.length < 4) {
+      cells = trimmed.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+    }
+    if (cells.length < 4) {
+      const match = trimmed.match(/^(.+?)\s+(\d{2,4}(?:\.\d+)?(?:\s+\d+(?:\.\d+)?){2,})\s*$/);
+      if (match) {
+        cells = [match[1].trim(), ...match[2].trim().split(/\s+/)];
+      }
+    }
+    if (cells.length >= 4) rows.push(cells);
+  }
+  if (rows.length < 2) return [];
+  return parseTableRows(rows);
 }
 
 function parseDelimitedTables(text: string): MenuItemDraft[] {

@@ -17,7 +17,7 @@ Protein 8g
 
 test('reads a standard nutrition label and ignores calories from fat', () => {
   const parsed = parseNutritionLabel(LABEL);
-  assert.equal(parsed.servingLabel, '1 cup (240ml)');
+  assert.equal(parsed.servingLabel, '1 cup (240 ml)');
   assert.equal(parsed.nutrients.calories, 120);
   assert.equal(parsed.nutrients.fat, 5);
   assert.equal(parsed.nutrients.sodium, 160);
@@ -80,7 +80,7 @@ Protein 12g
 
 test('reads abbreviated FDA labels like pasta boxes', () => {
   const parsed = parseNutritionLabel(PASTA_BOX);
-  assert.equal(parsed.servingLabel, '2 oz (56g) dry');
+  assert.equal(parsed.servingLabel, '2 oz (56 g) dry');
   assert.equal(parsed.nutrients.calories, 200);
   assert.equal(parsed.nutrients.fat, 2);
   assert.equal(parsed.nutrients.carbs, 36);
@@ -107,7 +107,7 @@ Protein 2g
 
 test('reads sauce-style labels with percent daily values', () => {
   const parsed = parseNutritionLabel(SAUCE_JAR);
-  assert.equal(parsed.servingLabel, '1/2 cup (125g)');
+  assert.equal(parsed.servingLabel, '1/2 cup (125 g)');
   assert.equal(parsed.nutrients.calories, 120);
   assert.equal(parsed.nutrients.fat, 9);
   assert.equal(parsed.nutrients.carbs, 6);
@@ -116,6 +116,42 @@ test('reads sauce-style labels with percent daily values', () => {
   assert.equal(parsed.nutrients.sodium, 400);
   assert.equal(parsed.nutrients.extras.find((extra) => extra.key === 'saturated_fat')?.amount, 6);
   assert.equal(parsed.nutrients.extras.find((extra) => extra.key === 'sugar')?.amount, 5);
+});
+
+const COLUMNAR_OCR = `
+Nutrition Facts
+Serving Size 1 cup (240ml)
+Calories
+Total Fat
+Saturated Fat
+Trans Fat
+Cholesterol
+Sodium
+Total Carbohydrate
+Dietary Fiber
+Total Sugars
+Protein
+120
+5g
+1g
+0g
+0mg
+160mg
+12g
+2g
+1g
+8g
+`;
+
+test('pairs OCR columns when labels and values are in separate blocks', () => {
+  const parsed = parseNutritionLabel(COLUMNAR_OCR);
+  assert.equal(parsed.nutrients.calories, 120);
+  assert.equal(parsed.nutrients.fat, 5);
+  assert.equal(parsed.nutrients.sodium, 160);
+  assert.equal(parsed.nutrients.carbs, 12);
+  assert.equal(parsed.nutrients.fiber, 2);
+  assert.equal(parsed.nutrients.protein, 8);
+  assert.equal(parsed.nutrients.extras.find((extra) => extra.key === 'sugar')?.amount, 1);
 });
 
 test('treats a restaurant menu as names rather than a label', () => {

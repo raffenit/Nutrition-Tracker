@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { navigate } from '../nav';
 import { HelixMark } from './HelixMark';
 import { IconFamily, IconHome, IconLibrary, IconPlan, IconSettings, IconSignIn } from './NavIcons';
+import { OfflineBanner } from './OfflineBanner';
 
 const LINKS = [
   { href: '/', label: 'Home', Icon: IconHome },
@@ -15,6 +17,7 @@ type AppShellProps = { path: string; kiosk: boolean; children: ReactNode };
 
 export function AppShell({ path, kiosk, children }: AppShellProps) {
   const links = kiosk ? [] : LINKS;
+  const { offline, pendingCount } = useOfflineStatus();
   return (
     <div className="app">
       <header className="top">
@@ -24,6 +27,7 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
           <span className="brand-word">Tracker</span>
         </button>
       </header>
+      {!kiosk && <OfflineBanner offline={offline} pendingCount={pendingCount} />}
       <main className="main">{children}</main>
       {links.length > 0 && (
         <nav className="tabbar" aria-label="Main">

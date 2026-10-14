@@ -1,4 +1,6 @@
+import { listAlertDismissals } from '../db/alerts.js';
 import { hydrationTotal, listHydration, listMeals } from '../db/logs.js';
+import { buildGoalAlerts } from '../domain/alerts.js';
 import { getTargets, listUsers } from '../db/users.js';
 import { glassVolumeMl } from '../domain/units.js';
 import { dayTotals } from '../domain/day.js';
@@ -25,11 +27,14 @@ export function boardRoutes(): Route[] {
       const date = readLocalDate(ctx.url.searchParams.get('date'), zone);
       const targets = getTargets(ctx.db, user.id) ?? DEFAULT_TARGETS;
       const days = trendDays(ctx.url.searchParams.get('days'));
+      const day = dayFor(ctx, user.id, date, zone);
+      const dismissed = listAlertDismissals(ctx.db, user.id, date);
       sendJson(ctx.res, 200, {
-        ...dayFor(ctx, user.id, date, zone),
+        ...day,
         today,
         glassMl: glassVolumeMl(targets.units),
         targets,
+        alerts: buildGoalAlerts(day.totals, targets, dismissed),
         weight: personalWeight(ctx.db, user.id, today),
         trends: buildTrendSeries(ctx.db, user.id, date, days),
       });

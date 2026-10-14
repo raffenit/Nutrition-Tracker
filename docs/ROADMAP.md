@@ -2,6 +2,8 @@
 
 This plan closes the gaps between the client spec and the current build, in an order that delivers user-visible value early and keeps privacy/testing constraints intact.
 
+**Navigation:** [Documentation index](./README.md) · [Code map (feature → files)](./CODE-MAP.md) · [Architecture](./ARCHITECTURE.md)
+
 **Definition of done (global):** feature works on phone-sized UI, has server tests where behavior is non-trivial, `npm test` passes, documented in this file’s phase notes, deployable via `./deploy.sh` or `docker compose up -d --build`.
 
 ---
@@ -18,6 +20,8 @@ This plan closes the gaps between the client spec and the current build, in an o
 ---
 
 ## Phase 1 — Quick manual log (no library save)
+
+**Status:** Done (2026-09-30).
 
 **Problem:** Rare one-off entries still require creating a library food first.
 
@@ -72,6 +76,8 @@ This plan closes the gaps between the client spec and the current build, in an o
 
 ## Phase 3 — Weight history view
 
+**Status:** Done (2026-09-30) — `/weight`, API range + single delete.
+
 **Problem:** Data and Trends sparkline exist; no dedicated place to review loss/gain over time.
 
 **Goal:** Personal **Weight** section when check-ins are enabled.
@@ -103,6 +109,8 @@ This plan closes the gaps between the client spec and the current build, in an o
 
 **Phase 4a — In-app (MVP alerts)**
 
+**Status:** Done (2026-09-30) — dashboard banners + dismiss table; Settings toggles still optional.
+
 - On dashboard load (and after log), compute % of daily targets for calories, protein, fiber, sodium (+ extras).
 - Rules (configurable later; defaults):
   - **Soft:** ≥ 90% calories or sodium → dismissible banner.
@@ -111,6 +119,8 @@ This plan closes the gaps between the client spec and the current build, in an o
 - Store dismissals per user per nutrient per local date (new small table or JSON in session — prefer table for clarity).
 
 **Phase 4b — Push / phone pop-up (optional)**
+
+**Status:** Done (2026-09-30) — VAPID + service worker + Settings opt-in; sends after meal log when alerts fire.
 
 - Service worker + Web Push (VAPID keys on server) **or** document Home Assistant mobile notification automation triggered by webhook (household already uses HA).
 - User opt-in in Settings; not required for client sign-off if 4a is solid.
@@ -129,6 +139,8 @@ This plan closes the gaps between the client spec and the current build, in an o
 ---
 
 ## Phase 5 — Restaurant PDF workflow
+
+**Status:** Done (2026-09-30) — review UI, whitespace/table menu parse, batch placeholder API + multi-select.
 
 **Problem:** PDF upload yields name candidates, not structured menu nutrition.
 
@@ -201,6 +213,93 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ---
 
+## Phase 9 — Offline PWA + sync (full implementation)
+
+**Status:** Done (2026-09-30) — shell cache, pins, outbox (meals/hydration/delete), Background Sync hook, library/dashboard cache.
+
+**Problem:** The app is installable (manifest + Add to Home Screen) but every screen calls the API. Without Tailscale or server reachability, the installed icon opens to errors — no logging, no cached library, no sync when connectivity returns.
+
+**Goal:** After at least one successful online session, the household can **use core nutrition workflows offline** on phone/tablet and **reconcile automatically** when the server is reachable again — without duplicate logs or silent data loss.
+
+**Non-goals (stay online-only until a later phase)**
+
+- Label/PDF upload, OCR, URL import, remote ingredient search (USDA / Open Food Facts).
+- Live family/kiosk board updates (kiosk remains online-first; optional read-only stale snapshot is stretch).
+- Push subscription or delivery while offline (queue notifications only after sync if needed).
+
+### 9a — App shell + read cache
+
+- Extend the service worker beyond push: cache **built assets** (JS/CSS/icons) and **app shell** so `/` and client routes load offline.
+- **IndexedDB** (or equivalent) stores last-known:
+  - Session capability flag (“can work offline until …”) after online login.
+  - User targets, unit prefs, enabled extras.
+  - Food library **subset**: favorites + recently logged + explicit “keep offline” pin (Settings).
+  - **Today snapshot**: dashboard totals, meal lines, hydration, in-app alerts (read-only stale).
+- UI: **Offline** banner; “Last updated …”; disable actions that require network with clear copy.
+
+**Acceptance**
+
+- Airplane mode after a normal online day → Today and Library (cached) render; no blank white screen.
+
+### 9b — Write outbox + idempotent server apply
+
+- Local **outbox** of mutations with stable **client-generated ids** (`clientMutationId` UUID per operation):
+  - Create log (library food or ad-hoc quick entry), delete log, add/remove water.
+  - Optional in same phase: weight entry create/delete (personal only).
+- `POST /api/logs` (and related routes) accept optional `clientMutationId`; server stores uniqueness per user and returns existing row on replay (no double-count on dashboard/family).
+- Sync runner: on `online` event, periodic retry, and **Background Sync** registration where the browser supports it; exponential backoff; surface **N pending** in header or Settings.
+- Ordering: apply outbox in **created-at order**; failed row stays queued with error message (e.g. deleted food) — user can fix or discard.
+
+**Acceptance**
+
+- Log lunch offline → reconnect → one entry on server, trends/family totals correct.
+- Kill app mid-sync → resume without duplicates.
+
+**Tests**
+
+- Server: same `clientMutationId` twice → single log row; dashboard totals once.
+- Server: outbox order with two logs same day.
+- Client: pure functions for merge/outbox state (no browser in unit tests where possible).
+
+### 9c — Offline UX parity (logging flows)
+
+- **`/add`**: library picker from cache; quick entry fully offline; servings/slot/date default to local “today” in household TZ (cached `TZ` or user-visible warning if TZ unknown).
+- **Dashboard**: show pending outbox lines as “Syncing…” or dashed until confirmed; allow delete of pending before sync.
+- **Settings**: “Offline library” — pin foods, show cache size, “Clear offline data” (outbox + cache, not server).
+- **Plan tab:** unify grocery checkmarks (today `localStorage`) with IndexedDB if needed so one offline store owns client state.
+
+**Acceptance**
+
+- Core loop offline: open app → quick log or cached food log → see provisional Today → sync → matches server after refresh online.
+
+### 9d — Conflicts, security, and ops
+
+- **Conflicts:** if server row changed while offline (rare for personal logs), default **server wins** for synced ids; outbox create always inserts new server ids. Document in ARCHITECTURE.
+- **Auth:** cookie session still required; offline only after online login in that browser profile. Kiosk tokens not cached for write offline.
+- **HTTPS / install:** offline does not remove need for secure context for push; independent features.
+- **Deploy:** bump SW cache version on each release; README note on “open app once online after upgrade.”
+
+**Acceptance**
+
+- Privacy checklist unchanged: weight never on family API; offline cache never exposes other users’ data on shared devices without their session.
+
+**Files (expected)**
+
+- `web/public/sw.js` (or Workbox build step), new `web/src/offline/` (db, sync, hooks, types).
+- `web/src/api/client.ts` — online detection + outbox wrapper.
+- `server/src/routes/logRoutes.ts`, `db/logs.ts`, migration for `client_mutation_id` (or dedicated `sync_mutations` table).
+- `waterRoutes` / `db/water` if water in scope (recommended).
+- `docs/ARCHITECTURE.md` — offline/sync section when shipped.
+- `docs/CODE-MAP.md` — offline module row.
+
+**Suggested build order**
+
+```text
+9a read cache + shell  →  9b outbox + idempotency  →  9c UX  →  9d conflicts/docs
+```
+
+---
+
 ## Suggested timeline (engineering order)
 
 ```text
@@ -211,6 +310,9 @@ Phase 4a Goal alerts       ──► client “alert functionality” (in-app)
 Phase 5 PDF workflow       ──► larger UX, iterative
 Phase 4b Push (optional)   ──► after 4a rules stable
 Phase 6 Walk doc/automation► only if client confirms
+Phase 7 OpenCookbook next   ► plan/grocery (in progress)
+Phase 8 Polish              ► parallel / handoff
+Phase 9 Offline PWA + sync  ► after core online flows stable (1–4, logging API)
 ```
 
 ---

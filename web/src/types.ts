@@ -10,7 +10,7 @@ export type Nutrients = {
 
 export type Units = 'metric' | 'imperial';
 
-export type DateFormat = 'iso' | 'mdy' | 'mdy_long' | 'dmy' | 'dmy_long';
+export type DateFormat = 'iso' | 'mdy' | 'mdy_long' | 'mdy_no_year' | 'dmy' | 'dmy_long' | 'dmy_no_year';
 
 export type Targets = {
   calories: number;
@@ -96,6 +96,13 @@ export type WeightStatus =
       reminderDue: boolean;
       entries: Array<{ id: string; localDate: string; weight: number; unit: 'lb' | 'kg' }>;
     };
+
+export type GoalAlert = {
+  id: string;
+  tone: 'warn' | 'danger' | 'success';
+  message: string;
+  dismissible: boolean;
+};
 
 export type Session = {
   setupRequired: boolean;

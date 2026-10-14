@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { listCachedFoods, mergeFoodsCache, readPinnedFoodIds } from '../offline/db';
 import type { Food } from '../types';
 
 export type LibraryShelf = 'foods' | 'recipes';
@@ -24,11 +25,17 @@ export function FoodLibraryPicker({ shelf, onSelect, excludeIds, actionLabel = '
       void api<{ foods: Food[] }>(`/api/foods?q=${encodeURIComponent(query.trim())}&shelf=${shelf}`)
         .then((result) => {
           if (cancelled) return;
-          const sorted = [...result.foods].sort((a, b) => {
-            if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
-            return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-          });
-          setFoods(sorted);
+          void mergeFoodsCache(result.foods);
+          setFoods(sortFoods(result.foods));
+        })
+        .catch(async () => {
+          if (cancelled) return;
+          const [cached, pinnedIds] = await Promise.all([listCachedFoods(), readPinnedFoodIds()]);
+          const pinned = cached.filter((food) => pinnedIds.includes(food.id));
+          const merged = sortFoods([...filterFoods(cached, shelf, query.trim()), ...filterFoods(pinned, shelf, query.trim())]);
+          const unique = [...new Map(merged.map((food) => [food.id, food])).values()];
+          if (cancelled) return;
+          setFoods(unique);
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -76,6 +83,26 @@ export function FoodLibraryPicker({ shelf, onSelect, excludeIds, actionLabel = '
         )}
       </ul>
     </div>
+  );
+}
+
+function sortFoods(foods: Food[]): Food[] {
+  return [...foods].sort((a, b) => {
+    if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+}
+
+function filterFoods(foods: Food[], shelf: LibraryShelf, queryText: string): Food[] {
+  const onShelf = foods.filter((food) =>
+    shelf === 'recipes' ? food.kind === 'custom' : food.kind !== 'custom',
+  );
+  if (!queryText) return onShelf;
+  const needle = queryText.toLowerCase();
+  return onShelf.filter(
+    (food) =>
+      food.name.toLowerCase().includes(needle)
+      || (food.brand?.toLowerCase().includes(needle) ?? false),
   );
 }
 

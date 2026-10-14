@@ -13,40 +13,42 @@ Household nutrition app for phones, tablets, and a Home Assistant panel. One sel
 | Weight over time (optional) | Opt-in in Settings; `weight_entries`; sparkline on Today **Trends**; never on `/api/family` |
 | Stats: calories, protein, fiber, salt | Today dashboard: macro pie, goal cards (sodium = salt), 7/14d trends |
 | Set goals | Settings → targets + optional extra nutrients (`targets.extras_json`) |
-| Goal alerts | Not implemented (only weekly weight reminder banner when enabled) |
+| Goal alerts | In-app banners on personal dashboard (`domain/alerts.ts`); dismiss per day; weekly weight reminder separate |
 | Family tracking | `/family` and kiosk token; shared day view per member |
-| Self-hosted, phone access | Docker + Caddy on `:3010` + Tailscale; PWA manifest (no push SW yet) |
+| Self-hosted, phone access | Docker + Caddy on `:3010` + Tailscale; PWA manifest + service worker (push + offline shell) |
 
 Extras built beyond the original list: hydration tracking, imperial/metric units, Open Food Facts + optional USDA ingredient search, favorites, drink → hydration rollup.
 
 ## Deployment topology
 
+**STANDALONE** (`CADDY_STYLE=STANDALONE`, `./standalone-deploy.sh`): bundled `nutrition-caddy` in this repo publishes `:3010` → `nutrition-tracker`.
+
+**EXTERNAL** (`CADDY_STYLE=EXTERNAL`, `./external-deploy.sh`): sibling `infrastructure/` Caddy on `media-network` publishes `:3010` → `nutrition-tracker`.
+
 ```text
 Phone / tablet / HA panel (Tailscale)
         │
         ▼
-Caddy (shared infrastructure stack, media-network)
-  :3010 → nutrition-tracker:3010
+Caddy :3010  (standalone nutrition-caddy OR shared infrastructure)
         │
         ▼
-Docker container (Nutrition-Tracker/Dockerfile)
-  Node 22 serves API + static web bundle
-  /data → host ./data (SQLite + uploads + tessdata cache)
+nutrition-tracker container — Node 22, API + static web
+  /data → host ./data (SQLite + uploads + tessdata)
 ```
 
-- **Deploy:** `./deploy.sh` from the repo root (recommended), or `docker compose up -d --build` without tests/git.
+- **Deploy:** `./deploy.sh` (dispatches on `CADDY_STYLE`), or `./standalone-deploy.sh` / `./external-deploy.sh` directly.
+- **Windows:** WSL2 + Docker Desktop — [SETUP-WINDOWS-WSL.md](./SETUP-WINDOWS-WSL.md).
 
 ### Deploy script
 
-Default `./deploy.sh` pipeline (override with `--skip-test` / `--skip-git`):
+Pipeline (override with `--skip-test` / `--skip-git`):
 
-1. **Tests** — root `npm test` → `scripts/run-tests.sh` runs server unit/integration tests and `web/` `tsc --noEmit`. Full console output is mirrored to gitignored **`local/test-last-run.log`** (overwrite each run).
-2. **Git** — if the working tree is dirty, `git add -A` and commit (requires `-m "…"` or `DEPLOY_COMMIT_MSG` in `local/deploy.env`); if `HEAD` is ahead of upstream, `git push`.
-3. **Docker** — verify `media-network`, `docker compose up -d --build`, poll `GET /api/health` on `NUTRITION_PORT` (default 3010).
+1. **Tests** — `npm test` → `local/test-last-run.log`
+2. **Git** — optional commit/push
+3. **Docker** — STANDALONE merges `docker-compose.standalone.yml`; EXTERNAL requires existing `media-network`
+4. **Health** — `GET /api/health` on `NUTRITION_PORT` (default 3010)
 
-Host prerequisites: Docker, **Node/npm** (install deps in repo root + `server/` + `web/` once), **git** with push access to `origin`.
-- **Caddy:** port `3010` must be defined in your infrastructure `Caddyfile` and published on the Caddy container.
-- **Host-specific paths/URLs:** `local/deploy.env` (gitignored; see `local.example/`).
+Host prerequisites: Docker; Node/npm for tests; git optional. **Host-specific URLs:** `local/deploy.env` (see `local.example/`).
 
 Environment (see `.env.example`, server admin only — not per user):
 
@@ -64,7 +66,7 @@ Deploy-only overrides (`REMOTE_BASE_URL`, `INFRA_COMPOSE_DIR`) live in gitignore
 | `web/` | React 19 + Vite SPA (client-side routing via `history.pushState`) |
 | `Dockerfile` | Multi-stage: build web, compile server, single runtime image |
 | `data/` | Runtime only — database, uploads, not in git |
-| `docs/` | Architecture (this file) and roadmap |
+| `docs/` | [Index](./README.md), architecture (this file), [code map](./CODE-MAP.md), roadmap |
 
 Root scripts: `npm test` (via `scripts/run-tests.sh` → `local/test-last-run.log`), `npm run build`.
 
@@ -99,12 +101,11 @@ Day boundaries use household timezone (`America/Chicago` default via `TZ` / hous
 | Setup / auth | `POST /api/setup`, login/logout, users (admin) |
 | Targets / household | `GET/PUT /api/targets`, `PUT /api/household`, `POST /api/household/kiosk` |
 | Foods | `GET/POST/PATCH/DELETE /api/foods`, `POST /api/foods/compose`, `GET /api/ingredients/search`, `POST /api/uploads` |
-| Logs | `POST /api/logs`, `DELETE /api/logs/:id`, hydration POST/DELETE |
-| Dashboard | `GET /api/dashboard?date=&days=` — day totals, targets, weight reminder state, trends |
+| Logs | `POST /api/logs` (library `foodId` or `adHoc`), `DELETE /api/logs/:id`, hydration POST/DELETE |
+| Dashboard | `GET /api/dashboard?date=&days=` — totals, targets, `alerts`, weight reminder, trends |
+| Alerts | `POST /api/alerts/dismiss` — personal dashboard only |
 | Family | `GET /api/family?date=` — kiosk or logged-in reader |
-| Weight | `GET/PUT/POST/DELETE /api/weight`, dismiss reminder |
-
-Logging today **requires** a `foodId` (`server/src/routes/logRoutes.ts`); ad-hoc logs without library are a planned change (see roadmap).
+| Weight | `GET /api/weight?historyDays=`, `PATCH/DELETE /api/weight/:id`, prefs, dismiss reminder, erase all |
 
 ## Domain logic (server)
 
@@ -130,7 +131,8 @@ Logging today **requires** a `foodId` (`server/src/routes/logRoutes.ts`); ad-hoc
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/` | Dashboard | Date bar, goals, pie, hydration, trends, weight reminder, log FAB |
-| `/add` | Add log | Search library; link to new label food |
+| `/add` | Add log | Library picker or **Quick entry** (ad-hoc, no `foods` row) |
+| `/weight` | Weight history | Personal 30/90d chart + entries when check-ins enabled |
 | `/library` | Library | Favorites, new label, custom meal |
 | `/foods/new`, `/foods/custom` | FoodPage | Label/manual/PDF vs composed meal |
 | `/family` | Family board | Kiosk mode restricts nav |
@@ -164,5 +166,7 @@ Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Serv
 
 ## Related docs
 
+- [README.md](./README.md) — documentation table of contents and roadmap status snapshot.
+- [CODE-MAP.md](./CODE-MAP.md) — feature → source file paths.
 - [ROADMAP.md](./ROADMAP.md) — planned work, phases, acceptance criteria.
 - [../README.md](../README.md) — build, test, deploy commands.

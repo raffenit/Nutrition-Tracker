@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { DateBar } from '../components/DateBar';
 import { DayLog } from '../components/DayLog';
 import { HydrationMeter } from '../components/HydrationMeter';
-import { GoalCards } from '../components/GoalCards';
+import { GoalAlertBanners } from '../components/GoalAlertBanners';
 import { MacroPieChart } from '../components/MacroPieChart';
-import { LogFab } from '../components/LogFab';
 import { TrendsPanel, type TrendDay, type TrendWeightPoint } from '../components/TrendsPanel';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import { readDashboardCache, saveDashboardCache } from '../offline/db';
+import { listOutboxEntries } from '../offline/db';
+import { postHydration, queueDeleteMeal, removePendingMeal } from '../offline/mutations';
+import { saveTargetsCache } from '../offline/db';
+import { applyPendingToTotals, pendingHydrationMl, pendingPreviewsForDate } from '../offline/pending';
+import { SYNC_COMPLETE_EVENT } from '../offline/register';
 import { nowLocalInput } from '../nav';
-import type { DayTotals, MealLog, Targets, WeightStatus } from '../types';
+import type { DayTotals, GoalAlert, MealLog, Targets, WeightStatus } from '../types';
 
 type Dashboard = {
   date: string;
@@ -17,44 +23,106 @@ type Dashboard = {
   totals: DayTotals;
   logs: MealLog[];
   targets: Targets;
+  alerts: GoalAlert[];
   weight: WeightStatus;
   trends: { days: number; endDate: string; points: TrendDay[]; weight: TrendWeightPoint[] };
 };
 
+function dashboardCacheKey(date: string | null, days: number): string {
+  return `dashboard:${date ?? 'today'}:d${days}`;
+}
+
 export function DashboardPage() {
   const [day, setDay] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [staleLabel, setStaleLabel] = useState<string | null>(null);
   const [trendDays, setTrendDays] = useState(7);
+  const { offline } = useOfflineStatus();
   const date = new URLSearchParams(window.location.search).get('date');
-  async function load(days = trendDays): Promise<void> {
+
+  const applyPending = useCallback(async (payload: Dashboard): Promise<Dashboard> => {
+    const previews = await pendingPreviewsForDate(payload.date);
+    const outbox = await listOutboxEntries();
+    const extraHydration = pendingHydrationMl(outbox, payload.date);
+    return {
+      ...payload,
+      totals: applyPendingToTotals(payload.totals, previews, extraHydration),
+      logs: [...payload.logs, ...previews.map((row) => row.log)],
+    };
+  }, []);
+
+  const load = useCallback(async (days = trendDays): Promise<void> => {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
     params.set('days', String(days));
     const query = params.toString();
-    setDay(await api<Dashboard>(`/api/dashboard${query ? `?${query}` : ''}`));
-  }
-  useEffect(() => { void load().catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not load today')); }, [date, trendDays]);
+    const cacheKey = dashboardCacheKey(date, days);
+    try {
+      const payload = await api<Dashboard>(`/api/dashboard${query ? `?${query}` : ''}`);
+      await saveDashboardCache(cacheKey, payload);
+      await saveTargetsCache(payload.targets);
+      setStaleLabel(null);
+      setDay(await applyPending(payload));
+      setError(null);
+    } catch (caught) {
+      const cached = await readDashboardCache<Dashboard>(cacheKey);
+      if (!cached) {
+        setError(caught instanceof Error ? caught.message : 'Could not load today');
+        return;
+      }
+      setStaleLabel(new Date(cached.savedAt).toLocaleString());
+      setDay(await applyPending(cached.payload));
+      setError(offline ? null : (caught instanceof Error ? caught.message : 'Could not refresh today'));
+    }
+  }, [applyPending, date, offline, trendDays]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const onSync = () => {
+      void load();
+    };
+    window.addEventListener(SYNC_COMPLETE_EVENT, onSync);
+    return () => window.removeEventListener(SYNC_COMPLETE_EVENT, onSync);
+  }, [load]);
+
   if (!day) return <p>{error ?? 'Loading today…'}</p>;
+
+  async function removeLog(id: string): Promise<void> {
+    if (id.startsWith('pending:')) {
+      await removePendingMeal(id.slice('pending:'.length));
+      await load();
+      return;
+    }
+    await queueDeleteMeal(id);
+    await load();
+  }
+
   return (
     <>
     <div className="page">
     <div className="stack">
+      {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
       <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
       {error && <p className="notice">{error}</p>}
-      {day.weight.enabled && day.weight.reminderDue && <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />}
-      <MacroPieChart totals={day.totals} />
-      <GoalCards totals={day.totals} targets={day.targets} />
+      {day.weight.enabled && day.weight.reminderDue && !offline && (
+        <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />
+      )}
+      <GoalAlertBanners alerts={day.alerts ?? []} localDate={day.date} onDismiss={() => void load()} />
+      <MacroPieChart totals={day.totals} targets={day.targets} />
+      <DayLog
+        logs={day.logs}
+        isToday={day.date === day.today}
+        onRemove={(id) => void removeLog(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
+      />
       <HydrationMeter
         amountMl={day.totals.hydrationMl}
         targetMl={day.targets.hydrationMl}
         units={day.targets.units}
-        onAdd={() => void api('/api/hydration', { method: 'POST', body: JSON.stringify({ amountMl: day.glassMl, loggedAt: nowLocalInput() }) }).then(() => load())}
+        onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
         onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
-      />
-      <DayLog
-        logs={day.logs}
-        isToday={day.date === day.today}
-        onRemove={(id) => void api(`/api/logs/${id}`, { method: 'DELETE' }).then(() => load())}
       />
       <TrendsPanel
         trends={day.trends}
@@ -64,7 +132,6 @@ export function DashboardPage() {
       />
     </div>
     </div>
-    <LogFab />
     </>
   );
 }
@@ -79,10 +146,7 @@ function WeightReminder({ unit, today, onDone }: { unit: 'lb' | 'kg'; today: str
       <h2>Weekly check-in</h2>
       <p className="muted">Only you can see this. It is not on the family dashboard.</p>
       <label>Weight ({unit})<input value={weight} onChange={(event) => setWeight(event.target.value)} inputMode="decimal" required /></label>
-      <div className="row">
-        <button className="primary" type="submit">Save</button>
-        <button type="button" onClick={() => void api('/api/weight/dismiss', { method: 'POST', body: '{}' }).then(onDone)}>Not today</button>
-      </div>
+      <button type="submit">Save</button>
     </form>
   );
 }

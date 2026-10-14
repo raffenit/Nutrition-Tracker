@@ -1,0 +1,7 @@
+# Bundled Caddy for CADDY_STYLE=STANDALONE (this repo only).
+# Access: http://localhost:3010 (and Tailscale IP:3010 when port is published)
+
+:3010 {
+	reverse_proxy nutrition-tracker:3010
+	encode gzip
+}

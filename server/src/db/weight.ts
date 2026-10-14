@@ -47,12 +47,55 @@ export function listWeightEntries(db: AppDatabase, userId: string): WeightEntry[
     `SELECT id, local_date, weight, unit FROM weight_entries
      WHERE user_id = ? ORDER BY local_date DESC LIMIT 52`,
   ).all(userId) as Array<{ id: string; local_date: string; weight: number; unit: WeightUnit }>;
-  return rows.map((row) => ({
+  return rows.map(toWeightEntry);
+}
+
+export function listWeightEntriesInRange(
+  db: AppDatabase,
+  userId: string,
+  fromDate: string,
+  toDate: string,
+): WeightEntry[] {
+  const rows = db.prepare(
+    `SELECT id, local_date, weight, unit FROM weight_entries
+     WHERE user_id = ? AND local_date >= ? AND local_date <= ?
+     ORDER BY local_date ASC`,
+  ).all(userId, fromDate, toDate) as Array<{ id: string; local_date: string; weight: number; unit: WeightUnit }>;
+  return rows.map(toWeightEntry);
+}
+
+export function deleteWeightEntry(db: AppDatabase, userId: string, id: string): boolean {
+  return db.prepare('DELETE FROM weight_entries WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+}
+
+export function updateWeightEntry(
+  db: AppDatabase,
+  userId: string,
+  id: string,
+  patch: { weight?: number; localDate?: string },
+): boolean {
+  const row = db.prepare(
+    'SELECT id FROM weight_entries WHERE id = ? AND user_id = ?',
+  ).get(id, userId) as { id: string } | undefined;
+  if (!row) return false;
+  if (patch.weight !== undefined) {
+    if (patch.weight <= 0) return false;
+    db.prepare('UPDATE weight_entries SET weight = ? WHERE id = ?').run(patch.weight, id);
+  }
+  if (patch.localDate !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.localDate)) return false;
+    db.prepare('UPDATE weight_entries SET local_date = ? WHERE id = ?').run(patch.localDate, id);
+  }
+  return true;
+}
+
+function toWeightEntry(row: { id: string; local_date: string; weight: number; unit: WeightUnit }): WeightEntry {
+  return {
     id: row.id,
     localDate: row.local_date,
     weight: row.weight,
     unit: row.unit,
-  }));
+  };
 }
 
 export function latestWeightDate(db: AppDatabase, userId: string): string | null {

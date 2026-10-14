@@ -37,3 +37,15 @@ test('parses a generic HTML nutrition table by column headers', () => {
   assert.equal(items[0]?.nutrients.protein, 42);
   assert.equal(items[0]?.nutrients.sodium, 890);
 });
+
+test('parses whitespace-separated PDF menu rows', () => {
+  const text = `Menu Item  Calories  Fat  Protein
+Grilled Salmon  520  22  45
+Garden Salad  180  8  6
+House Burger  890  52  38`;
+  const items = parseMenuFromSource(text, null);
+  assert.ok(items.length >= 2);
+  const salmon = items.find((item) => item.name.includes('Salmon'));
+  assert.equal(salmon?.nutrients.calories, 520);
+  assert.equal(salmon?.nutrients.protein, 45);
+});

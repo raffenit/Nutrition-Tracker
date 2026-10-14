@@ -31,7 +31,7 @@ export type MacroShares = {
 
 export type Units = 'metric' | 'imperial';
 
-export type DateFormat = 'iso' | 'mdy' | 'mdy_long' | 'dmy' | 'dmy_long';
+export type DateFormat = 'iso' | 'mdy' | 'mdy_long' | 'mdy_no_year' | 'dmy' | 'dmy_long' | 'dmy_no_year';
 
 export type Targets = {
   calories: number;

@@ -1,11 +1,49 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { apiFormUpload } from '../api/uploadWithProgress';
+import { ImportProgress, type ImportProgressState } from '../components/ImportProgress';
+import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { navigate } from '../nav';
 import { CORE_NUTRIENT_FIELDS, removeExtraAt, setCoreNutrient, setExtraAt } from '../nutrientFields';
-import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { EMPTY_NUTRIENTS, type Food, type Nutrients } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
+
+type ImportResult = {
+  uploadId: string | null;
+  kind?: 'pdf' | 'image';
+  textPreview?: string | null;
+  draft: { nutrients: Nutrients; servingLabel: string };
+  candidates: string[];
+  menuItems?: Array<{ name: string; servingLabel: string; nutrients: Nutrients }>;
+  warning: string | null;
+};
+
+type ImportStatus =
+  | { kind: 'ok'; text: string }
+  | { kind: 'warn'; text: string }
+  | { kind: 'err'; text: string };
+
+const PROCESS_URL = [
+  'Fetching link…',
+  'Reading page content…',
+  'Looking for nutrition facts…',
+  'Almost done…',
+];
+
+const PROCESS_PDF = [
+  'Reading PDF on server…',
+  'Extracting text…',
+  'Parsing nutrition facts…',
+  'Large PDFs can take a minute…',
+];
+
+const PROCESS_IMAGE = [
+  'Running OCR on the label…',
+  'Still reading the photo…',
+  'This can take up to a minute…',
+  'Parsing nutrition facts…',
+];
 
 export function FoodPage({ custom = false, editId = null }: FoodPageProps) {
   return custom ? <RecipeEditor editId={editId} /> : <FoodEditor editId={editId} />;
@@ -21,9 +59,21 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const [candidates, setCandidates] = useState<string[]>([]);
   const [menuItems, setMenuItems] = useState<Array<{ name: string; servingLabel: string; nutrients: Nutrients }>>([]);
   const [uploadId, setUploadId] = useState<string | null>(null);
+  const [importKind, setImportKind] = useState<'pdf' | 'image' | null>(null);
+  const [textPreview, setTextPreview] = useState<string | null>(null);
+  const [foodKind, setFoodKind] = useState<'packaged' | 'restaurant'>('packaged');
   const [importUrl, setImportUrl] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [batchSelect, setBatchSelect] = useState(false);
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(() => new Set());
+  const [stubBusy, setStubBusy] = useState(false);
   const [loading, setLoading] = useState(Boolean(editId));
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const processMessageStopRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => processMessageStopRef.current?.(), []);
 
   useEffect(() => {
     if (!editId) return;
@@ -36,64 +86,185 @@ function FoodEditor({ editId }: { editId: string | null }) {
       setIsDrink(food.isDrink);
       setDrinkMl(food.drinkMl ? String(food.drinkMl) : '355');
       setLoading(false);
-    }).catch(() => setError('Could not load this food'));
+    }).catch(() => setSaveError('Could not load this food'));
   }, [editId]);
 
-  function applyImport(result: {
-    uploadId: string | null;
-    draft: { nutrients: Nutrients; servingLabel: string };
-    candidates: string[];
-    menuItems?: Array<{ name: string; servingLabel: string; nutrients: Nutrients }>;
-    warning: string | null;
-  }): void {
+  function applyImport(result: ImportResult): void {
     setUploadId(result.uploadId);
+    setImportKind(result.kind ?? null);
+    setTextPreview(result.textPreview ?? null);
+    if (result.kind === 'pdf' && (result.candidates.length > 0 || (result.menuItems?.length ?? 0) === 0)) {
+      setFoodKind('restaurant');
+    }
     setCandidates(result.candidates);
-    setMenuItems(result.menuItems ?? []);
-    setError(result.warning);
-    if ((result.menuItems?.length ?? 0) > 0) {
+    const items = result.menuItems ?? [];
+    setMenuItems(items);
+    if (items.length > 0) {
       setName('');
       setNutrients(EMPTY_NUTRIENTS);
       setServing('1 serving');
+      setImportStatus({
+        kind: result.warning ? 'warn' : 'ok',
+        text: result.warning ?? 'Pick a menu item below, then review and save.',
+      });
       return;
     }
     setNutrients(result.draft.nutrients);
     setServing(result.draft.servingLabel);
-    if (!result.warning && result.draft.nutrients.calories === 0 && result.draft.nutrients.protein === 0) {
-      setError('No nutrition values were detected. Edit the fields below or try a photo/PDF.');
+    const emptyNutrition = result.draft.nutrients.calories === 0 && result.draft.nutrients.protein === 0;
+    if (result.warning) {
+      setImportStatus({ kind: 'warn', text: result.warning });
+      return;
     }
+    if (emptyNutrition && result.candidates.length > 0) {
+      setImportStatus({ kind: 'ok', text: 'Tap a name suggestion, then enter nutrition facts below.' });
+      return;
+    }
+    if (emptyNutrition) {
+      setImportStatus({ kind: 'warn', text: 'No nutrition values detected. Enter them below or try another file or URL.' });
+      return;
+    }
+    setImportStatus({ kind: 'ok', text: 'Values filled below — review and save.' });
   }
 
   function pickMenuItem(item: { name: string; servingLabel: string; nutrients: Nutrients }): void {
     setName(item.name);
     setServing(item.servingLabel);
     setNutrients(item.nutrients);
+    setFoodKind('restaurant');
+    setImportStatus({ kind: 'ok', text: 'Menu item applied — review and save.' });
   }
 
-  async function importLink(): Promise<void> {
-    if (!importUrl.trim()) return;
+  function pickCandidate(candidate: string): void {
+    setName(candidate);
+    setFoodKind('restaurant');
+    setImportStatus({ kind: 'ok', text: `“${candidate}” — add nutrition facts below, then save.` });
+  }
+
+  function toggleCandidate(candidate: string): void {
+    setSelectedCandidates((prev) => {
+      const next = new Set(prev);
+      if (next.has(candidate)) next.delete(candidate);
+      else next.add(candidate);
+      return next;
+    });
+  }
+
+  async function createStubFoods(): Promise<void> {
+    const names = [...selectedCandidates];
+    if (names.length === 0) return;
+    setStubBusy(true);
+    setSaveError(null);
     try {
-      const result = await api<{ uploadId: string | null; draft: { nutrients: Nutrients; servingLabel: string }; candidates: string[]; warning: string | null }>(
-        '/api/import-url',
-        { method: 'POST', body: JSON.stringify({ url: importUrl.trim() }) },
-      );
-      applyImport(result);
+      await api('/api/foods/stubs', {
+        method: 'POST',
+        body: JSON.stringify({
+          names,
+          uploadId,
+          source: importKind === 'pdf' ? 'pdf' : 'manual',
+        }),
+      });
+      setImportStatus({ kind: 'ok', text: `Created ${names.length} placeholder foods — add nutrition in Library.` });
+      setSelectedCandidates(new Set());
+      setBatchSelect(false);
+      navigate('/library');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not import URL');
+      setSaveError(caught instanceof Error ? caught.message : 'Could not create placeholders');
+    } finally {
+      setStubBusy(false);
     }
   }
 
-  async function upload(file: File): Promise<void> {
-    const body = new FormData();
-    body.set('file', file);
-    const result = await api<{ uploadId: string | null; draft: { nutrients: Nutrients; servingLabel: string }; candidates: string[]; warning: string | null }>('/api/uploads', { method: 'POST', body });
-    applyImport(result);
+  function startProcessMessages(steps: string[]): void {
+    processMessageStopRef.current?.();
+    let step = 0;
+    setImportProgress({ phase: 'process', percent: null, message: steps[0] ?? 'Processing…' });
+    const timer = window.setInterval(() => {
+      step = (step + 1) % steps.length;
+      setImportProgress({ phase: 'process', percent: null, message: steps[step] ?? 'Processing…' });
+    }, 2800);
+    processMessageStopRef.current = () => {
+      window.clearInterval(timer);
+      processMessageStopRef.current = null;
+    };
   }
+
+  function endImportProgress(): void {
+    processMessageStopRef.current?.();
+    setImportProgress(null);
+  }
+
+  async function importLink(): Promise<void> {
+    const url = importUrl.trim();
+    if (!url) {
+      setImportStatus({ kind: 'warn', text: 'Paste a link first.' });
+      return;
+    }
+    setImportStatus(null);
+    setSaveError(null);
+    startProcessMessages(PROCESS_URL);
+    try {
+      const result = await api<ImportResult>('/api/import-url', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      });
+      applyImport(result);
+    } catch (caught) {
+      setImportStatus({ kind: 'err', text: caught instanceof Error ? caught.message : 'Import failed' });
+    } finally {
+      endImportProgress();
+    }
+  }
+
+  async function uploadFile(file: File): Promise<void> {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const processSteps = isPdf ? PROCESS_PDF : PROCESS_IMAGE;
+    setImportStatus(null);
+    setSaveError(null);
+    setImportProgress({ phase: 'upload', percent: 0, message: 'Uploading…' });
+    let processingStarted = false;
+    try {
+      const body = new FormData();
+      body.set('file', file);
+      const result = await apiFormUpload<ImportResult>('/api/uploads', body, (loaded, total) => {
+        if (total <= 0) return;
+        const pct = Math.min(100, Math.round((loaded / total) * 100));
+        if (loaded >= total) {
+          if (!processingStarted) {
+            processingStarted = true;
+            startProcessMessages(processSteps);
+          }
+          return;
+        }
+        setImportProgress({ phase: 'upload', percent: pct, message: `Uploading… ${pct}%` });
+      });
+      if (!processingStarted) startProcessMessages(processSteps);
+      applyImport(result);
+    } catch (caught) {
+      setImportStatus({ kind: 'err', text: caught instanceof Error ? caught.message : 'Import failed' });
+    } finally {
+      endImportProgress();
+    }
+  }
+
+  const importBusy = importProgress !== null;
 
   async function save(event: { preventDefault: () => void }): Promise<void> {
     event.preventDefault();
+    const source = uploadId
+      ? (importKind === 'pdf' ? 'pdf' as const : 'image' as const)
+      : 'manual' as const;
     const payload = {
-      name, brand: brand || null, kind: 'packaged' as const, servingLabel: serving, nutrients, isDrink,
-      drinkMl: isDrink ? Number(drinkMl) : null, isFavorite: false, source: uploadId ? 'image' as const : 'manual' as const, uploadId: uploadId ?? undefined,
+      name,
+      brand: brand || null,
+      kind: foodKind,
+      servingLabel: serving,
+      nutrients,
+      isDrink,
+      drinkMl: isDrink ? Number(drinkMl) : null,
+      isFavorite: false,
+      source,
+      uploadId: uploadId ?? undefined,
     };
     try {
       if (editId) {
@@ -103,7 +274,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       }
       navigate('/library?shelf=foods');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save');
+      setSaveError(caught instanceof Error ? caught.message : 'Could not save');
     }
   }
 
@@ -117,7 +288,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       </header>
 
       <section className="card form-section">
-        <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required autoFocus={!editId} /></label>
+        <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
         <div className="form-row-2">
           <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
           <label>Serving<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
@@ -129,14 +300,74 @@ function FoodEditor({ editId }: { editId: string | null }) {
         {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
       </section>
 
-      <details className="card form-section import-panel">
-        <summary>Import from photo, PDF, or link</summary>
-        <label className="import-file">Choose file<input type="file" accept="image/*,.pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></label>
-        <div className="import-url-row">
-          <input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="PDF or nutrition page URL" />
-          <button type="button" onClick={() => void importLink()}>Import</button>
+      <section className="card form-section import-panel" aria-labelledby="food-import-heading">
+        <h2 id="food-import-heading" className="form-section-title">Import from photo, PDF, or link</h2>
+        <p className="muted import-hint">Optional. Direct PDF or nutrition page links work best.</p>
+        <div className="import-actions">
+          <button
+            type="button"
+            className="import-file-btn"
+            disabled={importBusy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Upload photo or PDF
+          </button>
+          <input
+            ref={fileInputRef}
+            className="import-file-input"
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void uploadFile(file);
+            }}
+          />
         </div>
-        <p className="muted import-hint">Direct PDF/HTML links work best; in-app-only menus may not load.</p>
+        <label className="import-url-field">
+          <span className="muted">Or paste a URL</span>
+          <div className="import-url-row">
+            <input
+              value={importUrl}
+              disabled={importBusy}
+              onChange={(event) => setImportUrl(event.target.value)}
+              placeholder="https://…"
+              inputMode="url"
+              autoComplete="off"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void importLink();
+                }
+              }}
+            />
+            <button type="button" className="primary import-url-btn" disabled={importBusy || !importUrl.trim()} onClick={() => void importLink()}>
+              {importBusy ? '…' : 'Import'}
+            </button>
+          </div>
+        </label>
+        {importProgress && <ImportProgress progress={importProgress} />}
+        {importStatus && (
+          <p
+            className={`import-status import-status-${importStatus.kind}`}
+            role={importStatus.kind === 'err' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {importStatus.text}
+          </p>
+        )}
+        {(textPreview || (importKind === 'pdf' && candidates.length > 0)) && (
+          <div className="pdf-review">
+            <h3 className="form-section-title">Menu PDF review</h3>
+            <p className="muted">Pick a dish name, then fill in nutrition from the sheet.</p>
+            {textPreview && (
+              <details className="pdf-text-preview">
+                <summary>Extracted text</summary>
+                <pre>{textPreview}</pre>
+              </details>
+            )}
+          </div>
+        )}
         {menuItems.length > 0 && (
           <ul className="library-list compact-list menu-pick-list">
             {menuItems.map((item) => (
@@ -153,15 +384,52 @@ function FoodEditor({ editId }: { editId: string | null }) {
           </ul>
         )}
         {menuItems.length === 0 && candidates.length > 0 && (
-          <div className="chip-row">{candidates.map((item) => <button type="button" className="chip" key={item} onClick={() => setName(item)}>{item}</button>)}</div>
+          <div className="pdf-candidate-batch">
+            <div className="library-toolbar-top">
+              <p className="muted">Name suggestions from the PDF</p>
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setBatchSelect((value) => !value);
+                  setSelectedCandidates(new Set());
+                }}
+              >
+                {batchSelect ? 'Single pick' : 'Select multiple'}
+              </button>
+            </div>
+            <div className="chip-row">
+              {candidates.map((item) => (
+                <button
+                  type="button"
+                  className={`chip${batchSelect && selectedCandidates.has(item) ? ' active' : ''}`}
+                  key={item}
+                  aria-pressed={batchSelect ? selectedCandidates.has(item) : undefined}
+                  onClick={() => (batchSelect ? toggleCandidate(item) : pickCandidate(item))}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+            {batchSelect && (
+              <button
+                type="button"
+                className="settings-secondary-btn"
+                disabled={stubBusy || selectedCandidates.size === 0}
+                onClick={() => void createStubFoods()}
+              >
+                {stubBusy ? 'Creating…' : `Create ${selectedCandidates.size || ''} placeholders`.trim()}
+              </button>
+            )}
+          </div>
         )}
-      </details>
+      </section>
 
       <section className="card form-section">
         <NutrientFields nutrients={nutrients} onChange={setNutrients} />
       </section>
 
-      {error && <p className="notice">{error}</p>}
+      {saveError && <p className="notice">{saveError}</p>}
       <button className="primary form-save" type="submit">Save food</button>
     </form>
   );
@@ -246,7 +514,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
 
       <section className="card form-section">
         <div className="form-row-2">
-          <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required autoFocus={!editId} /></label>
+          <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
           <label>Makes (servings)<input type="number" min="1" step="1" value={makesServings} onChange={(event) => setMakesServings(event.target.value)} required /></label>
         </div>
       </section>

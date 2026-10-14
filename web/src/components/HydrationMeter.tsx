@@ -10,29 +10,31 @@ type HydrationMeterProps = {
 };
 
 export function HydrationMeter({ amountMl, targetMl, units, onAdd, onRemove }: HydrationMeterProps) {
-  const level = targetMl > 0 ? amountMl / targetMl : 0;
+  const pct = targetMl > 0 ? Math.min(amountMl / targetMl, 1) * 100 : 0;
   return (
-    <section className="card hydration-card">
-      <h2>Hydration</h2>
-      <p>{formatVolume(amountMl, units)} of {formatVolume(targetMl, units)}</p>
-      <div className="glasses" aria-hidden="true">
-        {Array.from({ length: 8 }, (_, index) => (
-          <div className="glass" key={index}><i style={{ height: `${glassFill(level, index) * 100}%` }} /></div>
-        ))}
+    <section className="card hydration-card" aria-label="Hydration">
+      <div className="hydration-head">
+        <div className="hydration-copy">
+          <h2>Hydration</h2>
+          <p className="hydration-amount">
+            {formatVolume(amountMl, units)}
+            {targetMl > 0 && <span className="muted"> / {formatVolume(targetMl, units)}</span>}
+          </p>
+        </div>
+        <div className="hydration-stepper" role="group" aria-label="Adjust water">
+          <button type="button" className="hydration-step" aria-label={removeGlassLabel(units)} onClick={onRemove}>
+            −
+          </button>
+          <button type="button" className="hydration-step hydration-step-add" aria-label={glassLabel(units)} onClick={onAdd}>
+            +
+          </button>
+        </div>
       </div>
-      <p className="muted">Drinks in today&apos;s log count here too.</p>
-      <div className="row tight">
-        <button type="button" onClick={onRemove}>{removeGlassLabel(units)}</button>
-        <button type="button" className="primary" onClick={onAdd}>{glassLabel(units)}</button>
-      </div>
+      {targetMl > 0 && (
+        <div className="bar hydration-bar">
+          <span style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--water), var(--water-deep))' }} />
+        </div>
+      )}
     </section>
   );
-}
-
-function glassFill(level: number, index: number): number {
-  const start = index / 8;
-  const end = (index + 1) / 8;
-  if (level >= end) return 1;
-  if (level <= start) return 0;
-  return (level - start) / (end - start);
 }

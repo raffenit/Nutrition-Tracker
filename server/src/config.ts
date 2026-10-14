@@ -1,6 +1,12 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
+export type VapidConfig = {
+  publicKey: string;
+  privateKey: string;
+  subject: string;
+};
+
 export type AppConfig = {
   port: number;
   dataDir: string;
@@ -12,6 +18,7 @@ export type AppConfig = {
   timezone: string;
   publicUrl: string | null;
   glassMl: number;
+  vapid: VapidConfig | null;
 };
 
 export function loadConfig(): AppConfig {
@@ -31,7 +38,16 @@ export function loadConfig(): AppConfig {
     timezone: process.env.TZ?.trim() || 'America/Chicago',
     publicUrl: blankToNull(process.env.PUBLIC_URL),
     glassMl: 250,
+    vapid: loadVapid(),
   };
+}
+
+function loadVapid(): VapidConfig | null {
+  const publicKey = blankToNull(process.env.VAPID_PUBLIC_KEY);
+  const privateKey = blankToNull(process.env.VAPID_PRIVATE_KEY);
+  if (!publicKey || !privateKey) return null;
+  const subject = blankToNull(process.env.VAPID_SUBJECT) ?? 'mailto:nutrition@localhost';
+  return { publicKey, privateKey, subject };
 }
 
 function readPort(value: string | undefined): number {

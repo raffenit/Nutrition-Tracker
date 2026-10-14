@@ -1,3 +1,7 @@
+# App container only. Host port 3010 comes from:
+#   STANDALONE — merge docker-compose.standalone.yml (bundled Caddy)
+#   EXTERNAL   — sibling infrastructure/Caddy on media-network
+
 services:
   nutrition:
     build: .
@@ -7,6 +11,9 @@ services:
       TZ: ${TZ:-America/Chicago}
       USDA_API_KEY: ${USDA_API_KEY:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:nutrition@localhost}
       PORT: 3010
       DATA_DIR: /data
       PUBLIC_DIR: /app/public

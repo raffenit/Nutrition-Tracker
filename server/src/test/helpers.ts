@@ -24,6 +24,7 @@ export function testConfig(): AppConfig {
     timezone: 'America/Chicago',
     publicUrl: null,
     glassMl: 250,
+    vapid: null,
   };
 }
 
