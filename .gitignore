@@ -7,5 +7,5 @@ data/
 *.log
 .DS_Store
 
-# Host-specific paths, URLs, and deploy overrides (see local.example/)
+# Host-specific test logs and notes (see local.example/); config is .env only
 local/

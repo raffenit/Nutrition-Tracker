@@ -32,16 +32,29 @@ deploy_join_public_url() {
 
 deploy_load_env() {
   local script_dir="$1"
-  if [[ -f "$script_dir/local/deploy.env" ]]; then
+  local legacy="$script_dir/local/deploy.env"
+
+  if [[ -f "$legacy" ]]; then
+    echo "Note: local/deploy.env is deprecated — merging into this run, then removing the file."
+    echo "      Use .env only (see README Step 4). Add INFRA_COMPOSE_DIR or DEPLOY_COMMIT_MSG to .env if needed."
+    set -a
     # shellcheck disable=SC1091
-    source "$script_dir/local/deploy.env"
+    source "$legacy"
+    set +a
   fi
+
   if [[ -f "$script_dir/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
     source "$script_dir/.env"
     set +a
   fi
+
+  if [[ -f "$legacy" ]]; then
+    rm -f "$legacy"
+    echo "Removed: local/deploy.env"
+  fi
+
   COMMIT_MSG="${DEPLOY_COMMIT_MSG:-}"
 }
 
@@ -163,7 +176,7 @@ deploy_run_git() {
   fi
   if [[ -n "$(git -C "$script_dir" status --porcelain)" ]]; then
     if [[ -z "$commit_msg" ]]; then
-      echo "ERROR: Uncommitted changes. Pass -m \"message\" or set DEPLOY_COMMIT_MSG in local/deploy.env"
+      echo "ERROR: Uncommitted changes. Pass -m \"message\" or set DEPLOY_COMMIT_MSG in .env"
       git -C "$script_dir" status -sb
       exit 1
     fi
@@ -236,14 +249,14 @@ deploy_print_footer() {
   echo "Deployment complete"
   echo "========================================"
   echo "Local:  http://localhost:${port}"
-  local remote_base="${REMOTE_BASE_URL:-${TAILSCALE_SERVER_URL:-${PUBLIC_URL:-}}}"
+  local remote_base="${TAILSCALE_SERVER_URL:-${PUBLIC_URL:-}}"
   if [[ -n "$remote_base" ]]; then
     local remote
     remote="$(deploy_join_public_url "$remote_base" "$port")"
     echo "Tailscale (personal): ${remote}"
     echo "Tailscale (family):   ${remote%/}/family"
   else
-    echo "Tailscale: set TAILSCALE_SERVER_URL in .env (or REMOTE_BASE_URL in local/deploy.env)"
+    echo "Tailscale: set TAILSCALE_SERVER_URL in .env"
   fi
   echo ""
   echo "Logs:  $compose_hint logs -f"

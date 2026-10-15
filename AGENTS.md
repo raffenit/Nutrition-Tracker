@@ -8,6 +8,6 @@ Read `docs/README.md` for the doc index and `docs/CODE-MAP.md` to find files by 
 
 Weight records are personal. Family and kiosk responses go through `server/src/domain/familyView.ts` and must not include them.
 
-Host-specific deploy paths and URLs belong in `local/` (gitignored); see `local.example/`.
+Host-specific URLs and deploy options belong in `.env`; `local/` is for test logs only (see `local.example/`).
 
 Do not restart production infrastructure (Caddy) or this container until the pending change has been reviewed.

@@ -1,25 +1,16 @@
-# Host-specific configuration (optional)
+# Host-specific files (optional)
 
-The main repo stays generic. Put **your** Tailscale URL and non-default paths in `local/` at the repo root.
+The **`local/`** directory at the repo root is **gitignored** — use it for machine-local artifacts, not a second config file.
 
-That directory is **gitignored** — nothing here is committed.
+## Configuration
 
-## `.env` vs `local/deploy.env`
+Use a **single `.env`** (from `.env.example`) for the app **and** `./deploy.sh`. There is no `local/deploy.env` anymore; deploy deletes that file if it still exists from older installs.
 
-| File | Used by |
+## What goes in `local/`
+
+| Path | Purpose |
 | --- | --- |
-| `.env` (from `.env.example`) | **Docker / the app** — timezone, `TAILSCALE_SERVER_URL`, `USDA_API_KEY` |
-| `local/deploy.env` | **`./deploy.sh` only** — convenience output and infra path overrides |
+| `local/test-last-run.log` | Written by `npm test` / deploy |
+| `local/https-smoke-last.txt` | Last HTTPS smoke output (when enabled) |
 
-Household members do not configure either file; the person who runs the server does.
-
-## Setup
-
-```bash
-cp .env.example .env
-cp local.example/deploy.env.example local/deploy.env
-```
-
-Edit both with your Tailscale IP (`tailscale ip -4` on the server): `TAILSCALE_SERVER_URL=http://…` and `NUTRITION_PORT=3010` (do not put `:3010` in the Tailscale server URL).
-
-You can add other private notes under `local/` (backup paths, etc.).
+You can store private notes under `local/` if you want; nothing here is committed.

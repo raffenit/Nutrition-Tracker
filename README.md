@@ -134,13 +134,12 @@ The legacy name `PUBLIC_URL` still works if you already use it; prefer **`TAILSC
 
 Optional later: `USDA_API_KEY`, `VAPID_*` (Web Push — needs HTTPS in Step 8). See [.env.example](./.env.example).
 
-Optional deploy hints (not read by the app container):
+**One file only:** `./deploy.sh` and Docker both read **`.env`**. Do not create `local/deploy.env` — if an old copy exists, deploy removes it automatically.
 
-```bash
-mkdir -p local
-cp local.example/deploy.env.example local/deploy.env
-# same Tailscale server URL as .env (for deploy summary lines)
-```
+Optional in **`.env`** (read by `./deploy.sh`, not passed to the app container unless listed in `docker-compose.yml`):
+
+- `INFRA_COMPOSE_DIR` — EXTERNAL only, if `infrastructure/` is not `../infrastructure`
+- `DEPLOY_COMMIT_MSG` — default message when deploy commits dirty git state
 
 ---
 

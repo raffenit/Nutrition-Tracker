@@ -48,7 +48,7 @@ Pipeline (override with `--skip-test` / `--skip-git`):
 3. **Docker** — STANDALONE merges `docker-compose.standalone.yml`; EXTERNAL requires existing `media-network`
 4. **Health** — `GET /api/health` on `NUTRITION_PORT` (default 3010)
 
-Host prerequisites: Docker; Node/npm for tests; git optional. **Host-specific URLs:** `local/deploy.env` (see `local.example/`).
+Host prerequisites: Docker; Node/npm for tests; git optional. **Host URL:** `TAILSCALE_SERVER_URL` in `.env`.
 
 Environment (see `.env.example`, server admin only — not per user):
 
@@ -56,7 +56,7 @@ Environment (see `.env.example`, server admin only — not per user):
 - `TAILSCALE_SERVER_URL` — Tailscale server URL for kiosk links (tailnet only; no port in value); legacy `PUBLIC_URL` supported; `NUTRITION_PORT` — HTTP port on Tailscale IP (default 3010)
 - `USDA_API_KEY` — optional; enables USDA hits in `/api/ingredients/search` (Open Food Facts + library still work without it)
 
-Deploy-only overrides (`REMOTE_BASE_URL`, `INFRA_COMPOSE_DIR`) live in gitignored `local/deploy.env`; see `local.example/`.
+Optional deploy-only keys in **`.env`**: `INFRA_COMPOSE_DIR`, `DEPLOY_COMMIT_MSG` (see `.env.example`).
 
 ## Repository layout
 

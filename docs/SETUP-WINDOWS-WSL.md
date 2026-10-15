@@ -124,7 +124,7 @@ TAILSCALE_SERVER_URL=http://YOUR_TAILSCALE_IP
 NUTRITION_PORT=3010
 ```
 
-Optional: `mkdir -p local && cp local.example/deploy.env.example local/deploy.env` and set `REMOTE_BASE_URL`.
+All config lives in **`.env` only** (no `local/deploy.env`).
 
 ---
 

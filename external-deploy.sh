@@ -32,7 +32,7 @@ deploy_preflight_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}"
 if ! docker network inspect media-network >/dev/null 2>&1; then
   echo "ERROR: Docker network 'media-network' not found."
   echo "Start your infrastructure stack first, or set CADDY_STYLE=STANDALONE in .env and run ./deploy.sh."
-  echo "Set INFRA_COMPOSE_DIR in local/deploy.env if infrastructure is not ../infrastructure"
+  echo "Set INFRA_COMPOSE_DIR in .env if infrastructure is not ../infrastructure"
   exit 1
 fi
 

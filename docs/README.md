@@ -56,6 +56,6 @@ Update this table when a phase ships (date in ROADMAP + row here).
 
 | Path | Role |
 | --- | --- |
-| `local.example/` | Template for gitignored `local/deploy.env`, test logs |
+| `local.example/` | Notes on gitignored `local/` (test logs); config is **`.env` only** |
 | `.env.example` | Server env vars (`TZ`, `TAILSCALE_SERVER_URL`, `USDA_API_KEY`) |
 | `scripts/run-tests.sh` | Canonical test runner used by deploy |
