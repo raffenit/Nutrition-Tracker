@@ -30,6 +30,10 @@ deploy_join_public_url() {
   local port="${2:-3010}"
   base="$(deploy_normalize_tailscale_base "$base")"
   if [[ "$base" =~ ^https:// ]]; then
+    # https://host:3010 in .env is a common mistake — phones use 443 via tailscale serve.
+    if [[ "$base" =~ ^https://[^/]+:3010(/|$) ]]; then
+      base="${base/:3010/}"
+    fi
     echo "$base"
     return 0
   fi

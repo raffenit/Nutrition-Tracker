@@ -20,6 +20,13 @@ test('resolvePublicOrigin treats bare MagicDNS ts.net hostnames as HTTPS', () =>
   );
 });
 
+test('resolvePublicOrigin strips :3010 from mistaken https URLs', () => {
+  assert.equal(
+    resolvePublicOrigin('https://frankenstein.tailf6749c.ts.net:3010', 3010),
+    'https://frankenstein.tailf6749c.ts.net',
+  );
+});
+
 test('resolvePublicOrigin keeps a legacy PUBLIC_URL that already includes a port', () => {
   assert.equal(resolvePublicOrigin('http://100.100.67.105:3010', 8080), 'http://100.100.67.105:3010');
 });

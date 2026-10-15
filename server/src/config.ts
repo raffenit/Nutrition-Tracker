@@ -64,9 +64,15 @@ export function resolvePublicOrigin(publicUrl: string | null, publishedPort: num
         ? `https://${trimmed}`
         : `http://${trimmed}`;
     const parsed = new URL(withScheme);
+    // HTTPS uses Tailscale serve on 443 — not Caddy's host port (3010).
+    if (parsed.protocol === 'https:') {
+      const hostPort = parsed.port;
+      if (hostPort && hostPort !== '443' && (hostPort === '3010' || hostPort === String(publishedPort))) {
+        parsed.port = '';
+      }
+      return parsed.origin;
+    }
     if (parsed.port) return parsed.origin;
-    // HTTPS kiosk links use the reverse proxy (443); host NUTRITION_PORT is not in the URL.
-    if (parsed.protocol === 'https:') return parsed.origin;
     const port = publishedPort > 0 ? publishedPort : 80;
     if (port === 80) return parsed.origin;
     parsed.port = String(port);
