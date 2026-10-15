@@ -74,7 +74,7 @@ Skip tests on deploy:
 2. Sign in to the same tailnet as your phones.
 3. Install Tailscale on each phone (App Store / Play Store).
 
-Note the PC’s Tailscale IP from the tray icon (you will use it in `.env` as `PUBLIC_URL`).
+Note the PC’s Tailscale IP from the tray icon (you will use it as **`TAILSCALE_SERVER_URL`** in `.env`).
 
 Optional CLI in WSL: [Tailscale on Linux](https://tailscale.com/download/linux). Windows Tailscale alone is enough for most setups.
 
@@ -120,7 +120,8 @@ Minimum:
 ```env
 CADDY_STYLE=STANDALONE
 TZ=America/Chicago
-PUBLIC_URL=http://YOUR_TAILSCALE_IP:3010
+TAILSCALE_SERVER_URL=http://YOUR_TAILSCALE_IP
+NUTRITION_PORT=3010
 ```
 
 Optional: `mkdir -p local && cp local.example/deploy.env.example local/deploy.env` and set `REMOTE_BASE_URL`.
@@ -177,9 +178,14 @@ docker compose -f docker-compose.yml -f docker-compose.standalone.yml logs -f
 
 ---
 
-## I. HTTPS on Tailscale (README Step 8 — optional)
+## I. HTTPS on your tailnet (README Step 8 — recommended)
 
-After HTTP works: MagicDNS + HTTPS in [Tailscale admin](https://login.tailscale.com/admin/dns), then `sudo tailscale serve --bg http://127.0.0.1:3010`, update `PUBLIC_URL` to `https://….ts.net`, redeploy (section F).
+Follow **[README Step 8](../README.md#step-8--https-on-your-tailnet-recommended)** in full. Short version after HTTP works:
+
+1. [Tailscale admin → DNS](https://login.tailscale.com/admin/dns) — **MagicDNS** + **HTTPS certificates** on.  
+2. `sudo tailscale serve --bg http://127.0.0.1:3010` in WSL.  
+3. `.env`: `TAILSCALE_SERVER_URL=https://YOUR-PC.your-tailnet.ts.net` (no port).  
+4. Redeploy (section F).
 
 ---
 

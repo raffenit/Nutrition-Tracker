@@ -127,16 +127,19 @@ Edit `.env` (VS Code, vim, or nano). Minimum for a first run:
 | --- | --- | --- |
 | `CADDY_STYLE` | `STANDALONE` or `EXTERNAL` | From Step 1 |
 | `TZ` | `America/Chicago` | Household “today” |
-| `PUBLIC_URL` | `http://100.x.x.x:3010` | Kiosk links in Settings (Tailscale IP or later HTTPS URL) |
+| **`TAILSCALE_SERVER_URL`** | `http://100.x.x.x` then `https://pc-name.your-tailnet.ts.net` | **Tailscale server URL** — tailnet-only (not public internet). Host only; no `:3010`. Start with HTTP IP; switch to HTTPS after **Step 8**. |
+| `NUTRITION_PORT` | `3010` | Port Caddy publishes for **HTTP** via Tailscale IP (phones skip this when using HTTPS URL) |
 
-Optional later: `USDA_API_KEY`, `VAPID_*` (Web Push). See [.env.example](./.env.example).
+The legacy name `PUBLIC_URL` still works if you already use it; prefer **`TAILSCALE_SERVER_URL`** for new installs.
+
+Optional later: `USDA_API_KEY`, `VAPID_*` (Web Push — needs HTTPS in Step 8). See [.env.example](./.env.example).
 
 Optional deploy hints (not read by the app container):
 
 ```bash
 mkdir -p local
 cp local.example/deploy.env.example local/deploy.env
-# set REMOTE_BASE_URL to the same URL you use on phones
+# same Tailscale server URL as .env (for deploy summary lines)
 ```
 
 ---
@@ -199,12 +202,14 @@ curl -s http://localhost:3010/api/health
 
 Expect JSON with `"ok": true` (or setup prompt fields on first boot).
 
-From a **phone** on the same Tailscale network, open:
+From a **phone** on the **same Tailscale tailnet** (not public internet), open:
 
-| Page | URL |
+| Page | URL (HTTP — before Step 8) |
 | --- | --- |
-| Personal app | `http://YOUR_TAILSCALE_IP:3010` (or your `PUBLIC_URL`) |
-| Family board | same host **`/family`** |
+| Personal app | `http://YOUR_TAILSCALE_IP:3010` |
+| Family board | `http://YOUR_TAILSCALE_IP:3010/family` |
+
+These should match `TAILSCALE_SERVER_URL` + `NUTRITION_PORT` in `.env`. After HTTPS (Step 8), use `https://YOUR-MACHINE.your-tailnet.ts.net` instead (no port).
 
 Add to the phone home screen: Safari/Chrome → Share → **Add to Home Screen**.
 
@@ -225,18 +230,42 @@ docker compose -f docker-compose.yml logs -f
 1. Open the personal URL → complete **Setup** (household name, admin user, password).  
 2. **Settings** → set daily targets (calories, protein, etc.).  
 3. **Library** → add foods; on **Today**, use **+** to log meals.  
-4. (Optional) **Settings** → create a **family / kiosk link** (requires `PUBLIC_URL`) for a wall tablet or Home Assistant iframe.
+4. (Optional) **Settings** → create a **family / kiosk link** (requires **`TAILSCALE_SERVER_URL`** in `.env`) for a wall tablet or Home Assistant iframe.
 
 ---
 
-### Step 8 — HTTPS on Tailscale (optional; recommended for Web Push)
+### Step 8 — HTTPS on your tailnet (recommended)
 
-Do this **after** Step 6 succeeds over HTTP.
+Nutrition Tracker is meant for your **Tailscale tailnet**, not the open internet. You can start with **HTTP + Tailscale IP** (Step 6). **HTTPS** gives nicer URLs (no `:3010`), trusted certificates on phones, and is **required for Web Push** goal alerts.
 
-1. In [Tailscale admin → DNS](https://login.tailscale.com/admin/dns), enable **MagicDNS** and **HTTPS certificates**.  
-2. On the server: `sudo tailscale serve --bg http://127.0.0.1:3010`  
-3. Set **`PUBLIC_URL=https://YOUR-MACHINE.your-tailnet.ts.net`** in `.env`.  
-4. Redeploy (Step 5 script again, or `./deploy.sh --skip-test --skip-git`).
+Do this **after** Step 6 works over HTTP.
+
+#### What changes
+
+| Mode | `.env` | Open on phone (Tailscale on) |
+| --- | --- | --- |
+| **HTTP** (first install) | `TAILSCALE_SERVER_URL=http://100.x.x.x` and `NUTRITION_PORT=3010` | `http://100.x.x.x:3010` |
+| **HTTPS** (after this step) | `TAILSCALE_SERVER_URL=https://YOUR-MACHINE.your-tailnet.ts.net` | `https://YOUR-MACHINE.your-tailnet.ts.net` |
+
+#### Setup (once per server)
+
+1. **Enable tailnet HTTPS** — [Tailscale admin → DNS](https://login.tailscale.com/admin/dns): turn on **MagicDNS** and **HTTPS certificates** (Let’s Encrypt for `*.ts.net` names on your tailnet only).
+2. **Find your machine name** — Tailscale app or `tailscale status` on the server. You will use `https://<machine>.<tailnet>.ts.net` (exact suffix is shown in the admin UI).
+3. **Proxy HTTPS to the app** — on the server (WSL or Linux), with the stack already running on port 3010:
+   ```bash
+   sudo tailscale serve --bg http://127.0.0.1:3010
+   ```
+   Tailscale terminates HTTPS on **443** and forwards to local Caddy/app on **3010**.
+4. **Update `.env`** — set the HTTPS URL (no port):
+   ```env
+   TAILSCALE_SERVER_URL=https://YOUR-MACHINE.your-tailnet.ts.net
+   ```
+   Keep `NUTRITION_PORT=3010` for local health checks and Caddy; phones use the HTTPS URL without a port.
+5. **Redeploy** — `./deploy.sh --skip-git` (add `--skip-test` if you have no Node).
+6. **Phone** — open the `https://…ts.net` URL with Tailscale connected; update home-screen bookmark; in **Settings**, enable push if you configured `VAPID_*`.
+7. **Verify in tests** — `npm test` runs an HTTPS smoke check when `TAILSCALE_SERVER_URL` is `https://…` (same machine must reach that URL over Tailscale). Use `SKIP_HTTPS_SMOKE=1` to bypass.
+
+To stop HTTPS proxying later: `sudo tailscale serve reset`.
 
 ---
 
@@ -281,7 +310,7 @@ Default pipeline (when not skipping): **`npm test` on the host** (requires Node 
 ## Development (laptop)
 
 ```bash
-npm test       # server tests + web tsc → local/test-last-run.log
+npm test       # server tests + web tsc + optional HTTPS smoke → local/test-last-run.log
 npm run build
 ```
 

@@ -53,7 +53,7 @@ Host prerequisites: Docker; Node/npm for tests; git optional. **Host-specific UR
 Environment (see `.env.example`, server admin only — not per user):
 
 - `TZ` — household day boundaries
-- `PUBLIC_URL` — kiosk link generation in Settings
+- `TAILSCALE_SERVER_URL` — Tailscale server URL for kiosk links (tailnet only; no port in value); legacy `PUBLIC_URL` supported; `NUTRITION_PORT` — HTTP port on Tailscale IP (default 3010)
 - `USDA_API_KEY` — optional; enables USDA hits in `/api/ingredients/search` (Open Food Facts + library still work without it)
 
 Deploy-only overrides (`REMOTE_BASE_URL`, `INFRA_COMPOSE_DIR`) live in gitignored `local/deploy.env`; see `local.example/`.
@@ -144,7 +144,7 @@ API client: `web/src/api/client.ts` (credentials included for cookies).
 
 1. **Weight never leaves personal APIs** — family and kiosk payloads go through `toFamilyBoard` / `assertFamilyBoardIsPublic`; integration tests guard this.
 2. **Uploads and foods** are household-shared; meal logs are per-user.
-3. **Kiosk token** is hashed at rest; display URL built with `PUBLIC_URL` when set.
+3. **Kiosk token** is hashed at rest; display URL built from `TAILSCALE_SERVER_URL` + `NUTRITION_PORT` when set.
 
 ## Testing
 

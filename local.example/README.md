@@ -8,7 +8,7 @@ That directory is **gitignored** — nothing here is committed.
 
 | File | Used by |
 | --- | --- |
-| `.env` (from `.env.example`) | **Docker / the app** — timezone, `PUBLIC_URL`, `USDA_API_KEY` |
+| `.env` (from `.env.example`) | **Docker / the app** — timezone, `TAILSCALE_SERVER_URL`, `USDA_API_KEY` |
 | `local/deploy.env` | **`./deploy.sh` only** — convenience output and infra path overrides |
 
 Household members do not configure either file; the person who runs the server does.
@@ -20,6 +20,6 @@ cp .env.example .env
 cp local.example/deploy.env.example local/deploy.env
 ```
 
-Edit both with your Tailscale IP (`tailscale ip -4` on the server).
+Edit both with your Tailscale IP (`tailscale ip -4` on the server): `TAILSCALE_SERVER_URL=http://…` and `NUTRITION_PORT=3010` (do not put `:3010` in the Tailscale server URL).
 
 You can add other private notes under `local/` (backup paths, etc.).

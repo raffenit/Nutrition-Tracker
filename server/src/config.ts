@@ -16,7 +16,12 @@ export type AppConfig = {
   publicDir: string;
   usdaApiKey: string | null;
   timezone: string;
+  /** Tailscale server URL (`TAILSCALE_SERVER_URL` or legacy `PUBLIC_URL`). */
   publicUrl: string | null;
+  /** Host port on the tailnet for HTTP access (`NUTRITION_PORT`, default 3010). */
+  publishedPort: number;
+  /** Full origin for kiosk links (Tailscale URL + port when needed). */
+  publicOrigin: string | null;
   glassMl: number;
   vapid: VapidConfig | null;
 };
@@ -27,6 +32,9 @@ export function loadConfig(): AppConfig {
   const tessdataDir = path.join(dataDir, 'tessdata');
   mkdirSync(uploadDir, { recursive: true });
   mkdirSync(tessdataDir, { recursive: true });
+  const publicUrl =
+    blankToNull(process.env.TAILSCALE_SERVER_URL) ?? blankToNull(process.env.PUBLIC_URL);
+  const publishedPort = readPort(process.env.NUTRITION_PORT ?? process.env.PUBLIC_PORT);
   return {
     port: readPort(process.env.PORT),
     dataDir,
@@ -36,10 +44,31 @@ export function loadConfig(): AppConfig {
     publicDir: process.env.PUBLIC_DIR ?? path.join(process.cwd(), 'public'),
     usdaApiKey: blankToNull(process.env.USDA_API_KEY),
     timezone: process.env.TZ?.trim() || 'America/Chicago',
-    publicUrl: blankToNull(process.env.PUBLIC_URL),
+    publicUrl,
+    publishedPort,
+    publicOrigin: resolvePublicOrigin(publicUrl, publishedPort),
     glassMl: 250,
     vapid: loadVapid(),
   };
+}
+
+/** Combine Tailscale server URL with `NUTRITION_PORT` when the base has no port (legacy URLs with `:port` still work). */
+export function resolvePublicOrigin(publicUrl: string | null, publishedPort: number): string | null {
+  if (!publicUrl) return null;
+  const trimmed = publicUrl.trim().replace(/\/$/, '');
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed.includes('://') ? trimmed : `http://${trimmed}`);
+    if (parsed.port) return parsed.origin;
+    // HTTPS kiosk links use the reverse proxy (443); host NUTRITION_PORT is not in the URL.
+    if (parsed.protocol === 'https:') return parsed.origin;
+    const port = publishedPort > 0 ? publishedPort : 80;
+    if (port === 80) return parsed.origin;
+    parsed.port = String(port);
+    return parsed.origin;
+  } catch {
+    return trimmed;
+  }
 }
 
 function loadVapid(): VapidConfig | null {

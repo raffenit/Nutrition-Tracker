@@ -31,7 +31,7 @@ From repo root:
 npm test
 ```
 
-Runs `scripts/run-tests.sh` → server `node --test` + web `tsc --noEmit`. Full log: `local/test-last-run.log` (gitignored).
+Runs `scripts/run-tests.sh` → server `node --test` + web `tsc --noEmit` + optional **HTTPS smoke** when `.env` has `TAILSCALE_SERVER_URL=https://…` (hits `/api/health` over Tailscale; skip with `SKIP_HTTPS_SMOKE=1`). Full log: `local/test-last-run.log` (gitignored).
 
 Before any PR that touches logs or family APIs, use the privacy checklist in [ROADMAP.md — Tracking](./ROADMAP.md#tracking).
 
@@ -57,5 +57,5 @@ Update this table when a phase ships (date in ROADMAP + row here).
 | Path | Role |
 | --- | --- |
 | `local.example/` | Template for gitignored `local/deploy.env`, test logs |
-| `.env.example` | Server env vars (`TZ`, `PUBLIC_URL`, `USDA_API_KEY`) |
+| `.env.example` | Server env vars (`TZ`, `TAILSCALE_SERVER_URL`, `USDA_API_KEY`) |
 | `scripts/run-tests.sh` | Canonical test runner used by deploy |

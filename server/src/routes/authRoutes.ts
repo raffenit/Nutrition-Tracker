@@ -148,7 +148,8 @@ async function createKioskLink(ctx: Parameters<Route['handler']>[0]): Promise<vo
   requireAdmin(ctx.auth);
   const token = newToken();
   saveKioskHash(ctx.db, hashToken(token));
-  const origin = ctx.config.publicUrl ?? `http://${ctx.req.headers.host ?? `localhost:${ctx.config.port}`}`;
+  const origin =
+    ctx.config.publicOrigin ?? `http://${ctx.req.headers.host ?? `localhost:${ctx.config.port}`}`;
   sendJson(ctx.res, 200, { url: `${origin.replace(/\/$/, '')}/family?kiosk=${token}` });
 }
 

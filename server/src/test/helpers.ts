@@ -23,6 +23,8 @@ export function testConfig(): AppConfig {
     usdaApiKey: null,
     timezone: 'America/Chicago',
     publicUrl: null,
+    publishedPort: 3010,
+    publicOrigin: null,
     glassMl: 250,
     vapid: null,
   };

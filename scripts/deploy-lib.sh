@@ -8,6 +8,28 @@ DOWN=false
 RESTART_INFRA=false
 COMMIT_MSG="${DEPLOY_COMMIT_MSG:-}"
 
+# Print origin for humans: base URL (no port) + NUTRITION_PORT when needed.
+deploy_join_public_url() {
+  local base="${1%/}"
+  local port="${2:-3010}"
+  if [[ -z "$base" ]]; then
+    return 1
+  fi
+  if [[ "$base" =~ ^https:// ]]; then
+    echo "$base"
+    return 0
+  fi
+  if [[ "$base" =~ ^http://[^/]+:[0-9]+ ]]; then
+    echo "$base"
+    return 0
+  fi
+  if [[ "$port" == "80" ]]; then
+    echo "$base"
+    return 0
+  fi
+  echo "${base}:${port}"
+}
+
 deploy_load_env() {
   local script_dir="$1"
   if [[ -f "$script_dir/local/deploy.env" ]]; then
@@ -214,11 +236,14 @@ deploy_print_footer() {
   echo "Deployment complete"
   echo "========================================"
   echo "Local:  http://localhost:${port}"
-  if [[ -n "${REMOTE_BASE_URL:-}" ]]; then
-    echo "Remote: ${REMOTE_BASE_URL}"
-    echo "Family: ${REMOTE_BASE_URL%/}/family"
+  local remote_base="${REMOTE_BASE_URL:-${TAILSCALE_SERVER_URL:-${PUBLIC_URL:-}}}"
+  if [[ -n "$remote_base" ]]; then
+    local remote
+    remote="$(deploy_join_public_url "$remote_base" "$port")"
+    echo "Tailscale (personal): ${remote}"
+    echo "Tailscale (family):   ${remote%/}/family"
   else
-    echo "Remote: set REMOTE_BASE_URL in local/deploy.env or PUBLIC_URL in .env"
+    echo "Tailscale: set TAILSCALE_SERVER_URL in .env (or REMOTE_BASE_URL in local/deploy.env)"
   fi
   echo ""
   echo "Logs:  $compose_hint logs -f"
