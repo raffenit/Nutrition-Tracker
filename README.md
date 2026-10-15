@@ -36,7 +36,7 @@ Follow **[docs/SETUP-WINDOWS-WSL.md](./docs/SETUP-WINDOWS-WSL.md)** steps **1–
 3. Tailscale for Windows  
 4. Clone the repo (GitHub Desktop and/or `git` in Ubuntu)
 
-That document also covers **VS Code** or **vim** for editing config files.
+That document also covers **VS Code** or **vim** for editing config files, and **optional Node.js** for deploy tests (section **B2**).
 
 **Linux or macOS (GUI or CLI)**
 
@@ -45,6 +45,7 @@ That document also covers **VS Code** or **vim** for editing config files.
 | Docker | [Docker Desktop](https://docs.docker.com/desktop/) or your distro’s Docker package | `docker` + `docker compose` on PATH |
 | Git | [GitHub Desktop](https://desktop.github.com/) | `git` |
 | Remote phones | [Tailscale](https://tailscale.com/download) app | `tailscale` package + `tailscale up` |
+| Deploy tests (optional) | [Node.js 22+](https://nodejs.org/) installer | See **Host Node.js** below |
 
 Confirm Docker works:
 
@@ -52,6 +53,52 @@ Confirm Docker works:
 docker version
 docker compose version
 ```
+
+#### Host Node.js (for `./deploy.sh` tests)
+
+The app runs in **Docker**; you do **not** need Node to *use* Nutrition Tracker. You **do** need **Node.js 22+** and **npm** on the **host** (WSL Ubuntu, Linux, or macOS) if you want the default deploy script to run **`npm test`** before `docker compose up`. Tests are **not** run inside the container during deploy.
+
+Check:
+
+```bash
+node -v   # expect v22.x or newer
+npm -v
+```
+
+**Ubuntu / WSL (recommended — NodeSource 22.x)**
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v
+npm -v
+```
+
+**macOS (Homebrew)**
+
+```bash
+brew install node@22
+brew link node@22 --force --overwrite   # if `node` is not on PATH yet
+node -v
+```
+
+**Any OS (nvm)**
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+# open a new shell, then:
+nvm install 22
+nvm use 22
+node -v
+```
+
+If you **skip Node**, pass **`--skip-test`** on every deploy (there is no `--no-test` flag):
+
+```bash
+./deploy.sh --skip-test --skip-git
+```
+
+Docker-only manual start (no deploy script, no tests): see Step **5** manual `docker compose` blocks.
 
 ---
 
@@ -96,17 +143,25 @@ cp local.example/deploy.env.example local/deploy.env
 
 ### Step 5 — Start the stack
 
+Use **`./deploy.sh`** — it reads **`CADDY_STYLE`** from `.env` (Step 4) and runs the right compose files.
+
+| Your machine | Command |
+| --- | --- |
+| **Node 22+ installed** (Step 2) | `./deploy.sh --skip-git` (runs `npm test`, then Docker) |
+| **Docker only** (no Node) | `./deploy.sh --skip-test --skip-git` |
+| **Dev machine** with git remotes configured | `./deploy.sh -m "Describe your change"` |
+
 #### 5A — STANDALONE (bundled Caddy)
 
 No separate infrastructure repo required.
 
 ```bash
-./standalone-deploy.sh --skip-test --skip-git
+./deploy.sh --skip-test --skip-git
 ```
 
-First-time shortcut skips host Node tests and git; for your own server with Node/git configured, use `./standalone-deploy.sh -m "message"` instead.
+Replace `--skip-test` once Node is installed (see Step 2).
 
-Manual equivalent:
+Manual equivalent (no tests, no deploy script):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --build
@@ -124,13 +179,15 @@ docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --bu
 }
 ```
 
-3. Deploy the app:
+3. Deploy the app (with **`CADDY_STYLE=EXTERNAL`** in `.env`):
 
 ```bash
-./external-deploy.sh --skip-test --skip-git
+./deploy.sh --skip-test --skip-git
 ```
 
-After Caddyfile or infrastructure compose changes: `./external-deploy.sh --infra`
+After Caddyfile or infrastructure compose changes: `./deploy.sh --infra --skip-git` (add `--skip-test` if you have no Node).
+
+You can run `./standalone-deploy.sh` or `./external-deploy.sh` directly; they accept the same flags as `./deploy.sh`.
 
 ---
 
@@ -187,12 +244,13 @@ Do this **after** Step 6 succeeds over HTTP.
 
 ### Step 9 — Updates
 
-Pull new code, then redeploy with the same script you used in Step 5:
+Pull new code, then redeploy (same **`--skip-test`** choice as Step 5):
 
 ```bash
 git pull
-./standalone-deploy.sh --skip-git
-# or ./external-deploy.sh --skip-git
+./deploy.sh --skip-git
+# Docker only (no Node on host):
+./deploy.sh --skip-test --skip-git
 ```
 
 ---
@@ -208,7 +266,7 @@ git pull
 Common flags: `--help`, `--skip-test`, `--skip-git`, `-m "commit message"`, `--pull`, `--down`  
 **EXTERNAL only:** `--infra` restarts sibling infrastructure Caddy.
 
-Default pipeline (when not skipping): `npm test` → git commit/push if configured → Docker build/up → health check on port **3010**.
+Default pipeline (when not skipping): **`npm test` on the host** (requires Node 22+; see Step 2) → optional git commit/push → Docker build/up → health check on port **3010**. Use **`--skip-test`** when Node is not installed.
 
 ---
 

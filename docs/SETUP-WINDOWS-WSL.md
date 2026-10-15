@@ -4,7 +4,7 @@ Use this document for **[README Setup Step 2](../README.md#step-2--install-depen
 
 Then continue the **main README in order** (Steps 3–9). This guide expands Windows-only install details for Steps 2–7 and assumes **`CADDY_STYLE=STANDALONE`**. For shared homelab Caddy, use [README Step 5B](../README.md#5b--external-shared-homelab-caddy) instead of section 6 below.
 
-**Shell scripts:** run `./standalone-deploy.sh` in **Ubuntu (WSL)**, not PowerShell.
+**Shell scripts:** run `./deploy.sh` in **Ubuntu (WSL)**, not PowerShell (`CADDY_STYLE` in `.env` picks STANDALONE vs EXTERNAL).
 
 ---
 
@@ -39,6 +39,29 @@ In **Ubuntu (WSL)**:
 ```bash
 docker version
 docker compose version
+```
+
+---
+
+## B2. Node.js (optional — for deploy tests)
+
+Docker alone is enough to **run** the app. Install Node only if you want **`./deploy.sh`** to run **`npm test`** before each build (default). Without Node, always add **`--skip-test`**.
+
+In **Ubuntu (WSL)**:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v    # v22.x or newer
+npm -v
+```
+
+Alternative: [nvm](https://github.com/nvm-sh/nvm) — `nvm install 22` after installing nvm (see [README Host Node.js](../README.md#host-nodejs-for-deploysh-tests)).
+
+Skip tests on deploy:
+
+```bash
+./deploy.sh --skip-test --skip-git
 ```
 
 ---
@@ -106,16 +129,24 @@ Optional: `mkdir -p local && cp local.example/deploy.env.example local/deploy.en
 
 ## F. Start the stack (README Step 5A)
 
-First boot:
+Ensure `.env` has `CADDY_STYLE=STANDALONE`.
+
+First boot (Docker only — no Node):
 
 ```bash
-./standalone-deploy.sh --skip-test --skip-git
+./deploy.sh --skip-test --skip-git
 ```
 
-Later, with tests/git:
+Later, with Node 22+ installed (section B2):
 
 ```bash
-./standalone-deploy.sh -m "Describe your change"
+./deploy.sh --skip-git
+```
+
+With git commit on a dev machine:
+
+```bash
+./deploy.sh -m "Describe your change"
 ```
 
 ---
@@ -157,7 +188,9 @@ After HTTP works: MagicDNS + HTTPS in [Tailscale admin](https://login.tailscale.
 ```bash
 cd ~/Nutrition-Tracker
 git pull
-./standalone-deploy.sh --skip-git
+./deploy.sh --skip-git
+# or, if you did not install Node (section B2):
+./deploy.sh --skip-test --skip-git
 ```
 
 ---
@@ -179,5 +212,6 @@ git pull
 | --- | --- |
 | WSL | `wsl --install -d Ubuntu` |
 | Clone | `git clone https://github.com/raffenit/Nutrition-Tracker.git` |
-| Deploy | `./standalone-deploy.sh --skip-test --skip-git` |
+| Deploy (no Node) | `./deploy.sh --skip-test --skip-git` |
+| Deploy (with Node) | `./deploy.sh --skip-git` |
 | Tailscale IP | Windows tray icon |
