@@ -31,7 +31,7 @@ From repo root:
 npm test
 ```
 
-Runs `scripts/run-tests.sh` → server `node --test` + web `tsc --noEmit` + optional **HTTPS smoke** when `.env` has `TAILSCALE_SERVER_URL=https://…` (hits `/api/health` over Tailscale; skip with `SKIP_HTTPS_SMOKE=1`). Full log: `local/test-last-run.log` (gitignored).
+Runs `scripts/run-tests.sh` → server `node --test` + web `tsc --noEmit`. **HTTPS smoke** runs at end of **`./deploy.sh`** (after Docker health), not during `npm test`. Skip with `SKIP_HTTPS_SMOKE=1` in `.env`. Full log: `local/test-last-run.log` (gitignored).
 
 Before any PR that touches logs or family APIs, use the privacy checklist in [ROADMAP.md — Tracking](./ROADMAP.md#tracking).
 

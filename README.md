@@ -262,7 +262,7 @@ Do this **after** Step 6 works over HTTP.
    Keep `NUTRITION_PORT=3010` for local health checks and Caddy; phones use the HTTPS URL without a port.
 5. **Redeploy** — `./deploy.sh --skip-git` (add `--skip-test` if you have no Node).
 6. **Phone** — open the `https://…ts.net` URL with Tailscale connected; update home-screen bookmark; in **Settings**, enable push if you configured `VAPID_*`.
-7. **Verify in tests** — `npm test` runs an HTTPS smoke check when `TAILSCALE_SERVER_URL` is `https://…` (same machine must reach that URL over Tailscale). Use `SKIP_HTTPS_SMOKE=1` to bypass.
+7. **Verify after deploy** — `./deploy.sh` runs an HTTPS smoke check **after** the stack is up when `TAILSCALE_SERVER_URL` is HTTPS / `*.ts.net`. Use `SKIP_HTTPS_SMOKE=1` in `.env` to skip. (`npm test` does not hit HTTPS.)
 
 To stop HTTPS proxying later: `sudo tailscale serve reset`.
 
@@ -309,7 +309,7 @@ Default pipeline (when not skipping): **`npm test` on the host** (requires Node 
 ## Development (laptop)
 
 ```bash
-npm test       # server tests + web tsc + optional HTTPS smoke → local/test-last-run.log
+npm test       # server tests + web tsc → local/test-last-run.log (HTTPS smoke runs in ./deploy.sh)
 npm run build
 ```
 

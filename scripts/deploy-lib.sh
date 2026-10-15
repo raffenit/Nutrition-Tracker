@@ -9,12 +9,26 @@ RESTART_INFRA=false
 COMMIT_MSG="${DEPLOY_COMMIT_MSG:-}"
 
 # Print origin for humans: base URL (no port) + NUTRITION_PORT when needed.
-deploy_join_public_url() {
+deploy_normalize_tailscale_base() {
   local base="${1%/}"
-  local port="${2:-3010}"
   if [[ -z "$base" ]]; then
     return 1
   fi
+  if [[ "$base" =~ ^https?:// ]]; then
+    echo "$base"
+    return 0
+  fi
+  if [[ "$base" =~ \.ts\.net$ ]]; then
+    echo "https://${base}"
+    return 0
+  fi
+  echo "http://${base}"
+}
+
+deploy_join_public_url() {
+  local base="${1%/}"
+  local port="${2:-3010}"
+  base="$(deploy_normalize_tailscale_base "$base")"
   if [[ "$base" =~ ^https:// ]]; then
     echo "$base"
     return 0
@@ -211,6 +225,25 @@ deploy_restart_infra() {
   echo ""
   echo "[infra] Restarting shared Caddy stack..."
   docker compose -f "$infra_compose" up -d
+}
+
+deploy_https_smoke() {
+  local script_dir="$1"
+  if [[ "${SKIP_HTTPS_SMOKE:-}" == "1" ]]; then
+    echo ""
+    echo "[6/6] Tailscale HTTPS smoke — SKIP (SKIP_HTTPS_SMOKE=1)"
+    return 0
+  fi
+  echo ""
+  echo "[6/6] Tailscale HTTPS smoke (when .env uses https:// or *.ts.net)..."
+  if bash "$script_dir/scripts/test-https-smoke.sh"; then
+    echo "  Tailscale HTTPS: OK"
+    return 0
+  fi
+  echo ""
+  echo "  WARNING: Tailscale HTTPS smoke failed — deploy finished; fix tailscale serve and phones may still need HTTP :3010."
+  echo "  Set SKIP_HTTPS_SMOKE=1 in .env to hide this step."
+  return 0
 }
 
 deploy_health_check() {

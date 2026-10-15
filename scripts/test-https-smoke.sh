@@ -25,8 +25,12 @@ if [[ -z "$base" ]]; then
 fi
 
 if [[ ! "$base" =~ ^https:// ]]; then
-  echo "SKIP: Tailscale server URL is not HTTPS ($base)"
-  exit 0
+  if [[ "$base" =~ \.ts\.net$ ]]; then
+    base="https://${base}"
+  else
+    echo "SKIP: Tailscale server URL is not HTTPS ($base)"
+    exit 0
+  fi
 fi
 
 if ! command -v curl >/dev/null 2>&1; then
@@ -37,9 +41,19 @@ fi
 health_url="${base}/api/health"
 echo "GET $health_url"
 
+local_port="${NUTRITION_PORT:-3010}"
+local_url="http://127.0.0.1:${local_port}/api/health"
+
 body=""
 if ! body="$(curl -sfS --max-time 25 "$health_url")"; then
-  echo "FAIL: HTTPS health request failed (Tailscale connected? tailscale serve running?)"
+  echo "FAIL: HTTPS health request failed ($health_url)"
+  if local_body="$(curl -sfS --max-time 5 "$local_url" 2>/dev/null)" && [[ "$local_body" == *'"ok":true'* ]]; then
+    echo "      Local app is OK ($local_url) — Tailscale HTTPS is not proxying to port ${local_port}."
+    echo "      Fix: sudo tailscale serve --bg http://127.0.0.1:${local_port}"
+    echo "      Check: tailscale serve status"
+  else
+    echo "      Local health also failed — ensure the stack is up (./deploy.sh)."
+  fi
   exit 1
 fi
 

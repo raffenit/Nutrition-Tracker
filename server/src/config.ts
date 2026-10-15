@@ -58,7 +58,12 @@ export function resolvePublicOrigin(publicUrl: string | null, publishedPort: num
   const trimmed = publicUrl.trim().replace(/\/$/, '');
   if (!trimmed) return null;
   try {
-    const parsed = new URL(trimmed.includes('://') ? trimmed : `http://${trimmed}`);
+    const withScheme = trimmed.includes('://')
+      ? trimmed
+      : /\.ts\.net$/i.test(trimmed)
+        ? `https://${trimmed}`
+        : `http://${trimmed}`;
+    const parsed = new URL(withScheme);
     if (parsed.port) return parsed.origin;
     // HTTPS kiosk links use the reverse proxy (443); host NUTRITION_PORT is not in the URL.
     if (parsed.protocol === 'https:') return parsed.origin;
