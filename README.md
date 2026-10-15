@@ -21,7 +21,7 @@ Pick one mode and use it in **Step 4** (`CADDY_STYLE` in `.env`).
 | **STANDALONE** (default) | New install, Windows WSL, Raspberry Pi, single repo | **This repo** (bundled `nutrition-caddy`) | `CADDY_STYLE=STANDALONE` |
 | **EXTERNAL** | Homelab with sibling `infrastructure/` | **Shared** Caddy on `media-network` | `CADDY_STYLE=EXTERNAL` |
 
-Always run **`./deploy.sh`** after Step 4 — it reads `CADDY_STYLE` from `.env` (defaults to STANDALONE if unset). On **Windows**, run all shell commands in **WSL Ubuntu**, not PowerShell.
+Always run **`./deploy.sh`** after Step 4 — it reads `CADDY_STYLE` from `.env` (defaults to STANDALONE if unset). On **Windows**, use **WSL Ubuntu** for shell work, or run **`deploy-from-windows.bat`** from the repo folder (wraps `./deploy.sh` in WSL). Do not run `deploy.sh` in PowerShell.
 
 ---
 
@@ -337,5 +337,6 @@ GitHub: `https://github.com/raffenit/Nutrition-Tracker`
 | `docker-compose.yml` | App container |
 | `docker-compose.standalone.yml` | STANDALONE: Caddy + network |
 | `deploy.sh` | Deploy entrypoint (`CADDY_STYLE` in `.env`) |
+| `deploy-from-windows.bat` | Windows → WSL wrapper for `deploy.sh` |
 | `standalone-deploy.sh` / `external-deploy.sh` | Used by `deploy.sh`; rarely run by hand |
 | `data/` | Database and uploads (runtime; not in git) |

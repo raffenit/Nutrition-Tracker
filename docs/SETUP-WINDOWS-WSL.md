@@ -6,6 +6,14 @@ Then continue the **main README in order** (Steps 3–9). This guide expands Win
 
 **Shell scripts:** run `./deploy.sh` in **Ubuntu (WSL)**, not PowerShell (`CADDY_STYLE` in `.env` picks STANDALONE vs EXTERNAL).
 
+**From Windows (File Explorer / cmd):** double-click or run **`deploy-from-windows.bat`** in the repo root — it calls the same script inside WSL. Example:
+
+```cmd
+deploy-from-windows.bat --skip-test --skip-git
+```
+
+Prefer cloning under **`~/Nutrition-Tracker`** in Ubuntu for Docker speed; the batch file still works if the repo lives on `C:\` (slower builds).
+
 ---
 
 ## A. Install WSL2 and Ubuntu (README Step 2)
@@ -132,6 +140,8 @@ All config lives in **`.env` only** (no `local/deploy.env`).
 
 Ensure `.env` has `CADDY_STYLE=STANDALONE`.
 
+**Ubuntu terminal** or **`deploy-from-windows.bat`** (same flags):
+
 First boot (Docker only — no Node):
 
 ```bash
@@ -218,6 +228,6 @@ git pull
 | --- | --- |
 | WSL | `wsl --install -d Ubuntu` |
 | Clone | `git clone https://github.com/raffenit/Nutrition-Tracker.git` |
-| Deploy (no Node) | `./deploy.sh --skip-test --skip-git` |
-| Deploy (with Node) | `./deploy.sh --skip-git` |
+| Deploy (no Node) | `./deploy.sh --skip-test --skip-git` or `deploy-from-windows.bat --skip-test --skip-git` |
+| Deploy (with Node) | `./deploy.sh --skip-git` or `deploy-from-windows.bat --skip-git` |
 | Tailscale IP | Windows tray icon |
