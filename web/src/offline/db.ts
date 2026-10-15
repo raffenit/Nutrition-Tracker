@@ -2,17 +2,29 @@ import type { Food, Targets } from '../types';
 import type { CachedSession, OutboxEntry } from './types';
 
 const DB_NAME = 'nutrition-offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+
+function ensureDashboardsStore(db: IDBDatabase): void {
+  if (db.objectStoreNames.contains('dashboards')) db.deleteObjectStore('dashboards');
+  db.createObjectStore('dashboards', { keyPath: 'key' });
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
-      if (!db.objectStoreNames.contains('foods')) db.createObjectStore('foods', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('dashboards')) db.createObjectStore('dashboards');
-      if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'clientMutationId' });
+      const fromVersion = event.oldVersion;
+      if (fromVersion < 1) {
+        db.createObjectStore('meta');
+        db.createObjectStore('foods', { keyPath: 'id' });
+        ensureDashboardsStore(db);
+        db.createObjectStore('outbox', { keyPath: 'clientMutationId' });
+        return;
+      }
+      if (fromVersion < 2) {
+        ensureDashboardsStore(db);
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error('IndexedDB failed'));
@@ -51,9 +63,8 @@ export async function readSessionCache(): Promise<CachedSession | null> {
 }
 
 export async function saveDashboardCache(key: string, payload: unknown): Promise<void> {
-  await tx('dashboards', 'readwrite', (store) =>
-    store.put({ key, savedAt: new Date().toISOString(), payload }),
-  );
+  const row = { key, savedAt: new Date().toISOString(), payload };
+  await tx('dashboards', 'readwrite', (store) => store.put(row));
 }
 
 export async function readDashboardCache<T>(key: string): Promise<{ savedAt: string; payload: T } | null> {
