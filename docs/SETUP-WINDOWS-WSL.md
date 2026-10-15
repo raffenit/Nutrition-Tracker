@@ -200,7 +200,7 @@ git pull
 | Problem | Check |
 | --- | --- |
 | `docker: command not found` in WSL | Docker Desktop running; WSL integration on |
-| `permission denied` on `./standalone-deploy.sh` | `chmod +x standalone-deploy.sh` |
+| `permission denied` on `./deploy.sh` | `chmod +x deploy.sh standalone-deploy.sh external-deploy.sh` |
 | Phone cannot reach `:3010` | Tailscale on both; try PC firewall |
 | Health check fails | Section G logs command |
 

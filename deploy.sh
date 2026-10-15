@@ -4,7 +4,7 @@
 # CADDY_STYLE=STANDALONE  → bundled Caddy (default; new installs)
 # CADDY_STYLE=EXTERNAL    → shared infrastructure Caddy + media-network
 #
-# You can also run ./standalone-deploy.sh or ./external-deploy.sh directly.
+# Prefer this script. standalone-deploy.sh / external-deploy.sh are helpers; use them directly only in edge cases (see README deploy reference).
 
 set -euo pipefail
 

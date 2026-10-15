@@ -4,8 +4,8 @@
 # Use when infrastructure/ already runs Caddy on :3010 and defines media-network.
 # This repo only starts nutrition-tracker; no bundled Caddy.
 #
-# Run from repo root:
-#   ./external-deploy.sh
+# Prefer ./deploy.sh with CADDY_STYLE=EXTERNAL in .env.
+# Direct use (unusual):
 #   ./external-deploy.sh --infra   # also restart ../infrastructure Caddy
 
 set -euo pipefail
@@ -31,7 +31,7 @@ deploy_preflight_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}"
 
 if ! docker network inspect media-network >/dev/null 2>&1; then
   echo "ERROR: Docker network 'media-network' not found."
-  echo "Start your infrastructure stack first, or use ./standalone-deploy.sh instead."
+  echo "Start your infrastructure stack first, or set CADDY_STYLE=STANDALONE in .env and run ./deploy.sh."
   echo "Set INFRA_COMPOSE_DIR in local/deploy.env if infrastructure is not ../infrastructure"
   exit 1
 fi

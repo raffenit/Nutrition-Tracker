@@ -16,12 +16,12 @@ Work through these steps once on the machine that will run the server. Do not sk
 
 Pick one mode and use it in **Step 4** (`CADDY_STYLE` in `.env`).
 
-| Mode | Best for | Who publishes port **3010** | Deploy script |
+| Mode | Best for | Who publishes port **3010** | Set in `.env` (Step 4) |
 | --- | --- | --- | --- |
-| **STANDALONE** (default) | New install, Windows WSL, Raspberry Pi, single repo | **This repo** (bundled `nutrition-caddy`) | `./standalone-deploy.sh` |
-| **EXTERNAL** | Homelab with sibling `infrastructure/` | **Shared** Caddy on `media-network` | `./external-deploy.sh` |
+| **STANDALONE** (default) | New install, Windows WSL, Raspberry Pi, single repo | **This repo** (bundled `nutrition-caddy`) | `CADDY_STYLE=STANDALONE` |
+| **EXTERNAL** | Homelab with sibling `infrastructure/` | **Shared** Caddy on `media-network` | `CADDY_STYLE=EXTERNAL` |
 
-`./deploy.sh` reads `CADDY_STYLE` and calls the matching script. On **Windows**, run all shell commands in **WSL Ubuntu**, not PowerShell.
+Always run **`./deploy.sh`** after Step 4 — it reads `CADDY_STYLE` from `.env` (defaults to STANDALONE if unset). On **Windows**, run all shell commands in **WSL Ubuntu**, not PowerShell.
 
 ---
 
@@ -187,8 +187,6 @@ docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --bu
 
 After Caddyfile or infrastructure compose changes: `./deploy.sh --infra --skip-git` (add `--skip-test` if you have no Node).
 
-You can run `./standalone-deploy.sh` or `./external-deploy.sh` directly; they accept the same flags as `./deploy.sh`.
-
 ---
 
 ### Step 6 — Verify the server
@@ -257,16 +255,16 @@ git pull
 
 ## Deploy script reference
 
-| Script | When |
+| Command | When |
 | --- | --- |
-| `./standalone-deploy.sh` | `CADDY_STYLE=STANDALONE` |
-| `./external-deploy.sh` | `CADDY_STYLE=EXTERNAL` |
-| `./deploy.sh` | Dispatches from `.env` |
+| **`./deploy.sh`** | **Always** — reads `CADDY_STYLE` from `.env` (Step 4) |
 
 Common flags: `--help`, `--skip-test`, `--skip-git`, `-m "commit message"`, `--pull`, `--down`  
 **EXTERNAL only:** `--infra` restarts sibling infrastructure Caddy.
 
 Default pipeline (when not skipping): **`npm test` on the host** (requires Node 22+; see Step 2) → optional git commit/push → Docker build/up → health check on port **3010**. Use **`--skip-test`** when Node is not installed.
+
+`standalone-deploy.sh` and `external-deploy.sh` are internal helpers invoked by `./deploy.sh`. Run them directly only to force STANDALONE/EXTERNAL when `.env` is wrong or missing and you cannot edit it yet (unusual).
 
 ---
 
@@ -310,5 +308,6 @@ GitHub: `https://github.com/raffenit/Nutrition-Tracker`
 | `caddy/` | Standalone Caddyfile (`:3010`) |
 | `docker-compose.yml` | App container |
 | `docker-compose.standalone.yml` | STANDALONE: Caddy + network |
-| `standalone-deploy.sh` / `external-deploy.sh` | Deploy entrypoints |
+| `deploy.sh` | Deploy entrypoint (`CADDY_STYLE` in `.env`) |
+| `standalone-deploy.sh` / `external-deploy.sh` | Used by `deploy.sh`; rarely run by hand |
 | `data/` | Database and uploads (runtime; not in git) |

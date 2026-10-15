@@ -4,11 +4,8 @@
 # Use when you do NOT have a separate infrastructure/Caddy stack.
 # Publishes http://localhost:3010 via nutrition-caddy container.
 #
-# Run from repo root (Linux, macOS, or Windows WSL2):
-#   ./standalone-deploy.sh
-#   ./standalone-deploy.sh --skip-test --skip-git
-#
-# Same flags as external-deploy.sh (--help for list).
+# Prefer ./deploy.sh with CADDY_STYLE=STANDALONE in .env (default if unset).
+# Same flags as external-deploy.sh (--help via ./deploy.sh --help).
 
 set -euo pipefail
 

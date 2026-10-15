@@ -21,9 +21,9 @@ Extras built beyond the original list: hydration tracking, imperial/metric units
 
 ## Deployment topology
 
-**STANDALONE** (`CADDY_STYLE=STANDALONE`, `./standalone-deploy.sh`): bundled `nutrition-caddy` in this repo publishes `:3010` → `nutrition-tracker`.
+**STANDALONE** (`CADDY_STYLE=STANDALONE`, deploy via **`./deploy.sh`**): bundled `nutrition-caddy` in this repo publishes `:3010` → `nutrition-tracker`.
 
-**EXTERNAL** (`CADDY_STYLE=EXTERNAL`, `./external-deploy.sh`): sibling `infrastructure/` Caddy on `media-network` publishes `:3010` → `nutrition-tracker`.
+**EXTERNAL** (`CADDY_STYLE=EXTERNAL`, deploy via **`./deploy.sh`**): sibling `infrastructure/` Caddy on `media-network` publishes `:3010` → `nutrition-tracker`.
 
 ```text
 Phone / tablet / HA panel (Tailscale)
@@ -36,7 +36,7 @@ nutrition-tracker container — Node 22, API + static web
   /data → host ./data (SQLite + uploads + tessdata)
 ```
 
-- **Deploy:** `./deploy.sh` (dispatches on `CADDY_STYLE`), or `./standalone-deploy.sh` / `./external-deploy.sh` directly.
+- **Deploy:** **`./deploy.sh`** (reads `CADDY_STYLE` from `.env`).
 - **Windows:** WSL2 + Docker Desktop — [SETUP-WINDOWS-WSL.md](./SETUP-WINDOWS-WSL.md).
 
 ### Deploy script

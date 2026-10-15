@@ -61,7 +61,7 @@ deploy_parse_args() {
       -h|--help)
         cat <<'EOF'
 Usage:
-  ./standalone-deploy.sh | ./external-deploy.sh [options]
+  ./deploy.sh [options]
 
 Options:
   -m, --message TEXT   Commit message when the tree is dirty
