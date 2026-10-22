@@ -9,12 +9,12 @@ import { TrendsPanel, type TrendDay, type TrendWeightPoint } from '../components
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { readDashboardCache, saveDashboardCache } from '../offline/db';
 import { listOutboxEntries } from '../offline/db';
-import { postHydration, queueDeleteMeal, removePendingMeal } from '../offline/mutations';
+import { postHydration, queueDeleteHydration, queueDeleteMeal, removePendingMeal } from '../offline/mutations';
 import { saveTargetsCache } from '../offline/db';
-import { applyPendingToTotals, pendingHydrationMl, pendingPreviewsForDate } from '../offline/pending';
+import { applyPendingToTotals, pendingHydrationEntries, pendingHydrationMl, pendingPreviewsForDate } from '../offline/pending';
 import { SYNC_COMPLETE_EVENT } from '../offline/register';
 import { nowLocalInput } from '../nav';
-import type { DayTotals, GoalAlert, MealLog, Targets, WeightStatus } from '../types';
+import type { DayTotals, GoalAlert, HydrationEntry, MealLog, Targets, WeightStatus } from '../types';
 
 type Dashboard = {
   date: string;
@@ -22,6 +22,7 @@ type Dashboard = {
   glassMl: number;
   totals: DayTotals;
   logs: MealLog[];
+  hydration: HydrationEntry[];
   targets: Targets;
   alerts: GoalAlert[];
   weight: WeightStatus;
@@ -48,6 +49,7 @@ export function DashboardPage() {
       ...payload,
       totals: applyPendingToTotals(payload.totals, previews, extraHydration),
       logs: [...payload.logs, ...previews.map((row) => row.log)],
+      hydration: [...(payload.hydration ?? []), ...pendingHydrationEntries(outbox, payload.date)],
     };
   }, []);
 
@@ -100,6 +102,11 @@ export function DashboardPage() {
     await load();
   }
 
+  async function removeHydration(id: string): Promise<void> {
+    await queueDeleteHydration(id);
+    await load();
+  }
+
   return (
     <>
     <div className="page dashboard-page">
@@ -120,12 +127,15 @@ export function DashboardPage() {
           onRemove={(id) => void removeLog(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
         />
         <HydrationMeter
+          entries={day.hydration}
           amountMl={day.totals.hydrationMl}
           targetMl={day.targets.hydrationMl}
           units={day.targets.units}
-          promptAdd={day.date === day.today && day.totals.hydrationMl <= 0}
-          onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
-          onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
+          defaultAmountMl={day.glassMl}
+          isToday={day.date === day.today}
+          promptAdd={day.date === day.today && day.hydration.length === 0}
+          onAdd={(amountMl) => void postHydration(amountMl, nowLocalInput()).then(() => load())}
+          onRemove={(id) => void removeHydration(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
         />
       </div>
       <TrendsPanel

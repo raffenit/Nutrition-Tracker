@@ -89,3 +89,11 @@ export async function removePendingMeal(clientMutationId: string): Promise<void>
   const { removeOutboxEntry } = await import('./db');
   await removeOutboxEntry(clientMutationId);
 }
+
+export async function queueDeleteHydration(hydrationId: string): Promise<void> {
+  if (hydrationId.startsWith('pending:')) {
+    await removePendingMeal(hydrationId.slice('pending:'.length));
+    return;
+  }
+  await api(`/api/hydration/${hydrationId}`, { method: 'DELETE' });
+}

@@ -50,6 +50,7 @@ type HydrationSql = {
   source: 'water' | 'drink';
   logged_at: string;
   meal_log_id: string | null;
+  meal_name: string | null;
 };
 
 export function insertMeal(db: AppDatabase, meal: NewMeal): string {
@@ -138,8 +139,11 @@ export function insertWater(
 
 export function listHydration(db: AppDatabase, userId: string, localDate: string, timeZone: string): HydrationEntry[] {
   const rows = db.prepare(
-    `SELECT id, amount_ml, source, logged_at, meal_log_id
-     FROM hydration_logs WHERE user_id = ? AND local_date = ? ORDER BY logged_at`,
+    `SELECT h.id, h.amount_ml, h.source, h.logged_at, h.meal_log_id, m.name AS meal_name
+     FROM hydration_logs h
+     LEFT JOIN meal_logs m ON m.id = h.meal_log_id AND m.user_id = h.user_id
+     WHERE h.user_id = ? AND h.local_date = ?
+     ORDER BY h.logged_at`,
   ).all(userId, localDate) as HydrationSql[];
   return rows.map((row) => ({
     id: row.id,
@@ -147,6 +151,7 @@ export function listHydration(db: AppDatabase, userId: string, localDate: string
     source: row.source,
     timeLabel: formatTime(row.logged_at, timeZone),
     mealLogId: row.meal_log_id,
+    label: row.source === 'water' ? 'Water' : (row.meal_name ?? 'Drink'),
   }));
 }
 
@@ -157,7 +162,18 @@ export function deleteLatestWater(db: AppDatabase, userId: string, localDate: st
      ORDER BY logged_at DESC LIMIT 1`,
   ).get(userId, localDate) as { id: string } | undefined;
   if (!row) return false;
-  db.prepare('DELETE FROM hydration_logs WHERE id = ?').run(row.id);
+  return deleteHydrationLog(db, userId, row.id);
+}
+
+export function deleteHydrationLog(db: AppDatabase, userId: string, id: string): boolean {
+  const row = db.prepare(
+    'SELECT id, meal_log_id FROM hydration_logs WHERE id = ? AND user_id = ?',
+  ).get(id, userId) as { id: string; meal_log_id: string | null } | undefined;
+  if (!row) return false;
+  if (row.meal_log_id) {
+    db.prepare('DELETE FROM meal_logs WHERE id = ? AND user_id = ?').run(row.meal_log_id, userId);
+  }
+  db.prepare('DELETE FROM hydration_logs WHERE id = ? AND user_id = ?').run(id, userId);
   return true;
 }
 

@@ -111,6 +111,7 @@ export type HydrationEntry = {
   source: 'water' | 'drink';
   timeLabel: string;
   mealLogId: string | null;
+  label: string;
 };
 
 export type DayTotals = Nutrients & {

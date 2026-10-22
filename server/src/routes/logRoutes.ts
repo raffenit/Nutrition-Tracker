@@ -1,5 +1,5 @@
 import { getFood } from '../db/foods.js';
-import { deleteLatestWater, deleteMeal, insertMeal, insertWater } from '../db/logs.js';
+import { deleteHydrationLog, deleteMeal, insertMeal, insertWater } from '../db/logs.js';
 import { drinkVolume } from '../domain/drinks.js';
 import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients, scaleNutrients } from '../domain/nutrients.js';
@@ -23,7 +23,11 @@ export function logRoutes(): Route[] {
       sendJson(ctx.res, 200, { ok: true });
     }),
     route('POST', '/api/hydration', addWater),
-    route('DELETE', '/api/hydration/latest-water', removeWater),
+    route('DELETE', '/api/hydration/:id', async (ctx) => {
+      const user = requireUser(ctx.auth);
+      if (!deleteHydrationLog(ctx.db, user.id, ctx.params.id)) throw new HttpError(404, 'Hydration entry not found');
+      sendJson(ctx.res, 200, { ok: true });
+    }),
   ];
 }
 
@@ -108,13 +112,6 @@ async function addWater(ctx: Ctx): Promise<void> {
   const clientMutationId = optionalMutationId(body.clientMutationId);
   const id = insertWater(ctx.db, user.id, amount, loggedAt, localDate, clientMutationId);
   sendJson(ctx.res, 201, { ok: true, id });
-}
-
-async function removeWater(ctx: Ctx): Promise<void> {
-  const user = requireUser(ctx.auth);
-  const date = readLocalDate(ctx.url.searchParams.get('date'), householdZone(ctx));
-  if (!deleteLatestWater(ctx.db, user.id, date)) throw new HttpError(404, 'No glass of water to remove');
-  sendJson(ctx.res, 200, { ok: true });
 }
 
 function oneSlot(value: unknown): MealSlot {

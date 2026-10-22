@@ -1,4 +1,4 @@
-import type { DayTotals, MealLog } from '../types';
+import type { DayTotals, HydrationEntry, MealLog } from '../types';
 import { listCachedFoods } from './db';
 import { addNutrients, nutrientsFromMealBody } from './nutrients';
 import type { OutboxEntry, PendingLogPreview } from './types';
@@ -54,6 +54,22 @@ export async function pendingPreviewsForDate(localDate: string): Promise<Pending
     }
   }
   return previews;
+}
+
+export function pendingHydrationEntries(entries: OutboxEntry[], localDate: string): HydrationEntry[] {
+  return entries.flatMap((entry) => {
+    if (entry.kind !== 'hydration') return [];
+    const date = localDateFromBody(entry.body);
+    if (date !== localDate) return [];
+    return [{
+      id: `pending:${entry.clientMutationId}`,
+      amountMl: entry.body.amountMl,
+      source: 'water' as const,
+      timeLabel: `${formatPendingTime(entry.body.loggedAt)} · pending`,
+      mealLogId: null,
+      label: 'Water',
+    }];
+  });
 }
 
 export function pendingHydrationMl(entries: OutboxEntry[], localDate: string): number {

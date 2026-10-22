@@ -435,30 +435,31 @@ label > select { width: 100%; min-width: 0; }
 .weight-history-list li { align-items: center; }
 .log-mode-tabs { margin-bottom: 4px; }
 .hydration-card { padding: 10px 14px; display: grid; gap: 8px; }
+.hydration-card .card-head { margin-bottom: 4px; align-items: flex-start; }
+.hydration-head-copy { min-width: 0; flex: 1; }
 .hydration-card h2 { margin: 0; font-size: 0.95rem; }
-.hydration-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.hydration-copy { min-width: 0; }
-.hydration-amount { margin: 2px 0 0; font-size: 0.95rem; font-weight: 650; }
-.hydration-stepper { display: flex; gap: 6px; flex-shrink: 0; }
-.hydration-step {
-  width: 44px;
-  min-height: 44px;
-  padding: 0;
-  font-size: 1.5rem;
-  line-height: 1;
-  font-weight: 400;
-  border-radius: 12px;
-  background: var(--raise);
-  border: 1px solid var(--line);
-  color: var(--text);
+.hydration-amount { margin: 2px 0 0; font-size: 0.88rem; font-weight: 650; line-height: 1.3; }
+.hydration-bar { height: 8px; flex-shrink: 0; }
+.hydration-add-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
 }
-.hydration-step-add {
-  background: linear-gradient(165deg, #9eb8f5 0%, var(--water) 42%, var(--water-deep) 100%);
-  border-color: color-mix(in srgb, var(--water) 50%, var(--line));
-  color: #fff;
-  font-weight: 650;
+.hydration-add-field { margin: 0; min-width: 0; }
+.hydration-add-field input,
+.hydration-add-unit select {
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
 }
-.hydration-bar { height: 10px; }
+.hydration-add-unit select { min-width: 5.5rem; }
+.hydration-add-submit { min-height: 40px; padding: 0 12px; }
+.hydration-list { flex: 1 1 auto; min-height: 0; }
+@media (max-width: 520px) {
+  .hydration-add-form { grid-template-columns: 1fr 1fr; }
+  .hydration-add-submit { grid-column: 1 / -1; width: 100%; }
+}
 .trends-panel.metric-hydration .segmented[aria-label='Trend metric'] button.active {
   background: linear-gradient(165deg, var(--water), var(--water-deep));
 }
@@ -1120,27 +1121,8 @@ label > select { width: 100%; min-width: 0; }
     overflow: hidden;
   }
   .dashboard-hero .hydration-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 10px;
     height: 100%;
     padding: clamp(10px, 1.2vh, 14px) clamp(10px, 1vw, 14px);
-  }
-  .dashboard-hero .hydration-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-  .dashboard-hero .hydration-stepper {
-    width: 100%;
-    justify-content: stretch;
-  }
-  .dashboard-hero .hydration-step {
-    flex: 1;
-  }
-  .dashboard-hero .hydration-bar {
-    flex-shrink: 0;
   }
   .dashboard-hero > .card {
     height: 100%;

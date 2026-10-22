@@ -49,6 +49,15 @@ export type MealLog = {
   drinkMl: number | null;
 };
 
+export type HydrationEntry = {
+  id: string;
+  amountMl: number;
+  source: 'water' | 'drink';
+  timeLabel: string;
+  mealLogId: string | null;
+  label: string;
+};
+
 export type IngredientLine = {
   name: string;
   servings: number;

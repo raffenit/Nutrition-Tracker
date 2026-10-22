@@ -48,7 +48,7 @@ test('composed recipe stores per-serving nutrients and logging doubles dashboard
   });
 });
 
-test('hydration add and remove latest water updates dashboard', async () => {
+test('hydration add and remove by id updates dashboard', async () => {
   await withTestServer(async ({ port }) => {
     const { cookie, day } = await setupTestHousehold(port);
     const add = await api<{ id: string }>(port, '/api/hydration', {
@@ -65,7 +65,7 @@ test('hydration add and remove latest water updates dashboard', async () => {
     assert.equal(withWater.body.totals.hydrationMl, 250);
     assert.equal(withWater.body.hydration.length, 1);
 
-    const removed = await api(port, `/api/hydration/latest-water?date=${day}`, { method: 'DELETE', cookie });
+    const removed = await api(port, `/api/hydration/${add.body.id}`, { method: 'DELETE', cookie });
     assert.equal(removed.status, 200);
     const after = await api<{ totals: { hydrationMl: number } }>(port, `/api/dashboard?date=${day}`, { cookie });
     assert.equal(after.body.totals.hydrationMl, 0);

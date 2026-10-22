@@ -33,10 +33,28 @@ export function hydrationGoalFromInput(value: number, units: Units): number {
   return Math.round(value);
 }
 
-export function glassLabel(units: Units): string {
-  return units === 'imperial' ? 'Add 8 oz' : 'Add glass';
+export type VolumeLogUnit = 'ml' | 'l' | 'floz';
+
+export const VOLUME_LOG_UNITS: VolumeLogUnit[] = ['ml', 'l', 'floz'];
+
+export function volumeLogUnitLabel(unit: VolumeLogUnit): string {
+  if (unit === 'floz') return 'fl oz';
+  return unit;
 }
 
-export function removeGlassLabel(units: Units): string {
-  return units === 'imperial' ? 'Remove 8 oz' : 'Remove glass';
+export function defaultVolumeLogUnit(units: Units): VolumeLogUnit {
+  return units === 'imperial' ? 'floz' : 'ml';
+}
+
+export function mlToVolumeLogInput(ml: number, unit: VolumeLogUnit): number {
+  if (unit === 'l') return Math.round((ml / 1000) * 100) / 100;
+  if (unit === 'floz') return Math.round(mlToFlOz(ml) * 10) / 10;
+  return Math.round(ml);
+}
+
+export function volumeLogInputToMl(value: number, unit: VolumeLogUnit): number {
+  if (value <= 0) return 0;
+  if (unit === 'l') return Math.round(value * 1000);
+  if (unit === 'floz') return flOzToMl(value);
+  return Math.round(value);
 }
