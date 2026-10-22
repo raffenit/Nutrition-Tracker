@@ -7,7 +7,7 @@ All server tests compile to `dist-test/` and run via `npm test` in this package 
 | Path | Kind |
 | --- | --- |
 | `test/helpers.ts` | Ephemeral SQLite + HTTP server harness for integration tests |
-| `test/integration/*.test.ts` | End-to-end API tests against a real in-process server |
+| `test/integration/*.test.ts` | End-to-end API tests (`api.test.ts`, `coverage.test.ts`, …) |
 | `test/unit/domain/*.test.ts` | Pure domain logic (parsers, alerts, family board shaping, trends math, etc.) |
 | `test/unit/integrations/*.test.ts` | Unit tests for `src/integrations/` (SSRF rules, HTML helpers) |
 

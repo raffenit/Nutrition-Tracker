@@ -69,7 +69,7 @@ This plan closes the gaps between the client spec and the current build, in an o
 **Tests**
 
 - **Done (partial):** `test/integration/api.test.ts` composes with `makesServings: 2` and checks ingredient lines on `GET /api/foods/:id`.
-- **Still open:** unit tests for `domain/compose.ts` (`perServing` / `sumIngredientNutrients`); API assertion that per-serving calories match sum(ingredients)/N and logging 2 servings doubles dashboard totals.
+- **Done:** unit tests in `test/unit/domain/compose.test.ts`; API coverage in `test/integration/coverage.test.ts` (per-serving compose, log 2 servings).
 
 **Files:** `FoodPage.tsx`, possibly `foodRoutes.ts` / PATCH body for edits.
 

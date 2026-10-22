@@ -159,7 +159,7 @@ API client: `web/src/api/client.ts` (credentials included for cookies).
 
 Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Server tests` / `Web typecheck` / `Overall`). Full transcript: **`local/test-last-run.log`** (overwrite each run). **HTTPS smoke** runs after Docker health in `./deploy.sh` only; output also appended to **`local/https-smoke-last.txt`** when that step runs.
 
-**Known gaps (behavior not yet automated)** — hydration and log-delete routes, kiosk-token family board HTTP, compose per-serving math end-to-end, meal-plan/grocery HTTP, Web Push subscribe/send routes, upload/OCR/PDF HTTP, multi-user family board, and web offline/PWA runtime. See [ROADMAP.md](./ROADMAP.md) phases for product context; privacy/kiosk HTTP tests are planned last.
+**Known gaps (behavior not yet automated)** — kiosk-token family board HTTP, Web Push subscribe/send when VAPID is configured, upload/OCR/PDF HTTP, and web offline/PWA runtime. Hydration, log delete, login, multi-member family, meal-plan/grocery, import-url SSRF at HTTP layer, library ingredient search, and compose per-serving math are covered in `test/integration/coverage.test.ts` plus `test/unit/domain/compose.test.ts`. Privacy/kiosk HTTP tests are planned last.
 
 ## Design choices (why it looks like this)
 
