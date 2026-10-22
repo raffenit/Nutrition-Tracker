@@ -147,7 +147,7 @@ a { color: var(--accent-soft); }
 .page-layout-span { min-width: 0; }
 .dashboard-page { width: 100%; }
 .dashboard-hero { display: grid; gap: 8px; min-width: 0; }
-.dashboard-page > .hydration-card,
+.dashboard-hero > .hydration-card,
 .dashboard-page > .trends-panel { min-width: 0; }
 .day-log-card {
   display: flex;
@@ -1096,7 +1096,7 @@ label > select { width: 100%; min-width: 0; }
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    grid-template-rows: auto minmax(0, 1.2fr) auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1.35fr) minmax(0, 1fr);
     gap: clamp(4px, 0.75vh, 10px);
     overflow-x: hidden;
     overflow-y: auto;
@@ -1113,11 +1113,34 @@ label > select { width: 100%; min-width: 0; }
     font-size: 1.5rem;
   }
   .dashboard-hero {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(10.5rem, 0.82fr);
     gap: clamp(8px, 1.2vw, 16px);
     align-items: stretch;
     min-height: 0;
     overflow: hidden;
+  }
+  .dashboard-hero .hydration-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    height: 100%;
+    padding: clamp(10px, 1.2vh, 14px) clamp(10px, 1vw, 14px);
+  }
+  .dashboard-hero .hydration-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .dashboard-hero .hydration-stepper {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .dashboard-hero .hydration-step {
+    flex: 1;
+  }
+  .dashboard-hero .hydration-bar {
+    flex-shrink: 0;
   }
   .dashboard-hero > .card {
     height: 100%;
@@ -1155,9 +1178,6 @@ label > select { width: 100%; min-width: 0; }
   }
   .dashboard-page .macro-pie-caption {
     display: none;
-  }
-  .dashboard-page .hydration-card {
-    padding: clamp(8px, 1vh, 12px) clamp(12px, 1.2vw, 16px);
   }
   .dashboard-page .trends-panel {
     display: flex;
