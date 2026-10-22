@@ -20,16 +20,8 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
   const { offline, pendingCount } = useOfflineStatus();
   return (
     <div className="app">
-      {!kiosk && <OfflineBanner offline={offline} pendingCount={pendingCount} />}
-      {!kiosk && links.length > 0 ? (
-        <aside className="app-sidebar">
-          <header className="top">
-            <button type="button" className="brand" aria-label="Nutrition Tracker home" onClick={() => navigate('/')}>
-              <span className="brand-word">Nutrition</span>
-              <HelixMark size={28} />
-              <span className="brand-word">Tracker</span>
-            </button>
-          </header>
+      {!kiosk && links.length > 0 && (
+        <aside className="app-sidebar" aria-label="Primary">
           <nav className="tabbar app-nav" aria-label="Main">
             {links.map(({ href, label, Icon }) => (
               <a
@@ -47,16 +39,18 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
             ))}
           </nav>
         </aside>
-      ) : (
-        <header className="top app-top-solo">
+      )}
+      <div className="app-frame">
+        {!kiosk && <OfflineBanner offline={offline} pendingCount={pendingCount} />}
+        <header className="top app-brand-bar">
           <button type="button" className="brand" aria-label="Nutrition Tracker home" onClick={() => navigate('/')}>
             <span className="brand-word">Nutrition</span>
-            <HelixMark size={28} />
+            <HelixMark className="brand-helix" size={32} />
             <span className="brand-word">Tracker</span>
           </button>
         </header>
-      )}
-      <main className="main">{children}</main>
+        <main className="main">{children}</main>
+      </div>
       {kiosk && (
         <nav className="tabbar kiosk-bar app-nav" aria-label="Kiosk">
           <a href="/login" className="tab" aria-label="Sign in" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>

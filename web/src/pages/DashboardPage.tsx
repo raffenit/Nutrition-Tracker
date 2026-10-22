@@ -124,6 +124,7 @@ export function DashboardPage() {
         amountMl={day.totals.hydrationMl}
         targetMl={day.targets.hydrationMl}
         units={day.targets.units}
+        promptAdd={day.date === day.today && day.totals.hydrationMl <= 0}
         onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
         onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
       />

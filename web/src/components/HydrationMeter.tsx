@@ -7,9 +7,11 @@ type HydrationMeterProps = {
   units: Units;
   onAdd: () => void;
   onRemove: () => void;
+  /** Subtle highlight on + when today has no water logged yet. */
+  promptAdd?: boolean;
 };
 
-export function HydrationMeter({ amountMl, targetMl, units, onAdd, onRemove }: HydrationMeterProps) {
+export function HydrationMeter({ amountMl, targetMl, units, onAdd, onRemove, promptAdd = false }: HydrationMeterProps) {
   const pct = targetMl > 0 ? Math.min(amountMl / targetMl, 1) * 100 : 0;
   return (
     <section className="card hydration-card" aria-label="Hydration">
@@ -25,7 +27,12 @@ export function HydrationMeter({ amountMl, targetMl, units, onAdd, onRemove }: H
           <button type="button" className="hydration-step" aria-label={removeGlassLabel(units)} onClick={onRemove}>
             −
           </button>
-          <button type="button" className="hydration-step hydration-step-add" aria-label={glassLabel(units)} onClick={onAdd}>
+          <button
+            type="button"
+            className={`hydration-step hydration-step-add${promptAdd ? ' cta-prompt cta-prompt-water' : ''}`}
+            aria-label={glassLabel(units)}
+            onClick={onAdd}
+          >
             +
           </button>
         </div>

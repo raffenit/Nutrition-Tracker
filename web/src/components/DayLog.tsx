@@ -10,7 +10,7 @@ export function DayLog({ logs, onRemove, isToday = true }: DayLogProps) {
         <h2>Meals</h2>
         <button
           type="button"
-          className="round-add-btn"
+          className={`round-add-btn${logs.length === 0 && isToday ? ' cta-prompt' : ''}`}
           aria-label="Log food or drink"
           onClick={() => navigate('/add')}
         >
