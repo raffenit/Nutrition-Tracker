@@ -33,11 +33,11 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
   if (!board) return <p>Loading the household…</p>;
 
   return (
-    <div className="page">
+    <div className="page family-page">
       <DateBar path="/family" date={board.date} today={board.today} dateFormat={board.dateFormat} />
       <h1 className="page-title">{board.householdName}</h1>
       <FamilySummary members={board.members} />
-      <div className="grid">
+      <div className="grid family-member-grid">
         {board.members.map((member) => (
           <section className="card" key={member.user.id}>
             <h2>{member.user.name}</h2>

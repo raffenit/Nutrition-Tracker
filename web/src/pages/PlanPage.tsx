@@ -159,8 +159,8 @@ export function PlanPage() {
       )}
 
       {view === 'shop' && grocery && (
-        <section className="card shop-panel">
-          <div className="shop-toolbar row">
+        <section className="card shop-panel shop-layout">
+          <div className="shop-toolbar row shop-layout-span">
             <button
               type="button"
               className="primary"

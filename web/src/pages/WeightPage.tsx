@@ -42,7 +42,7 @@ export function WeightPage() {
   return (
     <div className="page">
       <button type="button" className="back-link" onClick={() => navigate('/')}>← Today</button>
-      <section className="card">
+      <section className="card weight-panel">
         <div className="row weight-page-head">
           <h1>Weight history</h1>
           <div className="segmented compact" role="group" aria-label="History range">

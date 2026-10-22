@@ -84,20 +84,20 @@ export function AddLogPage() {
 
   return (
     <div className="page add-log-page">
-      <button type="button" className="back-link" onClick={() => navigate('/')}>← Today</button>
-
-      <div className="segmented compact log-mode-tabs" role="group" aria-label="Log type">
+      <header className="page-layout-span add-log-head">
+        <button type="button" className="back-link" onClick={() => navigate('/')}>← Today</button>
+        <div className="segmented compact log-mode-tabs" role="group" aria-label="Log type">
         <button type="button" className={mode === 'library' ? 'active' : ''} onClick={() => { setMode('library'); setFood(null); }}>From library</button>
         <button type="button" className={mode === 'quick' ? 'active' : ''} onClick={() => setMode('quick')}>Quick entry</button>
-      </div>
-
-      <div className="segmented compact slot-tabs" role="group" aria-label="Meal slot">
+        </div>
+        <div className="segmented compact slot-tabs" role="group" aria-label="Meal slot">
         {SLOTS.map((item) => (
           <button type="button" className={item === slot ? 'active' : ''} key={item} onClick={() => setSlot(item)}>
             {item}
           </button>
         ))}
-      </div>
+        </div>
+      </header>
 
       {mode === 'library' && !food && (
         <section className="card form-section">
@@ -130,7 +130,7 @@ export function AddLogPage() {
       )}
 
       {mode === 'quick' && (
-        <form className="card form-section" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <form className="card form-section add-log-quick-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <h1>Quick entry</h1>
           <p className="muted">Log once without saving to your library.</p>
           <label>Name<input value={quickName} onChange={(event) => setQuickName(event.target.value)} required /></label>

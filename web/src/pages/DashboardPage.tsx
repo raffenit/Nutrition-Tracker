@@ -102,35 +102,41 @@ export function DashboardPage() {
 
   return (
     <>
-    <div className="page">
-    <div className="stack">
-      {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
-      <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
-      {error && <p className="notice">{error}</p>}
-      {day.weight.enabled && day.weight.reminderDue && !offline && (
-        <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />
-      )}
-      <GoalAlertBanners alerts={day.alerts ?? []} localDate={day.date} onDismiss={() => void load()} />
-      <MacroPieChart totals={day.totals} targets={day.targets} />
-      <DayLog
-        logs={day.logs}
-        isToday={day.date === day.today}
-        onRemove={(id) => void removeLog(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
-      />
-      <HydrationMeter
-        amountMl={day.totals.hydrationMl}
-        targetMl={day.targets.hydrationMl}
-        units={day.targets.units}
-        onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
-        onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
-      />
+    <div className="page dashboard-page">
+      <div className="page-layout-span stack">
+        {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
+        <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
+        {error && <p className="notice">{error}</p>}
+        {day.weight.enabled && day.weight.reminderDue && !offline && (
+          <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />
+        )}
+        <GoalAlertBanners alerts={day.alerts ?? []} localDate={day.date} onDismiss={() => void load()} />
+      </div>
+      <div className="page-layout-wide">
+        <div className="page-layout-column">
+          <MacroPieChart totals={day.totals} targets={day.targets} />
+          <HydrationMeter
+            amountMl={day.totals.hydrationMl}
+            targetMl={day.targets.hydrationMl}
+            units={day.targets.units}
+            onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
+            onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
+          />
+        </div>
+        <div className="page-layout-column page-layout-column-sticky">
+          <DayLog
+            logs={day.logs}
+            isToday={day.date === day.today}
+            onRemove={(id) => void removeLog(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
+          />
+        </div>
+      </div>
       <TrendsPanel
         trends={day.trends}
         units={day.targets.units}
         weightEnabled={day.weight.enabled}
         onDaysChange={(days) => setTrendDays(days)}
       />
-    </div>
     </div>
     </>
   );

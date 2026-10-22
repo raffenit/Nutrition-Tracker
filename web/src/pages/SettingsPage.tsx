@@ -31,7 +31,11 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
   }, []);
   if (!targets || !weight || !push) return <p>Loading settings…</p>;
   return (
-    <div className="page">
+    <div className="page settings-page">
+      <header className="page-layout-span settings-page-head">
+        <h1 className="page-title">Settings</h1>
+      </header>
+      <div className="settings-layout">
       <DisplayPreferences
         units={targets.units}
         dateFormat={targets.dateFormat}
@@ -76,7 +80,7 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
         <p className="muted">Use sign-in to switch to another household member on this device.</p>
       </section>
       {user.role === 'admin' && (
-        <section className="card settings-household">
+        <section className="card settings-household settings-layout-span">
           <h2>Household</h2>
           <p className="muted">
             <strong>{household?.name ?? 'Home'}</strong> · times use {household?.timezone ?? 'the server timezone'}.
@@ -96,6 +100,7 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
           </div>
         </section>
       )}
+      </div>
     </div>
   );
 }

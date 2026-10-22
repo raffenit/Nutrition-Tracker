@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { apiFormUpload } from '../api/uploadWithProgress';
-import { ImportProgress, type ImportProgressState } from '../components/ImportProgress';
-import { LabelCaptureHints, partialLabelImportHint } from '../components/LabelCaptureHints';
+import { FoodImportPanel, type FoodImportStatus } from '../components/FoodImportPanel';
+import type { ImportProgressState } from '../components/ImportProgress';
+import { partialLabelImportHint } from '../components/LabelCaptureHints';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { navigate } from '../nav';
 import {
@@ -35,10 +36,7 @@ type ImportResult = {
   warning: string | null;
 };
 
-type ImportStatus =
-  | { kind: 'ok'; text: string }
-  | { kind: 'warn'; text: string }
-  | { kind: 'err'; text: string };
+type ImportStatus = FoodImportStatus;
 
 const PROCESS_URL = [
   'Fetching link…',
@@ -325,115 +323,44 @@ function FoodEditor({ editId }: { editId: string | null }) {
         <h1>{editId ? 'Edit food' : 'Add food'}</h1>
       </header>
 
-      <section className="card form-section">
-        <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-        <div className="form-row-2">
-          <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
-          <label>Serving size<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
-        </div>
-        <label>Servings per container
-          <input
-            type="number"
-            min="0.25"
-            step="0.25"
-            placeholder="Optional — e.g. 1 for a single-serve bottle"
-            value={servingsPerContainer}
-            onChange={(event) => setServingsPerContainer(event.target.value)}
-          />
-        </label>
-        <label className="checkbox-inline">
-          <input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} />
-          <span>Counts as a drink (hydration)</span>
-        </label>
-        {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
-      </section>
+      <div className="food-form-layout">
+        <div className="food-form-column">
+          <section className="card form-section">
+            <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+            <div className="form-row-2">
+              <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
+              <label>Serving size<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
+            </div>
+            <label>Servings per container
+              <input
+                type="number"
+                min="0.25"
+                step="0.25"
+                placeholder="Optional — e.g. 1 for a single-serve bottle"
+                value={servingsPerContainer}
+                onChange={(event) => setServingsPerContainer(event.target.value)}
+              />
+            </label>
+            <label className="checkbox-inline">
+              <input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} />
+              <span>Counts as a drink (hydration)</span>
+            </label>
+            {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
+          </section>
 
-      <section className="card form-section import-panel" aria-labelledby="food-import-heading">
-        <h2 id="food-import-heading" className="form-section-title">Import from photo, PDF, or link</h2>
-        <p className="muted import-hint">Optional. For labels, a sharp photo beats a PDF link.</p>
-        <LabelCaptureHints />
-        <div className="import-actions">
-          {nativeLabelCamera ? (
-            <button
-              type="button"
-              className="primary import-file-btn"
-              disabled={importBusy}
-              onClick={() => cameraInputRef.current?.click()}
-            >
-              Take label photo
-            </button>
-          ) : (
-            <p className="import-camera-desktop-only" role="note">
-              Take label photo is only available on phones and tablets. On this device, use{' '}
-              <strong>Choose photo or PDF</strong> (or open the app on your phone).
-            </p>
-          )}
-          <button
-            type="button"
-            className={nativeLabelCamera ? 'import-file-btn' : 'primary import-file-btn'}
-            disabled={importBusy}
-            onClick={() => fileInputRef.current?.click()}
+          <FoodImportPanel
+            nativeLabelCamera={nativeLabelCamera}
+            importBusy={importBusy}
+            importUrl={importUrl}
+            onImportUrlChange={setImportUrl}
+            onImportLink={() => void importLink()}
+            onUploadFile={(file) => void uploadFile(file)}
+            onImportStatus={setImportStatus}
+            importProgress={importProgress}
+            importStatus={importStatus}
+            cameraInputRef={cameraInputRef}
+            fileInputRef={fileInputRef}
           >
-            Choose photo or PDF
-          </button>
-          {nativeLabelCamera && (
-            <input
-              ref={cameraInputRef}
-              className="import-file-input"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (file) void uploadFile(file);
-              }}
-            />
-          )}
-          <input
-            ref={fileInputRef}
-            className="import-file-input"
-            type="file"
-            accept="image/*,.pdf,application/pdf"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) void uploadFile(file);
-            }}
-          />
-        </div>
-        <label className="import-url-field">
-          <span className="muted">Or paste a URL</span>
-          <div className="import-url-row">
-            <input
-              value={importUrl}
-              disabled={importBusy}
-              onChange={(event) => setImportUrl(event.target.value)}
-              placeholder="https://…"
-              inputMode="url"
-              autoComplete="off"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void importLink();
-                }
-              }}
-            />
-            <button type="button" className="primary import-url-btn" disabled={importBusy || !importUrl.trim()} onClick={() => void importLink()}>
-              {importBusy ? '…' : 'Import'}
-            </button>
-          </div>
-        </label>
-        {importProgress && <ImportProgress progress={importProgress} />}
-        {importStatus && (
-          <p
-            className={`import-status import-status-${importStatus.kind}`}
-            role={importStatus.kind === 'err' ? 'alert' : 'status'}
-            aria-live="polite"
-          >
-            {importStatus.text}
-          </p>
-        )}
         {(textPreview || (importKind === 'pdf' && candidates.length > 0)) && (
           <div className="pdf-review">
             <h3 className="form-section-title">Menu PDF review</h3>
@@ -501,19 +428,23 @@ function FoodEditor({ editId }: { editId: string | null }) {
             )}
           </div>
         )}
-      </section>
+          </FoodImportPanel>
+        </div>
 
-      <section className="card form-section">
-        <NutrientFields
-          nutrients={nutrients}
-          units={nutrientUnits}
-          onChange={setNutrients}
-          onUnitsChange={setNutrientUnits}
-        />
-      </section>
+        <div className="food-form-column food-form-column-side">
+          <section className="card form-section">
+            <NutrientFields
+              nutrients={nutrients}
+              units={nutrientUnits}
+              onChange={setNutrients}
+              onUnitsChange={setNutrientUnits}
+            />
+          </section>
 
-      {saveError && <p className="notice">{saveError}</p>}
-      <button className="primary form-save" type="submit">Save food</button>
+          {saveError && <p className="notice">{saveError}</p>}
+          <button className="primary form-save" type="submit">Save food</button>
+        </div>
+      </div>
     </form>
   );
 }
@@ -602,14 +533,15 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         </div>
       </section>
 
-      <section className="card form-section">
-        <h2 className="form-section-title">Add from food library</h2>
-        <p className="muted">Tap a food to add it as an ingredient. Search or scroll the list.</p>
-        <FoodLibraryPicker shelf="foods" onSelect={addLibraryIngredient} excludeIds={excludeIds} />
-        <button type="button" className="linkish" onClick={() => navigate('/foods/new')}>New food from label</button>
-      </section>
+      <div className="food-form-layout">
+        <section className="card form-section food-form-column">
+          <h2 className="form-section-title">Add from food library</h2>
+          <p className="muted">Tap a food to add it as an ingredient. Search or scroll the list.</p>
+          <FoodLibraryPicker shelf="foods" onSelect={addLibraryIngredient} excludeIds={excludeIds} />
+          <button type="button" className="linkish" onClick={() => navigate('/foods/new')}>New food from label</button>
+        </section>
 
-      <section className="card form-section">
+        <section className="card form-section food-form-column food-form-column-side">
         <h2 className="form-section-title">Ingredients {lines.length > 0 ? `(${lines.length})` : ''}</h2>
         {lines.length === 0 && <p className="muted">Search above and tap a food to add it.</p>}
         <ul className="recipe-ingredients">
@@ -636,7 +568,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
             </li>
           ))}
         </ul>
-      </section>
+        </section>
+      </div>
 
       {error && <p className="notice">{error}</p>}
       <button className="primary form-save" type="button" onClick={() => void save()} disabled={lines.length === 0}>Save recipe</button>

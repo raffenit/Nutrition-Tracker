@@ -28,9 +28,8 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
         </button>
       </header>
       {!kiosk && <OfflineBanner offline={offline} pendingCount={pendingCount} />}
-      <main className="main">{children}</main>
       {links.length > 0 && (
-        <nav className="tabbar" aria-label="Main">
+        <nav className="tabbar app-nav" aria-label="Main">
           {links.map(({ href, label, Icon }) => (
             <a
               key={href}
@@ -42,14 +41,17 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
               onClick={(event) => { event.preventDefault(); navigate(href); }}
             >
               <Icon className="tab-icon" />
+              <span className="tab-label">{label}</span>
             </a>
           ))}
         </nav>
       )}
+      <main className="main">{children}</main>
       {kiosk && (
-        <nav className="tabbar kiosk-bar" aria-label="Kiosk">
+        <nav className="tabbar kiosk-bar app-nav" aria-label="Kiosk">
           <a href="/login" className="tab" aria-label="Sign in" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>
             <IconSignIn className="tab-icon" />
+            <span className="tab-label">Sign in</span>
           </a>
         </nav>
       )}
