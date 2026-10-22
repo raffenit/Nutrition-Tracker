@@ -1142,6 +1142,15 @@ label > select { width: 100%; min-width: 0; }
   .dashboard-page .datebar {
     padding: 0;
   }
+  .dashboard-page .datebar-nav {
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+    gap: clamp(4px, 0.45vw, 8px);
+  }
+  .dashboard-page .datebar-center {
+    flex: 0 1 auto;
+  }
   .dashboard-page .datebar-arrow {
     width: 40px;
     min-height: 40px;
@@ -1351,7 +1360,6 @@ label > select { width: 100%; min-width: 0; }
     align-self: center;
     width: 100%;
   }
-  .dashboard-page .datebar-nav { max-width: none; }
   .app {
     flex-direction: row;
     align-items: stretch;
