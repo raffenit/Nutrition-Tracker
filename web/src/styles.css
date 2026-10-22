@@ -123,8 +123,12 @@ a { color: var(--accent-soft); }
   color: var(--muted);
 }
 .tab[aria-current="page"] {
-  color: #fff;
+  color: var(--ink);
+  font-weight: 650;
   background: linear-gradient(165deg, var(--accent-warm), var(--accent-soft) 45%, var(--accent));
+}
+.tab[aria-current="page"] .tab-icon {
+  color: var(--ink);
 }
 .tab-icon {
   width: 26px;
@@ -1283,7 +1287,12 @@ label > select { width: 100%; min-width: 0; }
     color: var(--text);
   }
   .app-sidebar .tab[aria-current="page"] {
+    color: var(--ink);
     box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  .app-sidebar .tab[aria-current="page"] .tab-label,
+  .app-sidebar .tab[aria-current="page"] .tab-icon {
+    color: var(--ink);
   }
   .app-frame {
     margin-left: var(--sidebar-width);
