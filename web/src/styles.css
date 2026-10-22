@@ -19,7 +19,7 @@
   --sodium: #c87888;
   --favorite: #f0c040;
   --danger: #ff5068;
-  --sidebar-width: 13.75rem;
+  --sidebar-width: 10.5rem;
   --sidebar-bg: #0a0507;
   --sidebar-bg-deep: #060304;
   --sidebar-border: color-mix(in srgb, var(--line) 55%, #000);
@@ -1259,7 +1259,7 @@ label > select { width: 100%; min-width: 0; }
     width: var(--sidebar-width);
     height: 100dvh;
     max-height: 100dvh;
-    padding: 16px 12px;
+    padding: 12px 8px;
     background:
       linear-gradient(
         165deg,
@@ -1292,15 +1292,18 @@ label > select { width: 100%; min-width: 0; }
     max-width: none;
     width: 100%;
     justify-content: flex-start;
-    gap: 10px;
-    padding: 0 12px;
-    min-height: 46px;
+    gap: 8px;
+    padding: 0 10px;
+    min-height: 44px;
     color: color-mix(in srgb, var(--muted) 92%, var(--text));
   }
-  .app-sidebar .tab-label { display: inline; }
+  .app-sidebar .tab-label {
+    display: inline;
+    white-space: nowrap;
+  }
   .app-sidebar .tab-icon {
-    width: clamp(24px, 1.4rem + 0.3vw, 28px);
-    height: clamp(24px, 1.4rem + 0.3vw, 28px);
+    width: 24px;
+    height: 24px;
   }
   .app-sidebar .tab:not([aria-current="page"]):hover {
     background: color-mix(in srgb, var(--text) 6%, transparent);
@@ -1422,7 +1425,7 @@ label > select { width: 100%; min-width: 0; }
 @media (min-width: 1200px) {
   :root {
     font-size: clamp(1rem, 0.92rem + 0.28vw, 1.125rem);
-    --sidebar-width: 14.5rem;
+    --sidebar-width: 11rem;
   }
   .plan-days { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
