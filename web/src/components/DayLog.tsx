@@ -5,7 +5,7 @@ type DayLogProps = { logs: MealLog[]; onRemove?: (id: string) => void; isToday?:
 
 export function DayLog({ logs, onRemove, isToday = true }: DayLogProps) {
   return (
-    <section className="card" aria-label="Meals">
+    <section className="card day-log-card" aria-label="Meals">
       <header className="card-head">
         <h2>Meals</h2>
         <button

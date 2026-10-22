@@ -74,7 +74,29 @@ a { color: var(--accent-soft); }
 }
 .helix { display: block; color: var(--accent-soft); width: auto; max-width: 100%; }
 .main { flex: 1; min-width: 0; width: 100%; }
-.app-sidebar { display: contents; min-width: 0; }
+/* Mobile: sidebar wrapper pins the bottom dock; desktop overrides in @media (min-width: 900px). */
+.app-sidebar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: 100%;
+  pointer-events: none;
+}
+.app-sidebar .app-nav { pointer-events: auto; }
+.app-nav {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
 .tabbar {
   position: fixed;
   left: 0;
@@ -82,14 +104,13 @@ a { color: var(--accent-soft); }
   bottom: 0;
   z-index: 20;
   display: flex;
-  justify-content: space-around;
+  justify-content: center;
   gap: 4px;
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   border-top: 1px solid var(--line);
   backdrop-filter: blur(10px);
 }
-.tabbar.kiosk-bar { justify-content: center; }
 .tab {
   flex: 1;
   max-width: 64px;
@@ -124,6 +145,15 @@ a { color: var(--accent-soft); }
 .dashboard-hero { display: grid; gap: 8px; min-width: 0; }
 .dashboard-page > .hydration-card,
 .dashboard-page > .trends-panel { min-width: 0; }
+.day-log-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.day-log-card .list {
+  min-height: 0;
+  overflow-y: auto;
+}
 .round-add-btn {
   width: 44px;
   height: 44px;
@@ -1048,19 +1078,54 @@ label > select { width: 100%; min-width: 0; }
     position: sticky;
     top: 12px;
   }
+  .app-frame:has(.dashboard-page) .app-brand-bar {
+    padding: 2px 0 clamp(8px, 1.2vh, 14px);
+  }
+  .main:has(> .dashboard-page) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .dashboard-page {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1.2fr) auto minmax(0, 1fr);
+    gap: clamp(4px, 0.75vh, 10px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .dashboard-page .page-layout-span.stack {
+    gap: clamp(4px, 0.6vh, 8px);
+  }
+  .dashboard-page .datebar {
+    padding: 0;
+  }
+  .dashboard-page .datebar-arrow {
+    width: 40px;
+    min-height: 40px;
+    font-size: 1.5rem;
+  }
   .dashboard-hero {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-    gap: 16px;
+    gap: clamp(8px, 1.2vw, 16px);
     align-items: stretch;
+    min-height: 0;
+    overflow: hidden;
   }
   .dashboard-hero > .card {
     height: 100%;
-    min-height: clamp(14rem, 22vh, 19rem);
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
   }
   .dashboard-hero .macro-pie {
     display: flex;
     flex-direction: column;
-    container-type: inline-size;
+    container-type: size;
+    min-height: 0;
   }
   .dashboard-hero .macro-pie-hit {
     flex: 1;
@@ -1073,16 +1138,67 @@ label > select { width: 100%; min-width: 0; }
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: center;
-    gap: clamp(12px, 2vw, 24px);
+    gap: clamp(8px, 1.5vw, 20px);
     width: 100%;
-    min-height: clamp(10rem, 18vh, 16rem);
+    min-height: 0;
   }
   .dashboard-hero .macro-pie .pie {
-    width: min(100%, max(9.5rem, 44cqw), 15rem);
-    height: min(100%, max(9.5rem, 44cqw), 15rem);
+    width: min(100%, max(7.5rem, 40cqw), min(14rem, 85cqh));
+    height: min(100%, max(7.5rem, 40cqw), min(14rem, 85cqh));
     aspect-ratio: 1;
     justify-self: center;
     align-self: center;
+  }
+  .dashboard-page .macro-pie-caption {
+    display: none;
+  }
+  .dashboard-page .hydration-card {
+    padding: clamp(8px, 1vh, 12px) clamp(12px, 1.2vw, 16px);
+  }
+  .dashboard-page .trends-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding: clamp(10px, 1.2vh, 14px) clamp(12px, 1.2vw, 18px);
+  }
+  .dashboard-page .trends-panel .segmented.compact {
+    flex-shrink: 0;
+  }
+  .dashboard-page .trend-avg {
+    margin: 4px 0 6px;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+  }
+  .dashboard-page .trend-bars {
+    flex: 1 1 auto;
+    min-height: 48px;
+    max-height: min(11vh, 88px);
+    align-items: end;
+  }
+  .dashboard-page .trend-bar-track {
+    height: min(100%, 72px);
+    max-height: min(11vh, 72px);
+  }
+  .dashboard-page .weight-trend {
+    margin-top: 4px;
+    padding-top: 6px;
+    flex-shrink: 0;
+  }
+  .dashboard-page .weight-trend h3 {
+    margin: 0 0 4px;
+    font-size: 0.82rem;
+  }
+  .dashboard-page .weight-spark {
+    height: min(36px, 5vh);
+  }
+  .dashboard-page .weight-see-all {
+    min-height: 32px;
+    padding: 0 6px;
+    font-size: 0.82rem;
+  }
+  .dashboard-page .day-log-card .list {
+    flex: 1 1 auto;
   }
   .dashboard-hero .macro-pie .pie-hole {
     width: 58%;
@@ -1107,12 +1223,18 @@ label > select { width: 100%; min-width: 0; }
     padding-bottom: 0;
   }
   .app-sidebar {
+    pointer-events: auto;
     display: flex;
     flex-direction: column;
     position: fixed;
-    inset: 0 auto 0 0;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
     z-index: 30;
     width: var(--sidebar-width);
+    height: 100dvh;
+    max-height: 100dvh;
     padding: 16px 12px;
     background:
       linear-gradient(
@@ -1126,8 +1248,35 @@ label > select { width: 100%; min-width: 0; }
       inset -1px 0 0 color-mix(in srgb, #000 40%, transparent),
       6px 0 28px color-mix(in srgb, #000 45%, transparent);
   }
+  .app-sidebar .app-nav {
+    position: static;
+    inset: auto;
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+    margin: 0;
+    padding: 8px 0 0;
+    background: transparent;
+    border: 0;
+    backdrop-filter: none;
+  }
   .app-sidebar .tab {
+    flex: 0 0 auto;
+    max-width: none;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 12px;
+    min-height: 46px;
     color: color-mix(in srgb, var(--muted) 92%, var(--text));
+  }
+  .app-sidebar .tab-label { display: inline; }
+  .app-sidebar .tab-icon {
+    width: clamp(24px, 1.4rem + 0.3vw, 28px);
+    height: clamp(24px, 1.4rem + 0.3vw, 28px);
   }
   .app-sidebar .tab:not([aria-current="page"]):hover {
     background: color-mix(in srgb, var(--text) 6%, transparent);
@@ -1136,24 +1285,22 @@ label > select { width: 100%; min-width: 0; }
   .app-sidebar .tab[aria-current="page"] {
     box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 28%, transparent);
   }
-  .app-sidebar .tabbar {
-    position: static;
-    flex: 1;
-    justify-content: flex-start;
-    padding: 8px 0 0;
-    background: transparent;
-    border: 0;
-    backdrop-filter: none;
-    border-radius: 0;
-  }
   .app-frame {
     margin-left: var(--sidebar-width);
     width: calc(100% - var(--sidebar-width));
     max-width: none;
     padding: 12px clamp(20px, 3vw, 40px) 28px;
+    min-height: 100dvh;
+    box-sizing: border-box;
+  }
+  .app-frame:has(.dashboard-page) {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    padding-bottom: 12px;
   }
   .app-brand-bar {
-    padding: 6px 0 clamp(14px, 2vh, 22px);
+    padding: 6px 0 clamp(10px, 1.5vh, 18px);
   }
   .app-brand-bar .brand {
     gap: clamp(10px, 1.2vw, 16px);
@@ -1171,20 +1318,7 @@ label > select { width: 100%; min-width: 0; }
   .page h1, .page-title { font-size: clamp(1.2rem, 1rem + 0.8vw, 1.55rem); }
   .page .card { padding: clamp(12px, 1.2vw, 18px) clamp(14px, 1.4vw, 22px); }
   .card h2, .card h3 { font-size: clamp(0.95rem, 0.9rem + 0.25vw, 1.08rem); }
-  .tab {
-    flex: 0 0 auto;
-    max-width: none;
-    width: 100%;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 0 12px;
-    min-height: 46px;
-  }
-  .tab-label { display: inline; font-size: clamp(0.88rem, 0.84rem + 0.15vw, 0.98rem); }
-  .tab-icon {
-    width: clamp(24px, 1.4rem + 0.3vw, 28px);
-    height: clamp(24px, 1.4rem + 0.3vw, 28px);
-  }
+  .app-sidebar .tab-label { font-size: clamp(0.88rem, 0.84rem + 0.15vw, 0.98rem); }
   .library-page {
     grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
     align-items: start;

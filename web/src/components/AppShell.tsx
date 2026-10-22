@@ -22,7 +22,7 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
     <div className="app">
       {!kiosk && links.length > 0 && (
         <aside className="app-sidebar" aria-label="Primary">
-          <nav className="tabbar app-nav" aria-label="Main">
+          <nav className="app-nav" aria-label="Main">
             {links.map(({ href, label, Icon }) => (
               <a
                 key={href}
