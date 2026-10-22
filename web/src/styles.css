@@ -1148,7 +1148,7 @@ label > select { width: 100%; min-width: 0; }
     font-size: 1.5rem;
   }
   .dashboard-hero {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(10.5rem, 0.82fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: clamp(8px, 1.2vw, 16px);
     align-items: stretch;
     min-height: 0;
@@ -1159,6 +1159,7 @@ label > select { width: 100%; min-width: 0; }
     padding: clamp(10px, 1.2vh, 14px) clamp(10px, 1vw, 14px);
     grid-template-rows: auto minmax(0, 1fr);
     gap: clamp(6px, 0.8vh, 10px);
+    container-type: size;
   }
   .dashboard-hero .hydration-card .card-head {
     margin-bottom: 0;
@@ -1166,8 +1167,8 @@ label > select { width: 100%; min-width: 0; }
   .dashboard-hero .hydration-card-body {
     grid-row: 2;
     min-height: 0;
-    grid-template-columns: minmax(3rem, 32%) minmax(0, 1fr);
-    gap: clamp(10px, 1.2vw, 14px);
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(8px, 0.9vw, 12px);
     align-items: stretch;
   }
   .dashboard-hero .hydration-card-body:not(:has(.hydration-bar)) {
@@ -1176,16 +1177,17 @@ label > select { width: 100%; min-width: 0; }
   .dashboard-hero .hydration-bar {
     height: 100%;
     min-height: 0;
-    width: 100%;
+    width: min(100%, max(2.75rem, 36cqw), 4.25rem);
     background: transparent;
     border-radius: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     justify-content: flex-end;
+    justify-self: start;
   }
   .dashboard-hero .hydration-glass-vessel {
-    width: min(100%, 4.5rem);
+    width: 100%;
     height: 100%;
     min-height: 0;
     display: flex;
@@ -1213,10 +1215,46 @@ label > select { width: 100%; min-width: 0; }
   .dashboard-hero .hydration-card-stack {
     flex: 1 1 auto;
     min-height: 0;
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .dashboard-hero .hydration-empty {
+    font-size: 0.85rem;
+    line-height: 1.35;
   }
   .dashboard-hero .hydration-list {
     flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
     overflow-y: auto;
+    align-content: start;
+  }
+  .dashboard-hero .hydration-list li {
+    width: 100%;
+    padding: 6px 0;
+    font-size: clamp(0.8rem, 0.76rem + 0.15cqw, 0.88rem);
+    line-height: 1.35;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .dashboard-hero .hydration-list li > span {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .dashboard-hero .hydration-list li > button {
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .dashboard-hero .hydration-add-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    width: 100%;
+  }
+  .dashboard-hero .hydration-add-submit {
+    grid-column: 1 / -1;
+    width: 100%;
   }
   .dashboard-hero > .card {
     height: 100%;
