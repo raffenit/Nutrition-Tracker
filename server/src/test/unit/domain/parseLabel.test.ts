@@ -298,6 +298,21 @@ Protein 30g
   assert.equal(parsed.nutrients.sodium, 230);
 });
 
+/** One-line OCR: misspelled “total”, fat glued to `2.Sg`, fiber `Ig`, cholesterol after trans fat. */
+const GLUED_FAT_ONE_LINE_OCR = `
+Nutrition Facts Calories 150/12 Tolal Fat2.Sg Saturated Fat LSg Trans Fat Og 25mg_ Total Carbohydrate 4g Dietary Fiber Ig 8 Total Sugars 2g Protein 30g
+`;
+
+test('parses glued fat decimal, saturated LSg, fiber Ig, and cholesterol after trans fat on one line', () => {
+  const parsed = parseNutritionLabel(GLUED_FAT_ONE_LINE_OCR);
+  assert.equal(parsed.nutrients.calories, 150);
+  assert.equal(parsed.nutrients.fat, 2.5);
+  assert.equal(parsed.nutrients.fiber, 1);
+  assert.equal(parsed.nutrients.protein, 30);
+  assert.equal(parsed.nutrients.extras.find((row) => row.key === 'saturated_fat')?.amount, 1.5);
+  assert.equal(parsed.nutrients.extras.find((row) => row.key === 'cholesterol')?.amount, 25);
+});
+
 test('treats a restaurant menu as names rather than a label', () => {
   const text = 'Spring Menu\nRoasted chicken\nGarden salad\n';
   const parsed = parseNutritionLabel(text);

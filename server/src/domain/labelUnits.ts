@@ -1,6 +1,7 @@
 import type { Nutrients } from '../types.js';
 import {
   correctAmountIfUnitMisreadAsSuffix,
+  expandOcrDecimalBeforeGram,
   findEmbeddedCanonicalSpan,
   parseAmountWithFuzzyUnit,
   parseFuzzyMassUnit,
@@ -68,6 +69,7 @@ export function inferNutrientsFromUnits(raw: string): Nutrients {
   assignTotalFatFromUnits(text, nutrients);
   assignCaloriesFromVariants(text, nutrients);
   inferExtrasFromVariants(text, nutrients);
+  assignCholesterolMgAfterTransFat(text, nutrients);
 
   if (nutrients.calories <= 0) {
     const kcal = text.match(/\b(\d{2,4})\s*kcal\b/i);
@@ -161,6 +163,8 @@ function assignExtraByVariantWindow(
  */
 export function estimateSaturatedFatFromOcrSlice(slice: string, totalFatG: number): number | null {
   const region = labelAmountRegion(slice);
+  const lsMisread = region.match(/\bfat\b[^0-9]{0,8}([IlL])([Ss])\s*(?:g|9|G|\b)/i);
+  if (lsMisread) return 1.5;
   const row = region.match(
     /s\w*at\w*[^a-z]{0,10}fat[^0-9]{0,24}(\d+(?:\.\d+)?)(?:\s*g\b|\s+(\d{1,2})\s*%?|\s+(\d{1,2})(?:\s*%|\s|$))/i,
   );
@@ -211,7 +215,7 @@ function assignByVariantLabelWindow(
 function assignTotalFatFromUnits(text: string, nutrients: Nutrients): void {
   if (nutrients.fat > 0) return;
 
-  const patterns = [/\btotal\s*fat\b/gi, /\bfat\b/gi];
+  const patterns = [/\bt[a-z]{3,7}l\s+fat/gi, /\btotal\s*fat\b/gi, /\bfat\b/gi, /(?<![a-z])fat(?=\d)/gi];
   for (const pattern of patterns) {
     for (const match of text.matchAll(pattern)) {
       const index = match.index ?? 0;
@@ -219,11 +223,45 @@ function assignTotalFatFromUnits(text: string, nutrients: Nutrients): void {
       if (/saturat|trans\s*$/i.test(before) || /saturat|trans\s+fat/i.test(before + match[0])) continue;
 
       const slice = sliceForLabelAnchor(text, index, 'total_fat', 28);
+      const glued = readGluedFatGramAmount(slice);
+      if (glued != null && glued > 0 && glued <= 120) {
+        nutrients.fat = glued;
+        return;
+      }
       const amount = readAmountWithUnit(slice, 'g');
       if (amount == null || amount > 120) continue;
       nutrients.fat = amount;
       return;
     }
+  }
+}
+
+/** `Fat2.Sg`, `fat 2.59` — fat label glued to digits/units on one-line OCR. */
+function readGluedFatGramAmount(slice: string): number | null {
+  const region = labelAmountRegion(slice);
+  const gluedDot = region.match(/\bfat(\d+)\.([A-Za-z]{1,3})/i);
+  if (gluedDot) {
+    const expanded = expandOcrDecimalBeforeGram(gluedDot[1] ?? '', gluedDot[2] ?? '');
+    if (expanded != null && expanded > 0 && expanded <= 100) return expanded;
+  }
+  const gluedDigits = region.match(/\bfat(\d+(?:\.\d+)?)([9gq6])(?:\s|\d|%|$)/i);
+  if (gluedDigits) {
+    const literal = gluedDigits[1] ?? '';
+    const value = correctAmountIfUnitMisreadAsSuffix(literal, 'g', region);
+    if (Number.isFinite(value) && value > 0 && value <= 100) return value;
+  }
+  return null;
+}
+
+/** Interleaved OCR: `Trans Fat Og 25mg_` with cholesterol on the same run. */
+function assignCholesterolMgAfterTransFat(text: string, nutrients: Nutrients): void {
+  if (nutrients.extras.some((row) => row.key === 'cholesterol' && row.amount > 0)) return;
+  const normalized = normalizeOcrUnitNoise(text);
+  const match = normalized.match(/\btrans\s+fat\b[^0-9]{0,24}(\d{1,3})\s*mg\b/i);
+  if (!match) return;
+  const amount = Number(match[1]);
+  if (amount > 0 && amount <= 999) {
+    addUnitExtra(nutrients, 'cholesterol', 'Cholesterol', amount, 'mg');
   }
 }
 
@@ -268,6 +306,9 @@ function readAmountWithUnit(slice: string, expected: 'g' | 'mg', slot?: UnitSlot
   }
 
   if (expected === 'g') {
+    const gluedFat = readGluedFatGramAmount(region);
+    if (gluedFat != null) return gluedFat;
+
     const beforeDv = region.match(/[^\d](\d+(?:\.\d+)?)\s+(?:\d{1,2}\s*%|\d{1,2}\b)/);
     if (beforeDv) {
       const literal = beforeDv[1] ?? '';

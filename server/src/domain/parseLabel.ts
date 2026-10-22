@@ -1,6 +1,7 @@
 import type { Nutrients } from '../types.js';
 import {
   correctAmountIfUnitMisreadAsSuffix,
+  expandOcrDecimalBeforeGram,
   findEmbeddedCanonicalSpan,
   parseAmountWithFuzzyUnit,
 } from './ocrConfusables.js';
@@ -450,6 +451,15 @@ function readSaturatedFatGramsNoisy(raw: string, totalFatG: number): number | nu
 function readTotalFatGramsNoisy(raw: string): number | null {
   for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
     if (/saturat|sq\w*at|trans\s+fat/i.test(line)) continue;
+    const fuzzyTotal = line.match(/\bt[a-z]{3,7}l\s+fat[^0-9]{0,6}(\d+(?:\.\d+)?)/i);
+    if (fuzzyTotal) {
+      const tail = line.slice(fuzzyTotal.index ?? 0, (fuzzyTotal.index ?? 0) + 32);
+      const glued = tail.match(/\bfat(\d+)\.([A-Za-z]{1,3})/i);
+      if (glued) {
+        const fromDot = expandOcrDecimalBeforeGram(glued[1] ?? '', glued[2] ?? '');
+        if (fromDot != null && fromDot > 0) return fromDot;
+      }
+    }
     const match = line.match(/\btotal fat\b[^0-9]{0,12}(\d+(?:\.\d+)?)\s*g\b/i);
     if (match) return Number(match[1]);
   }
@@ -458,8 +468,19 @@ function readTotalFatGramsNoisy(raw: string): number | null {
 
 function readFiberGramsNoisy(raw: string): number | null {
   for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
-    const match = line.match(/\b(?:dietary\s+)?fiber\b[^0-9]{0,12}(\d+(?:\.\d+)?)\b/i);
+    const fiberMatch = line.match(/\b(?:dietary\s+)?fiber\b/i);
+    if (!fiberMatch) continue;
+    const slice = line.slice(fiberMatch.index ?? 0, (fiberMatch.index ?? 0) + 28);
+    const fuzzyIg = slice.match(/\bfiber\b[^A-Za-z0-9]{0,10}([Il|]\s*(?:g|9)|Ig\b)/i);
+    if (fuzzyIg) {
+      const token = (fuzzyIg[1] ?? '').replace(/\s/g, '');
+      const parsed = parseAmountWithFuzzyUnit(/g|9/i.test(token) ? token : `${token}g`);
+      if (parsed?.unit === 'g' && parsed.amount >= 0 && parsed.amount <= 100) return parsed.amount;
+    }
+    const match = slice.match(/\bfiber\b[^0-9]{0,12}(\d+(?:\.\d+)?)\s*(?:g|9)\b/i);
     if (match) return Number(match[1]);
+    const loose = slice.match(/\bfiber\b[^0-9]{0,12}(\d+(?:\.\d+)?)\b/i);
+    if (loose) return Number(loose[1]);
   }
   return null;
 }

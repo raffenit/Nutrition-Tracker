@@ -215,6 +215,15 @@ export function findVariantLabelAnchors(text: string, slot: VariantLabelSlot): n
       const index = match.index ?? 0;
       if (!anchors.includes(index)) anchors.push(index);
     }
+    for (const match of text.matchAll(/\bt[a-z]{3,7}l\s+fat(?![a-z])/gi)) {
+      const index = match.index ?? 0;
+      if (!/saturat|trans/i.test(text.slice(Math.max(0, index - 10), index))) push(index);
+    }
+    for (const match of text.matchAll(/(?<![a-z])fat(\d+(?:\.\d+)?)/gi)) {
+      const index = match.index ?? 0;
+      if (isSaturatedOrTransBefore(text, index)) continue;
+      push(index);
+    }
   }
 
   if (slot === 'saturated_fat') {

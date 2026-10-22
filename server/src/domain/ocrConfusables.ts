@@ -65,7 +65,8 @@ export function parseConfusableAmountToken(token: string): number | null {
   const trimmed = token.trim();
   if (/^\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
   if (/^[Il|1]$/.test(trimmed)) return 1;
-  if (/^[Il|]\d$/.test(trimmed)) return Number(normalizeDigitRun(trimmed));
+  if (/^[Il|L]\d$/.test(trimmed)) return Number(normalizeDigitRun(trimmed));
+  if (/^[Ll|I]$/.test(trimmed)) return 1;
   const normalized = normalizeDigitRun(trimmed);
   if (/^\d+(?:\.\d+)?$/.test(normalized)) return Number(normalized);
   return null;
@@ -99,7 +100,27 @@ export function parseFuzzyMassUnit(raw: string): FuzzyMeasureUnit | null {
   if (cleaned.startsWith('m') && cleaned.length <= 4 && levenshtein(cleaned, 'mg') <= 2) return 'mg';
   if (/^m[9g8]$/i.test(cleaned)) return 'mg';
   if (cleaned.length === 1 && cleaned === 'g') return 'g';
+  if (cleaned === 'sg' || cleaned === 's9') return 'g';
 
+  return null;
+}
+
+/**
+ * OCR glues decimal + misread unit: `2.Sg` / `2.S9` on labels that read 2.5 g
+ * (S/confusable ≈ 5, trailing letters ≈ g).
+ */
+export function expandOcrDecimalBeforeGram(intPart: string, afterDot: string): number | null {
+  const base = Number(intPart);
+  if (!Number.isFinite(base) || base < 0 || base > 100) return null;
+  const tail = afterDot.replace(/[^A-Za-z0-9]/g, '');
+  if (!tail) return null;
+  if (/^[Ss5][gq9]?$/i.test(tail)) return base + 0.5;
+  const fuzzy = parseFuzzyMassUnit(tail);
+  if (fuzzy === 'g' && /^[Ss5]/i.test(tail)) return base + 0.5;
+  const digit = parseConfusableAmountToken(tail.charAt(0));
+  if (digit != null && digit >= 0 && digit <= 9 && tail.length <= 2) {
+    return base + digit / 10;
+  }
   return null;
 }
 
@@ -218,7 +239,13 @@ export function parseAmountWithFuzzyUnit(fragment: string): { amount: number; un
   const trimmed = fragment.trim();
   if (!trimmed) return null;
 
-  const glued = trimmed.match(/^(\d+(?:\.\d+)?|[Il|1])([A-Za-z]{1,6})/);
+  const dotMisread = trimmed.match(/^(\d+)\.([Ss5])([A-Za-z]{0,3})/);
+  if (dotMisread) {
+    const expanded = expandOcrDecimalBeforeGram(dotMisread[1] ?? '', dotMisread[2] ?? '');
+    if (expanded != null) return { amount: expanded, unit: 'g' };
+  }
+
+  const glued = trimmed.match(/^(\d+(?:\.\d+)?|[Il|1L])([A-Za-z]{1,6})/);
   if (glued) {
     const amount = parseConfusableAmountToken(glued[1] ?? '');
     const unit = parseFuzzyMassUnit(glued[2] ?? '');
