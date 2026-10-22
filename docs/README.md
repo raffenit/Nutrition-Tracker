@@ -31,7 +31,7 @@ From repo root:
 npm test
 ```
 
-Runs `scripts/run-tests.sh` → server `node --test` + web `tsc --noEmit`. **HTTPS smoke** runs at end of **`./deploy.sh`** (after Docker health), not during `npm test`. Skip with `SKIP_HTTPS_SMOKE=1` in `.env`. Full log: `local/test-last-run.log` (gitignored).
+Runs `scripts/run-tests.sh` → server `node --test` on all `dist-test/**/*.test.js` + web `tsc --noEmit`. Layout: [server/src/test/README.md](../server/src/test/README.md). **HTTPS smoke** runs at end of **`./deploy.sh`** (after Docker health), not during `npm test`; skip with `SKIP_HTTPS_SMOKE=1` in `.env`. Logs: `local/test-last-run.log` (full test run), `local/https-smoke-last.txt` (last smoke step when it runs).
 
 Before any PR that touches logs or family APIs, use the privacy checklist in [ROADMAP.md — Tracking](./ROADMAP.md#tracking).
 

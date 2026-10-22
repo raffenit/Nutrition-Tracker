@@ -86,20 +86,25 @@ Shell / nav: `web/src/components/AppShell.tsx`.
 
 ## Tests
 
+See [server/src/test/README.md](../server/src/test/README.md) for layout. `./deploy.sh` runs the same **`npm test`** as local dev (unless `--skip-test`).
+
 | Kind | Location |
 | --- | --- |
-| HTTP integration | `server/src/test/api.test.ts` |
+| HTTP integration | `server/src/test/integration/api.test.ts` |
 | Test harness | `server/src/test/helpers.ts` |
-| Domain unit tests | `server/src/domain/*.test.ts` |
+| Domain unit tests | `server/src/test/unit/domain/*.test.ts` |
+| Integrations unit tests | `server/src/test/unit/integrations/*.test.ts` (e.g. URL import SSRF) |
 | Web | `npm run check` in `web/` (no component tests yet) |
 
-**Privacy regression:** `familyView` tests + `api.test.ts` asserts family JSON has no `weight`.
+**Runner:** `server/package.json` runs every `dist-test/**/*.test.js` after `tsc -p tsconfig.test.json`.
+
+**Privacy regression (today):** `test/unit/domain/familyView.test.ts` + integration `api.test.ts` cookie-authenticated family JSON check (no `weight` substring). Kiosk HTTP tests planned.
 
 ## Planned work (where to edit)
 
 | ROADMAP phase | Primary touchpoints |
 | --- | --- |
-| **1** Quick log | `logRoutes.ts`, `db/logs.ts`, `AddLogPage.tsx`, `api.test.ts` |
+| **1** Quick log | `logRoutes.ts`, `db/logs.ts`, `AddLogPage.tsx`, `test/integration/api.test.ts` |
 | **3** Weight history | `weightRoutes.ts`, `db/weight.ts`, new `WeightPage.tsx`, `App.tsx`, `TrendsPanel.tsx` |
 | **4a** Goal alerts | `domain/alerts.ts`, `db/alerts.ts`, `database.ts` (migration), `boardRoutes.ts`, `alertRoutes.ts`, `server.ts`, dashboard banner component |
 | **5** PDF workflow | `foodRoutes.ts`, `FoodPage.tsx`, `parseLabel.ts` |

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { emptyNutrients, macroShares } from './nutrients.js';
-import { assertFamilyBoardIsPublic, toFamilyBoard } from './familyView.js';
-import { weightReminderDue } from './weight.js';
+import { emptyNutrients, macroShares } from '../../../domain/nutrients.js';
+import { assertFamilyBoardIsPublic, toFamilyBoard } from '../../../domain/familyView.js';
+import { weightReminderDue } from '../../../domain/weight.js';
 
 const totals = { ...emptyNutrients(), hydrationMl: 0, shares: macroShares(emptyNutrients()) };
 

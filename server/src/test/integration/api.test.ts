@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_TARGETS } from '../domain/nutrients.js';
-import { api, withTestServer } from './helpers.js';
+import { DEFAULT_TARGETS } from '../../domain/nutrients.js';
+import { api, withTestServer } from '../helpers.js';
 
 async function householdToday(port: number, cookie: string): Promise<string> {
   const dashboard = await api<{ today: string }>(port, '/api/dashboard', { cookie });

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { dayGoalsMet, hasActiveGoals } from './familyInsights.js';
-import { DEFAULT_TARGETS } from './nutrients.js';
-import type { DayTotals, Targets } from '../types.js';
+import { dayGoalsMet, hasActiveGoals } from '../../../domain/familyInsights.js';
+import { DEFAULT_TARGETS } from '../../../domain/nutrients.js';
+import type { DayTotals, Targets } from '../../../types.js';
 
 const emptyDay: DayTotals = {
   calories: 0,

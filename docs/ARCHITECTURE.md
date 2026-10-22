@@ -142,20 +142,24 @@ API client: `web/src/api/client.ts` (credentials included for cookies).
 
 ## Privacy and security rules
 
-1. **Weight never leaves personal APIs** — family and kiosk payloads go through `toFamilyBoard` / `assertFamilyBoardIsPublic`; integration tests guard this.
+1. **Weight never leaves personal APIs** — family and kiosk payloads go through `toFamilyBoard` / `assertFamilyBoardIsPublic`. Unit tests enforce `assertFamilyBoardIsPublic`; HTTP integration tests check cookie-authenticated `GET /api/family` responses. Kiosk-session HTTP coverage is planned separately.
 2. **Uploads and foods** are household-shared; meal logs are per-user.
 3. **Kiosk token** is hashed at rest; display URL built from `TAILSCALE_SERVER_URL` + `NUTRITION_PORT` when set.
 
 ## Testing
 
-`npm test` runs **two gates** (see `scripts/run-tests.sh`). Both must pass for deploy; a green server test count does **not** mean the web app is OK.
+`npm test` runs **two gates** (see `scripts/run-tests.sh`). Both must pass for deploy unless you use `./deploy.sh --skip-test`; a green server test count does **not** mean the web app is OK.
 
 | Gate | What it checks |
 | --- | --- |
-| **Server** | Node native `test` runner — domain unit tests (`parseLabel`, `parseMenuTable`, `time`, `familyView`, `trends`, weight reminder) and HTTP integration (`server/src/test/api.test.ts`), including API shapes the web UI relies on (e.g. recipe `ingredients` on `GET /api/foods/:id`). |
-| **Web** | `tsc --noEmit` — React/TS must compile; catches missing fields on shared DTOs like `Food`. No component tests yet. |
+| **Server** | Node native `test` runner over **all** compiled `dist-test/**/*.test.js` files (see [server/src/test/README.md](../server/src/test/README.md)). Includes unit tests under `test/unit/domain/` (parsers, alerts, push rules, family board, trends, diet presets, grocery math, public origin), `test/unit/integrations/` (URL import SSRF + HTML helpers), and HTTP integration in `test/integration/api.test.ts` (health, setup, dashboard, family privacy string check, trends, ad-hoc logs, idempotent logs, goal alerts, weight APIs, compose/recipe shapes). |
+| **Web** | `tsc --noEmit` — React/TS must compile; catches missing fields on shared DTOs like `Food`. No component or browser tests yet. |
 
-Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Server tests` / `Web typecheck` / `Overall`). Full transcript: **`local/test-last-run.log`** (overwrite each run).
+**Host Node:** `server/package.json` requires **Node ≥ 22.13** for `npm test`; README deploy steps describe **22+** on the host.
+
+Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Server tests` / `Web typecheck` / `Overall`). Full transcript: **`local/test-last-run.log`** (overwrite each run). **HTTPS smoke** runs after Docker health in `./deploy.sh` only; output also appended to **`local/https-smoke-last.txt`** when that step runs.
+
+**Known gaps (behavior not yet automated)** — hydration and log-delete routes, kiosk-token family board HTTP, compose per-serving math end-to-end, meal-plan/grocery HTTP, Web Push subscribe/send routes, upload/OCR/PDF HTTP, multi-user family board, and web offline/PWA runtime. See [ROADMAP.md](./ROADMAP.md) phases for product context; privacy/kiosk HTTP tests are planned last.
 
 ## Design choices (why it looks like this)
 

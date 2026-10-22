@@ -35,7 +35,7 @@ log "========================================"
 server_ok=true
 web_ok=true
 
-if ! run_phase "[1/2] Server — unit + API tests (node --test)" npm --prefix "$ROOT/server" test; then
+if ! run_phase "[1/2] Server — all dist-test/**/*.test.js (node --test)" npm --prefix "$ROOT/server" test; then
   server_ok=false
 fi
 

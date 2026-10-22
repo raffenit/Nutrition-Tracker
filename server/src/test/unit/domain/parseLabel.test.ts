@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { menuCandidates, parseNutritionLabel } from './parseLabel.js';
+import { menuCandidates, parseNutritionLabel } from '../../../domain/parseLabel.js';
 
 const LABEL = `
 Nutrition Facts

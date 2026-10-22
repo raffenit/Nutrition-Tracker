@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolvePublicOrigin } from '../config.js';
+import { resolvePublicOrigin } from '../../../config.js';
 
 test('resolvePublicOrigin appends NUTRITION_PORT to a base URL without port', () => {
   assert.equal(resolvePublicOrigin('http://100.100.67.105', 3010), 'http://100.100.67.105:3010');

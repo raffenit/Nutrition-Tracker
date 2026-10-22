@@ -45,7 +45,7 @@ This plan closes the gaps between the client spec and the current build, in an o
 - API: create ad-hoc log, dashboard totals, delete log.
 - Family board still has no weight; ad-hoc logs appear for that user only.
 
-**Files (expected):** `logRoutes.ts`, `db/logs.ts`, `AddLogPage.tsx`, `types.ts` (server + web), `api.test.ts`.
+**Files (expected):** `logRoutes.ts`, `db/logs.ts`, `AddLogPage.tsx`, `types.ts` (server + web), `test/integration/api.test.ts`.
 
 ---
 
@@ -68,7 +68,8 @@ This plan closes the gaps between the client spec and the current build, in an o
 
 **Tests**
 
-- Unit test already in compose; add API test composing with N&gt;1 and logging.
+- **Done (partial):** `test/integration/api.test.ts` composes with `makesServings: 2` and checks ingredient lines on `GET /api/foods/:id`.
+- **Still open:** unit tests for `domain/compose.ts` (`perServing` / `sumIngredientNutrients`); API assertion that per-serving calories match sum(ingredients)/N and logging 2 servings doubles dashboard totals.
 
 **Files:** `FoodPage.tsx`, possibly `foodRoutes.ts` / PATCH body for edits.
 

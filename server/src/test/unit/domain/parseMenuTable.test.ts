@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseMenuFromSource, parseNutritionixHtml, parsePipeTableText } from './parseMenuTable.js';
+import { parseMenuFromSource, parseNutritionixHtml, parsePipeTableText } from '../../../domain/parseMenuTable.js';
 
 const NUTRITIONIX_ROW = `<tr class="odd"><td class="al"><a class="nmItem" title="American Breakfast" href="viewLabel">American Breakfast</a></td><td class="col">650</td><td class="col">43</td><td class="col">20</td><td class="col">0</td><td class="col">490</td><td class="col">1,330</td><td class="col">32</td><td class="col">1</td><td class="col">7</td><td class="col">32</td></tr>`;
 

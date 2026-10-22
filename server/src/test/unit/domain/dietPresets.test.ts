@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyDietPreset, dietPresetById, listDietPresetsPublic } from './dietPresets.js';
-import { DEFAULT_TARGETS } from './nutrients.js';
+import { applyDietPreset, dietPresetById, listDietPresetsPublic } from '../../../domain/dietPresets.js';
+import { DEFAULT_TARGETS } from '../../../domain/nutrients.js';
 
 test('diet presets are documented and unique', () => {
   const presets = listDietPresetsPublic();

@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { openDatabase } from '../db/database.js';
-import { insertUser, saveHousehold, saveTargets } from '../db/users.js';
-import { hashPassword } from '../auth/passwords.js';
-import { DEFAULT_TARGETS } from './nutrients.js';
-import { buildTrendSeries } from './trends.js';
+import { openDatabase } from '../../../db/database.js';
+import { insertUser, saveHousehold, saveTargets } from '../../../db/users.js';
+import { hashPassword } from '../../../auth/passwords.js';
+import { DEFAULT_TARGETS } from '../../../domain/nutrients.js';
+import { buildTrendSeries } from '../../../domain/trends.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { insertMeal } from '../db/logs.js';
-import { insertFood } from '../db/foods.js';
-import { emptyNutrients } from './nutrients.js';
+import { insertMeal } from '../../../db/logs.js';
+import { insertFood } from '../../../db/foods.js';
+import { emptyNutrients } from '../../../domain/nutrients.js';
 
 test('buildTrendSeries fills missing days with zero and ends on the anchor date', () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'nutrition-trend-'));

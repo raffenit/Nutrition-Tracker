@@ -56,12 +56,12 @@ docker compose version
 
 #### Host Node.js (for `./deploy.sh` tests)
 
-The app runs in **Docker**; you do **not** need Node to *use* Nutrition Tracker. You **do** need **Node.js 22+** and **npm** on the **host** (WSL Ubuntu, Linux, or macOS) if you want the default deploy script to run **`npm test`** before `docker compose up`. Tests are **not** run inside the container during deploy.
+The app runs in **Docker**; you do **not** need Node to *use* Nutrition Tracker. You **do** need **Node.js 22+** (server package declares **≥ 22.13**) and **npm** on the **host** (WSL Ubuntu, Linux, or macOS) if you want the default deploy script to run **`npm test`** before `docker compose up`. Tests are **not** run inside the container during deploy. Server test layout: [server/src/test/README.md](./server/src/test/README.md).
 
 Check:
 
 ```bash
-node -v   # expect v22.x or newer
+node -v   # expect v22.13+ (22.x)
 npm -v
 ```
 
@@ -309,7 +309,7 @@ Default pipeline (when not skipping): **`npm test` on the host** (requires Node 
 ## Development (laptop)
 
 ```bash
-npm test       # server tests + web tsc → local/test-last-run.log (HTTPS smoke runs in ./deploy.sh)
+npm test       # all server *.test.js under dist-test/ + web tsc → local/test-last-run.log
 npm run build
 ```
 

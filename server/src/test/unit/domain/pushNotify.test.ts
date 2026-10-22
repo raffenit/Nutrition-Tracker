@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { openDatabase } from '../db/database.js';
-import { alertAlreadyPushed, markAlertPushed } from '../db/push.js';
-import { shouldPushAlert } from './pushNotify.js';
+import { openDatabase } from '../../../db/database.js';
+import { alertAlreadyPushed, markAlertPushed } from '../../../db/push.js';
+import { shouldPushAlert } from '../../../domain/pushNotify.js';
 
 test('shouldPushAlert sends hard alerts once and allows soft alerts', () => {
   const db = openDatabase(':memory:');

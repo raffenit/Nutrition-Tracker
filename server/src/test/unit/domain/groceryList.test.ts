@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { aggregateGroceryLineItems } from './groceryList.js';
-import type { Food } from '../types.js';
+import { aggregateGroceryLineItems } from '../../../domain/groceryList.js';
+import type { Food } from '../../../types.js';
 
 const yogurt: Food = {
   id: 'y1',

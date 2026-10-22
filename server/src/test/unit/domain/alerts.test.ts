@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildGoalAlerts } from './alerts.js';
-import { DEFAULT_TARGETS } from './nutrients.js';
-import type { DayTotals } from '../types.js';
+import { buildGoalAlerts } from '../../../domain/alerts.js';
+import { DEFAULT_TARGETS } from '../../../domain/nutrients.js';
+import type { DayTotals } from '../../../types.js';
 
 const baseTotals = (): DayTotals => ({
   calories: 0,

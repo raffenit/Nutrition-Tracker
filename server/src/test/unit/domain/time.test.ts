@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { localDate, zonedToUtc } from './time.js';
+import { localDate, zonedToUtc } from '../../../domain/time.js';
 
 test('converts Chicago wall time to UTC during daylight saving', () => {
   const iso = zonedToUtc('2026-09-29T18:30', 'America/Chicago');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertSafeHostname } from './importUrl.js';
-import { htmlToText } from './htmlText.js';
+import { assertSafeHostname } from '../../../integrations/importUrl.js';
+import { htmlToText } from '../../../integrations/htmlText.js';
 
 test('blocks loopback and link-local hosts', () => {
   assert.throws(() => assertSafeHostname('localhost'));
