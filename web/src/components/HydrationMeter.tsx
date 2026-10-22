@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import {
   defaultVolumeLogUnit,
   formatVolume,
@@ -74,7 +74,7 @@ export function HydrationMeter({
         {isToday && (
           <button
             type="button"
-            className={`round-add-btn${promptAdd && entries.length === 0 ? ' cta-prompt' : ''}`}
+            className={`round-add-btn${promptAdd && entries.length === 0 ? ' cta-prompt cta-prompt-water' : ''}`}
             aria-label="Log water"
             aria-expanded={addOpen}
             onClick={() => (addOpen ? setAddOpen(false) : openAddForm())}
@@ -84,62 +84,76 @@ export function HydrationMeter({
         )}
       </header>
 
-      {targetMl > 0 && (
-        <div className="bar hydration-bar">
-          <span style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--water), var(--water-deep))' }} />
-        </div>
-      )}
+      <div className="hydration-card-body">
+        {targetMl > 0 && (
+          <div
+            className="bar hydration-bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(pct)}
+            aria-label="Hydration progress"
+            style={{ '--hydration-pct': `${pct}%` } as CSSProperties}
+          >
+            <div className="hydration-glass-vessel" aria-hidden="true">
+              <span className="hydration-bar-fill" />
+            </div>
+          </div>
+        )}
 
-      {addOpen && isToday && (
-        <form
-          className="hydration-add-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitAdd();
-          }}
-        >
-          <label className="hydration-add-field">
-            <span className="sr-only">Amount</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0.1"
-              step="any"
-              value={amount}
-              required
-              autoFocus
-              onChange={(event) => setAmount(event.target.value)}
-            />
-          </label>
-          <label className="hydration-add-field hydration-add-unit">
-            <span className="sr-only">Unit</span>
-            <select
-              value={volumeUnit}
-              onChange={(event) => setVolumeUnit(event.target.value as VolumeLogUnit)}
+        <div className="hydration-card-stack">
+          {addOpen && isToday && (
+            <form
+              className="hydration-add-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitAdd();
+              }}
             >
-              {VOLUME_LOG_UNITS.map((unit) => (
-                <option key={unit} value={unit}>{volumeLogUnitLabel(unit)}</option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className="primary hydration-add-submit">Add</button>
-        </form>
-      )}
+              <label className="hydration-add-field">
+                <span className="sr-only">Amount</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0.1"
+                  step="any"
+                  value={amount}
+                  required
+                  autoFocus
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+              </label>
+              <label className="hydration-add-field hydration-add-unit">
+                <span className="sr-only">Unit</span>
+                <select
+                  value={volumeUnit}
+                  onChange={(event) => setVolumeUnit(event.target.value as VolumeLogUnit)}
+                >
+                  {VOLUME_LOG_UNITS.map((unit) => (
+                    <option key={unit} value={unit}>{volumeLogUnitLabel(unit)}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" className="primary hydration-add-submit">Add</button>
+            </form>
+          )}
 
-      {showEmpty && !addOpen && (
-        <p className="muted">{isToday ? 'No water logged yet today.' : 'No hydration logged on this day.'}</p>
-      )}
+          {showEmpty && !addOpen && (
+            <p className="muted hydration-empty">{isToday ? 'No water logged yet today.' : 'No hydration logged on this day.'}</p>
+          )}
 
-      <ul className="list hydration-list">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            <span>
-              <strong>{entry.timeLabel}</strong> {entry.label} · {formatVolume(entry.amountMl, units)}
-            </span>
-            {onRemove && <button type="button" onClick={() => onRemove(entry.id)}>Remove</button>}
-          </li>
-        ))}
-      </ul>
+          <ul className="list hydration-list">
+            {entries.map((entry) => (
+              <li key={entry.id}>
+                <span>
+                  <strong>{entry.timeLabel}</strong> {entry.label} · {formatVolume(entry.amountMl, units)}
+                </span>
+                {onRemove && <button type="button" onClick={() => onRemove(entry.id)}>Remove</button>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </section>
   );
 }

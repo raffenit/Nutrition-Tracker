@@ -39,15 +39,21 @@ export function MacroPieChart({ totals, targets }: MacroPieChartProps) {
 
   return (
     <section className="card macro-pie">
-      <h2>Macros</h2>
-      <button
-        type="button"
-        className={`macro-pie-hit${goalsAvailable ? '' : ' macro-pie-hit-static'}`}
-        aria-expanded={goalsAvailable ? goalsOpen : undefined}
-        aria-controls={goalsAvailable ? drawerId : undefined}
-        disabled={!goalsAvailable}
-        onClick={() => goalsAvailable && setGoalsOpen((open) => !open)}
-      >
+      <header className="card-head">
+        <h2>Macros</h2>
+        {goalsAvailable && (
+          <button
+            type="button"
+            className="macro-goals-toggle"
+            aria-expanded={goalsOpen}
+            aria-controls={drawerId}
+            onClick={() => setGoalsOpen((open) => !open)}
+          >
+            {goalsOpen ? 'Hide goals' : 'Goals'}
+          </button>
+        )}
+      </header>
+      <div className="macro-pie-body">
         <div className="pie-wrap">
           <div className="pie" style={{ background: gradient }} aria-hidden="true">
             <div className={`pie-hole${calorieStatus !== 'ok' ? ` macro-${calorieStatus}` : ''}`}>
@@ -67,10 +73,7 @@ export function MacroPieChart({ totals, targets }: MacroPieChartProps) {
             })}
           </ul>
         </div>
-        {goalsAvailable && (
-          <span className="macro-pie-hint muted">{goalsOpen ? 'Hide daily goals' : 'Daily goals'}</span>
-        )}
-      </button>
+      </div>
       {!goalsAvailable && (
         <p className="muted macro-pie-caption">Calorie split from protein, fat, and carbs logged today.</p>
       )}
