@@ -112,25 +112,21 @@ export function DashboardPage() {
         )}
         <GoalAlertBanners alerts={day.alerts ?? []} localDate={day.date} onDismiss={() => void load()} />
       </div>
-      <div className="page-layout-wide">
-        <div className="page-layout-column">
-          <MacroPieChart totals={day.totals} targets={day.targets} />
-          <HydrationMeter
-            amountMl={day.totals.hydrationMl}
-            targetMl={day.targets.hydrationMl}
-            units={day.targets.units}
-            onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
-            onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
-          />
-        </div>
-        <div className="page-layout-column page-layout-column-sticky">
-          <DayLog
-            logs={day.logs}
-            isToday={day.date === day.today}
-            onRemove={(id) => void removeLog(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
-          />
-        </div>
+      <div className="dashboard-hero">
+        <MacroPieChart totals={day.totals} targets={day.targets} />
+        <DayLog
+          logs={day.logs}
+          isToday={day.date === day.today}
+          onRemove={(id) => void removeLog(id).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove'))}
+        />
       </div>
+      <HydrationMeter
+        amountMl={day.totals.hydrationMl}
+        targetMl={day.targets.hydrationMl}
+        units={day.targets.units}
+        onAdd={() => void postHydration(day.glassMl, nowLocalInput()).then(() => load())}
+        onRemove={() => void api(`/api/hydration/latest-water?date=${day.date}`, { method: 'DELETE' }).then(() => load()).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not remove water'))}
+      />
       <TrendsPanel
         trends={day.trends}
         units={day.targets.units}

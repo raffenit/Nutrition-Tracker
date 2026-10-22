@@ -53,7 +53,8 @@ a { color: var(--accent-soft); }
   line-height: 1;
 }
 .helix { display: block; color: var(--accent-soft); width: auto; max-width: 100%; }
-.main { flex: 1; min-width: 0; }
+.main { flex: 1; min-width: 0; width: 100%; }
+.app-sidebar { display: contents; }
 .tabbar {
   position: fixed;
   left: 0;
@@ -99,6 +100,10 @@ a { color: var(--accent-soft); }
 .page-layout-wide { display: grid; gap: 8px; min-width: 0; }
 .page-layout-column { display: grid; gap: 8px; min-width: 0; align-content: start; }
 .page-layout-span { min-width: 0; }
+.dashboard-page { width: 100%; }
+.dashboard-hero { display: grid; gap: 8px; min-width: 0; }
+.dashboard-page > .hydration-card,
+.dashboard-page > .trends-panel { min-width: 0; }
 .round-add-btn {
   width: 44px;
   height: 44px;
@@ -993,25 +998,59 @@ label > select { width: 100%; min-width: 0; }
     position: sticky;
     top: 12px;
   }
+  .dashboard-hero {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+  .dashboard-hero > .card {
+    height: 100%;
+    min-height: 13rem;
+  }
+  .dashboard-hero .macro-pie .pie-wrap {
+    justify-content: flex-start;
+  }
+  .dashboard-page .datebar-nav { max-width: none; }
   .app {
     display: grid;
-    max-width: 1280px;
-    grid-template-columns: minmax(10.5rem, 12.5rem) minmax(0, 1fr);
+    width: 100%;
+    max-width: min(100%, 1360px);
+    grid-template-columns: minmax(11rem, 13rem) minmax(0, 1fr);
     grid-template-areas:
-      "top top"
       "banner banner"
-      "nav main";
-    column-gap: 22px;
+      "sidebar main";
+    column-gap: 24px;
     row-gap: 12px;
     padding: 16px 28px 28px;
     align-items: start;
   }
-  .top { grid-area: top; }
   .offline-banner { grid-area: banner; }
-  .app-nav { grid-area: nav; }
-  .main { grid-area: main; min-width: 0; }
+  .app-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    grid-area: sidebar;
+    position: sticky;
+    top: 12px;
+    align-self: start;
+  }
+  .app-sidebar .top { padding: 0; justify-content: flex-start; }
+  .app-sidebar .brand {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 4px 6px 0;
+    min-height: auto;
+  }
+  .app-sidebar .brand-word { font-size: 0.88rem; }
+  .main { grid-area: main; min-width: 0; width: 100%; }
+  .app-top-solo { grid-area: sidebar; }
   .page h1, .page-title { font-size: 1.35rem; }
   .page .card { padding: 12px 18px; }
+  .app-sidebar .tabbar {
+    position: static;
+    flex: 1;
+  }
   .tabbar {
     position: sticky;
     top: 12px;
@@ -1081,7 +1120,7 @@ label > select { width: 100%; min-width: 0; }
   }
   .add-log-head .back-link { margin-right: auto; }
   .add-log-page {
-    max-width: 56rem;
+    max-width: none;
   }
   .add-log-quick-form .nutrient-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -20,31 +20,41 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
   const { offline, pendingCount } = useOfflineStatus();
   return (
     <div className="app">
-      <header className="top">
-        <button type="button" className="brand" aria-label="Nutrition Tracker home" onClick={() => navigate('/')}>
-          <span className="brand-word">Nutrition</span>
-          <HelixMark size={28} />
-          <span className="brand-word">Tracker</span>
-        </button>
-      </header>
       {!kiosk && <OfflineBanner offline={offline} pendingCount={pendingCount} />}
-      {links.length > 0 && (
-        <nav className="tabbar app-nav" aria-label="Main">
-          {links.map(({ href, label, Icon }) => (
-            <a
-              key={href}
-              href={href}
-              className="tab"
-              aria-current={path === href ? 'page' : undefined}
-              aria-label={label}
-              title={label}
-              onClick={(event) => { event.preventDefault(); navigate(href); }}
-            >
-              <Icon className="tab-icon" />
-              <span className="tab-label">{label}</span>
-            </a>
-          ))}
-        </nav>
+      {!kiosk && links.length > 0 ? (
+        <aside className="app-sidebar">
+          <header className="top">
+            <button type="button" className="brand" aria-label="Nutrition Tracker home" onClick={() => navigate('/')}>
+              <span className="brand-word">Nutrition</span>
+              <HelixMark size={28} />
+              <span className="brand-word">Tracker</span>
+            </button>
+          </header>
+          <nav className="tabbar app-nav" aria-label="Main">
+            {links.map(({ href, label, Icon }) => (
+              <a
+                key={href}
+                href={href}
+                className="tab"
+                aria-current={path === href ? 'page' : undefined}
+                aria-label={label}
+                title={label}
+                onClick={(event) => { event.preventDefault(); navigate(href); }}
+              >
+                <Icon className="tab-icon" />
+                <span className="tab-label">{label}</span>
+              </a>
+            ))}
+          </nav>
+        </aside>
+      ) : (
+        <header className="top app-top-solo">
+          <button type="button" className="brand" aria-label="Nutrition Tracker home" onClick={() => navigate('/')}>
+            <span className="brand-word">Nutrition</span>
+            <HelixMark size={28} />
+            <span className="brand-word">Tracker</span>
+          </button>
+        </header>
       )}
       <main className="main">{children}</main>
       {kiosk && (
