@@ -1,5 +1,6 @@
 import { navigate } from '../nav';
 import type { MealLog } from '../types';
+import { RemoveButton } from './RemoveButton';
 
 type DayLogProps = { logs: MealLog[]; onRemove?: (id: string) => void; isToday?: boolean };
 
@@ -24,7 +25,9 @@ export function DayLog({ logs, onRemove, isToday = true }: DayLogProps) {
         {logs.map((log) => (
           <li key={log.id}>
             <span><strong>{log.timeLabel}</strong> {label(log.slot)} · {log.name} · {Math.round(log.nutrients.calories)} kcal{log.drinkMl ? ` · ${Math.round(log.drinkMl)} ml` : ''}</span>
-            {onRemove && <button type="button" onClick={() => onRemove(log.id)}>Remove</button>}
+            {onRemove && (
+              <RemoveButton label={`Remove ${log.name}`} onClick={() => onRemove(log.id)} />
+            )}
           </li>
         ))}
       </ul>

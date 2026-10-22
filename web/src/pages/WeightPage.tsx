@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { RemoveButton } from '../components/RemoveButton';
 import { navigate } from '../nav';
 import type { WeightStatus } from '../types';
 
@@ -72,13 +73,11 @@ export function WeightPage() {
           {[...entries].reverse().map((entry) => (
             <li key={entry.id}>
               <span><strong>{entry.localDate}</strong> · {entry.weight} {entry.unit}</span>
-              <button
-                type="button"
-                className="danger"
+              <RemoveButton
+                label={`Remove weight entry for ${entry.localDate}`}
+                className="remove-icon-btn-danger"
                 onClick={() => void api<{ weight: WeightStatus }>(`/api/weight/${entry.id}?historyDays=${days}`, { method: 'DELETE' }).then((result) => setWeight(result.weight)).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not delete'))}
-              >
-                Remove
-              </button>
+              />
             </li>
           ))}
         </ul>

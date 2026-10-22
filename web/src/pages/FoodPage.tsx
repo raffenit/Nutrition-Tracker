@@ -5,6 +5,7 @@ import { FoodImportPanel, type FoodImportStatus } from '../components/FoodImport
 import type { ImportProgressState } from '../components/ImportProgress';
 import { partialLabelImportHint } from '../components/LabelCaptureHints';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
+import { RemoveButton } from '../components/RemoveButton';
 import { navigate } from '../nav';
 import {
   CORE_NUTRIENT_FIELDS,
@@ -564,7 +565,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                 />
                 <span className="muted">× {line.servingLabel}</span>
               </label>
-              <button type="button" className="recipe-ingredient-remove" aria-label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))}>×</button>
+              <RemoveButton label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))} />
             </li>
           ))}
         </ul>
@@ -639,7 +640,10 @@ function NutrientFields({
               ))}
             </select>
           </span>
-          <button type="button" className="link-button" onClick={() => onChange(removeExtraAt(nutrients, index))}>Remove</button>
+          <RemoveButton
+            label={`Remove ${extra.label}`}
+            onClick={() => onChange(removeExtraAt(nutrients, index))}
+          />
         </label>
       ))}
     </fieldset>

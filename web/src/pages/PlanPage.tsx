@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
+import { RemoveButton } from '../components/RemoveButton';
 import { formatDisplayDate } from '../dateFormat';
 import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
 import type { Food } from '../types';
@@ -138,14 +139,12 @@ export function PlanPage() {
                       >
                         Log
                       </button>
-                      <button
-                        type="button"
-                        className="library-action danger"
+                      <RemoveButton
+                        label={`Remove ${entry.foodName} from plan`}
+                        className="remove-icon-btn-danger"
                         disabled={busy}
                         onClick={() => void saveEntries(entries.filter((row) => row.id !== entry.id))}
-                      >
-                        Remove
-                      </button>
+                      />
                     </div>
                   </li>
                 ))}

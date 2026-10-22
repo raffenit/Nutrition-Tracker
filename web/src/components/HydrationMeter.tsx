@@ -10,6 +10,7 @@ import {
   type VolumeLogUnit,
 } from '../units';
 import type { HydrationEntry } from '../types';
+import { RemoveButton } from './RemoveButton';
 
 type HydrationMeterProps = {
   entries: HydrationEntry[];
@@ -93,9 +94,12 @@ export function HydrationMeter({
             aria-valuemax={100}
             aria-valuenow={Math.round(pct)}
             aria-label="Hydration progress"
-            style={{ '--hydration-pct': `${pct}%` } as CSSProperties}
           >
-            <div className="hydration-glass-vessel" aria-hidden="true">
+            <div
+              className="hydration-glass-vessel"
+              aria-hidden="true"
+              style={{ '--hydration-pct': `${pct}%` } as CSSProperties}
+            >
               <span className="hydration-bar-fill" />
             </div>
           </div>
@@ -148,7 +152,13 @@ export function HydrationMeter({
                 <span>
                   <strong>{entry.timeLabel}</strong> {entry.label} · {formatVolume(entry.amountMl, units)}
                 </span>
-                {onRemove && <button type="button" onClick={() => onRemove(entry.id)}>Remove</button>}
+                {onRemove && (
+                  <RemoveButton
+                    label={`Remove ${entry.label}`}
+                    className="remove-icon-btn-water"
+                    onClick={() => onRemove(entry.id)}
+                  />
+                )}
               </li>
             ))}
           </ul>

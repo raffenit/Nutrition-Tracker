@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { mergeFoodsCache } from '../offline/db';
 import { FavoriteStar } from '../components/FavoriteStar';
+import { RemoveButton } from '../components/RemoveButton';
 import { LIBRARY_SORTS, readLibrarySort, sortLibraryFoods, type LibrarySort } from '../librarySort';
 import { navigate, usePath } from '../nav';
 import type { Food } from '../types';
@@ -155,7 +156,7 @@ function LibraryRow({
         </button>
         <div className="library-item-actions">
           <button type="button" className="library-action" onClick={() => navigate(editHref)}>Edit</button>
-          <button type="button" className="library-action danger" onClick={onDelete}>Delete</button>
+          <RemoveButton label={`Delete ${food.name}`} className="remove-icon-btn-danger" onClick={onDelete} />
           <FavoriteStar compact active={food.isFavorite} onToggle={onFavoriteToggle} />
         </div>
       </div>

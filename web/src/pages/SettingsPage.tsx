@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { RemoveButton } from '../components/RemoveButton';
 import { navigate } from '../nav';
 import { DATE_FORMAT_OPTIONS, type DateFormat } from '../dateFormat';
 import {
@@ -256,9 +257,11 @@ function ExtraGoalsEditor({ extras, onChange }: { extras: Targets['extras']; onC
         <div className="extra-goal-row" key={`${extra.key}-${index}`}>
           <div className="extra-goal-head">
             <span className="extra-goal-label">Nutrient {index + 1}</span>
-            <button type="button" className="extra-goal-remove danger" onClick={() => onChange(extras.filter((_, i) => i !== index))}>
-              Remove
-            </button>
+            <RemoveButton
+              label={`Remove extra nutrient ${extra.label || index + 1}`}
+              className="remove-icon-btn-danger"
+              onClick={() => onChange(extras.filter((_, i) => i !== index))}
+            />
           </div>
           <div className="extra-goal-fields">
             <label>Name<input value={extra.label} onChange={(event) => {

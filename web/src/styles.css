@@ -247,7 +247,7 @@ input, select {
 label > input:not([type="checkbox"]):not([type="radio"]),
 label > select { width: 100%; min-width: 0; }
 .bar { height: 8px; background: #1a1014; border-radius: 99px; overflow: hidden; }
-.bar span { display: block; height: 100%; }
+.bar:not(.hydration-bar) span { display: block; height: 100%; }
 .macro-pie { display: grid; gap: 8px; }
 .macro-pie .card-head { margin-bottom: 4px; }
 .macro-goals-toggle {
@@ -339,13 +339,6 @@ label > select { width: 100%; min-width: 0; }
   gap: 8px;
 }
 .extra-goal-label { font-size: 0.82rem; font-weight: 650; color: var(--muted); }
-.extra-goal-remove {
-  min-height: 36px;
-  padding: 0 10px;
-  font-size: 0.82rem;
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-}
 .extra-goal-fields {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr 0.6fr;
@@ -443,6 +436,7 @@ label > select { width: 100%; min-width: 0; }
 .hydration-empty { margin: 0; font-size: 0.88rem; }
 .hydration-bar { height: 8px; flex-shrink: 0; }
 .hydration-glass-vessel {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -484,12 +478,33 @@ label > select { width: 100%; min-width: 0; }
   background: linear-gradient(165deg, #9eb8f5 0%, var(--water) 42%, var(--water-deep) 100%);
   border: 1px solid color-mix(in srgb, var(--water) 45%, transparent);
 }
-.hydration-card .hydration-list button {
-  color: var(--water);
-  background: color-mix(in srgb, var(--water) 12%, var(--raise));
-  border: 1px solid color-mix(in srgb, var(--water) 35%, var(--line));
-}
 .hydration-list { flex: 1 1 auto; min-height: 0; }
+.remove-icon-btn {
+  width: 2.25rem;
+  min-height: 2.25rem;
+  max-height: 2.25rem;
+  padding: 0;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.remove-icon-btn:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--raise));
+}
+.remove-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.remove-icon-btn-icon { width: 1rem; height: 1rem; display: block; }
+.remove-icon-btn-danger { color: var(--danger); }
+.remove-icon-btn-water:hover:not(:disabled) {
+  color: var(--water-deep);
+  border-color: color-mix(in srgb, var(--water) 45%, var(--line));
+  background: color-mix(in srgb, var(--water) 12%, var(--raise));
+}
 @media (max-width: 520px) {
   .hydration-add-form { grid-template-columns: 1fr 1fr; }
   .hydration-add-submit { grid-column: 1 / -1; width: 100%; }
@@ -550,6 +565,15 @@ label > select { width: 100%; min-width: 0; }
 .nutrient-field > span:first-child {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.nutrient-field:has(.remove-icon-btn) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 4px;
+}
+.nutrient-field:has(.remove-icon-btn) .remove-icon-btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 .nutrient-field .link-button {
   grid-column: 1 / -1;
@@ -895,15 +919,6 @@ label > select { width: 100%; min-width: 0; }
   font-size: 0.82rem;
 }
 .recipe-ingredient-qty input { width: 3.5rem; min-height: 36px; padding: 0 6px; }
-.recipe-ingredient-remove {
-  min-height: 36px;
-  width: 36px;
-  padding: 0;
-  font-size: 1.25rem;
-  line-height: 1;
-  background: transparent;
-  color: var(--muted);
-}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1168,7 +1183,6 @@ label > select { width: 100%; min-width: 0; }
     padding: clamp(10px, 1.2vh, 14px) clamp(10px, 1vw, 14px);
     grid-template-rows: auto minmax(0, 1fr);
     gap: clamp(6px, 0.8vh, 10px);
-    container-type: size;
   }
   .dashboard-hero .hydration-card .card-head {
     margin-bottom: 0;
@@ -1176,7 +1190,7 @@ label > select { width: 100%; min-width: 0; }
   .dashboard-hero .hydration-card-body {
     grid-row: 2;
     min-height: 0;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(3.25rem, 36%) minmax(0, 1fr);
     gap: clamp(8px, 0.9vw, 12px);
     align-items: stretch;
   }
@@ -1186,23 +1200,16 @@ label > select { width: 100%; min-width: 0; }
   .dashboard-hero .hydration-bar {
     height: 100%;
     min-height: 0;
-    width: min(100%, max(2.75rem, 36cqw), 4.25rem);
+    width: 100%;
+    max-width: 100%;
     background: transparent;
     border-radius: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-end;
-    justify-self: start;
+    overflow: visible;
   }
   .dashboard-hero .hydration-glass-vessel {
     width: 100%;
     height: 100%;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    overflow: hidden;
     border: 2px solid color-mix(in srgb, var(--water) 50%, var(--line));
     border-top: 3px solid color-mix(in srgb, var(--water) 65%, var(--line));
     border-radius: 8px 8px 1.1rem 1.1rem;
@@ -1213,6 +1220,8 @@ label > select { width: 100%; min-width: 0; }
       inset 0.35rem 0 0.75rem color-mix(in srgb, var(--water) 12%, transparent);
   }
   .dashboard-hero .hydration-bar-fill {
+    position: absolute;
+    inset: auto 0 0;
     width: 100%;
     height: var(--hydration-pct, 0%);
     min-width: 0;
@@ -1250,11 +1259,7 @@ label > select { width: 100%; min-width: 0; }
     min-width: 0;
     flex: 1 1 auto;
   }
-  .dashboard-hero .hydration-list li > button {
-    min-height: 34px;
-    padding: 0 8px;
-    font-size: 0.78rem;
-    flex-shrink: 0;
+  .dashboard-hero .hydration-list li > .remove-icon-btn {
     align-self: center;
   }
   .dashboard-hero .hydration-add-form {
@@ -1285,10 +1290,11 @@ label > select { width: 100%; min-width: 0; }
   }
   .dashboard-hero .macro-pie .pie-wrap {
     flex: 1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: clamp(8px, 1.5vw, 20px);
+    justify-content: center;
+    gap: clamp(8px, 1vh, 14px);
     width: 100%;
     min-height: 0;
   }
@@ -1355,9 +1361,11 @@ label > select { width: 100%; min-width: 0; }
     font-size: clamp(1.15rem, 1rem + 0.6vw, 1.55rem);
   }
   .dashboard-hero .macro-pie .pie-legend {
-    font-size: clamp(0.92rem, 0.86rem + 0.25vw, 1.05rem);
-    gap: clamp(6px, 1vh, 12px);
-    align-self: center;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: clamp(8px, 1.2vw, 14px);
+    font-size: clamp(0.82rem, 0.78rem + 0.2vw, 0.92rem);
     width: 100%;
   }
   .app {
