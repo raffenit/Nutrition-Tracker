@@ -313,6 +313,14 @@ test('parses glued fat decimal, saturated LSg, fiber Ig, and cholesterol after t
   assert.equal(parsed.nutrients.extras.find((row) => row.key === 'cholesterol')?.amount, 25);
 });
 
+test('reads sodium from garbled macro gap before total carbohydrate', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Trans Fat Og 25mg_ 8 L [3gzzor5 "% J Total Carbohydrate 4g Protein 30g
+`);
+  assert.equal(parsed.nutrients.sodium, 230);
+});
+
 test('treats a restaurant menu as names rather than a label', () => {
   const text = 'Spring Menu\nRoasted chicken\nGarden salad\n';
   const parsed = parseNutritionLabel(text);

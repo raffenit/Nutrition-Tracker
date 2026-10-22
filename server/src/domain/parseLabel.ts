@@ -8,7 +8,12 @@ import {
 import { classifyVariantLabelLine, embeddedCanonicalForSlot, matchVariantLabelToken } from './labelVariants.js';
 import { parseServingsPerContainerVariant, parseServingSizeVariant } from './labelHeaderParse.js';
 import { estimateSaturatedFatFromOcrSlice } from './labelUnits.js';
-import { inferNutrientsFromUnits, normalizeOcrUnitNoise, parseMeasuredAmount } from './labelUnits.js';
+import {
+  inferNutrientsFromUnits,
+  normalizeOcrUnitNoise,
+  parseMeasuredAmount,
+  readSodiumFromMacroGap,
+} from './labelUnits.js';
 import { emptyNutrients } from './nutrients.js';
 
 export type LabelParse = {
@@ -426,6 +431,9 @@ function caloriesFromSlashOcr(main: string, dvPart: string): number {
 
 /** Total fat only — ignore saturated/trans lines where OCR still says "Fat Ng". */
 function readSodiumMgNoisy(raw: string): number | null {
+  const fromGap = readSodiumFromMacroGap(raw);
+  if (fromGap != null) return fromGap;
+
   const text = normalizeOcrUnitNoise(raw);
   for (const line of text.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
     const variant = matchVariantInlineLine(line);

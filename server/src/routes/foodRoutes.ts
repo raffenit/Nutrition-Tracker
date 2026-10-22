@@ -10,7 +10,7 @@ import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImport } from '../domain/nutritionImport.js';
-import { extractImageText, extractPdfText } from '../integrations/extractText.js';
+import { extractImageLabel, extractPdfText } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
 import { searchUsda } from '../integrations/usda.js';
@@ -18,7 +18,7 @@ import { HttpError } from '../http/errors.js';
 import { requireUser } from '../http/access.js';
 import { readJson, sendJson } from '../http/respond.js';
 import { route, type Ctx, type Route } from '../http/router.js';
-import type { Food, SearchHit } from '../types.js';
+import type { Food, Nutrients, SearchHit } from '../types.js';
 
 const MAX_UPLOAD = 12 * 1024 * 1024;
 
@@ -167,6 +167,9 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
   const extracted = await readExtractedText(kind, file.bytes, ctx.config);
   const built = buildNutritionImport(extracted.text, kind);
+  if (extracted.slotMergedNutrients) {
+    applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
+  }
   const warning = extracted.warning ?? built.warning;
   const saved = insertUpload(ctx.db, {
     kind,
@@ -289,21 +292,49 @@ function extensionFor(filename: string): string {
   return '.jpg';
 }
 
+function applySlotMergedNutrients(target: Nutrients, merged: Nutrients): void {
+  if (merged.calories > 0) target.calories = merged.calories;
+  if (merged.fat > 0) target.fat = merged.fat;
+  if (merged.carbs > 0) target.carbs = merged.carbs;
+  if (merged.fiber > 0) target.fiber = merged.fiber;
+  if (merged.protein > 0) target.protein = merged.protein;
+  if (merged.sodium > 0) target.sodium = merged.sodium;
+  for (const extra of merged.extras) {
+    if (extra.amount <= 0) continue;
+    const index = target.extras.findIndex((row) => row.key === extra.key);
+    if (index >= 0) target.extras[index] = { ...extra };
+    else target.extras.push({ ...extra });
+  }
+}
+
 async function readExtractedText(
   kind: 'image' | 'pdf',
   bytes: Buffer,
   config: { tessdataDir: string; easyocrModelDir: string; easyocrEnabled: boolean },
-): Promise<{ text: string; warning: string | null }> {
+): Promise<{ text: string; warning: string | null; slotMergedNutrients: Nutrients | null }> {
   try {
-    const text =
-      kind === 'pdf'
-        ? await extractPdfText(bytes)
-        : await extractImageText(bytes, config.tessdataDir, {
-            easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
-          });
-    return { text, warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.' };
+    if (kind === 'pdf') {
+      const text = await extractPdfText(bytes);
+      return {
+        text,
+        warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.',
+        slotMergedNutrients: null,
+      };
+    }
+    const { text, slotMergedNutrients } = await extractImageLabel(bytes, config.tessdataDir, {
+      easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
+    });
+    return {
+      text,
+      warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.',
+      slotMergedNutrients,
+    };
   } catch {
-    return { text: '', warning: 'The file is saved, and the text could not be read. Enter the nutrition facts yourself.' };
+    return {
+      text: '',
+      warning: 'The file is saved, and the text could not be read. Enter the nutrition facts yourself.',
+      slotMergedNutrients: null,
+    };
   }
 }
 

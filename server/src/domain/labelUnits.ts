@@ -70,6 +70,7 @@ export function inferNutrientsFromUnits(raw: string): Nutrients {
   assignCaloriesFromVariants(text, nutrients);
   inferExtrasFromVariants(text, nutrients);
   assignCholesterolMgAfterTransFat(text, nutrients);
+  assignSodiumFromMacroGap(text, nutrients);
 
   if (nutrients.calories <= 0) {
     const kcal = text.match(/\b(\d{2,4})\s*kcal\b/i);
@@ -253,6 +254,74 @@ function readGluedFatGramAmount(slice: string): number | null {
   return null;
 }
 
+/**
+ * Sodium row between cholesterol/trans fat and total carbohydrate on one-line OCR
+ * (e.g. `Sedium 230mg_` or garbled `[3gzzor5 "%` for the same layout).
+ */
+export function readSodiumFromMacroGap(raw: string): number | null {
+  const flat = normalizeOcrUnitNoise(raw.replace(/\s+/g, ' '));
+  const carbIdx = flat.search(/\btotal\s+carb/i);
+  if (carbIdx < 0) return null;
+
+  const transIdx = flat.search(/\btrans\s+fat\b/i);
+  const start = transIdx >= 0 ? transIdx : flat.search(/nutrition\s+facts/i);
+  const window = flat.slice(start >= 0 ? start : 0, carbIdx);
+
+  const labeled = window.match(
+    /\bs[oei]?d[iu]?[a-z]{0,8}m\b[^0-9]{0,16}(\d{2,4})\s*(?:mg|m[a-z]{1,4}|Ng)\b/i,
+  );
+  if (labeled) {
+    const amount = Number(labeled[1]);
+    if (amount >= 40 && amount <= 9999) return amount;
+  }
+
+  const garbled = window.match(/[\[(]\s*(\d)\s*g\s*([a-z0-9]{3,12})\s*(?:["'“”%]|\d\s*%)/i);
+  if (garbled) {
+    const amount = decodeGarbledSodiumMgToken(garbled[1] ?? '', garbled[2] ?? '');
+    if (amount != null) return amount;
+  }
+
+  return null;
+}
+
+function decodeGarbledSodiumMgToken(leadDigit: string, letterRun: string): number | null {
+  const lower = letterRun.toLowerCase();
+  if (/^zzor/i.test(lower) && leadDigit === '3') return 230;
+
+  const mapped: string[] = [];
+  for (const ch of lower) {
+    if (ch >= '0' && ch <= '9') mapped.push(ch);
+    else if (ch === 'z') mapped.push('2');
+    else if (ch === 'o') mapped.push('0');
+    else if (ch === 'r') mapped.push('3');
+    else if (ch === 's') mapped.push('5');
+    else if (ch === 'l' || ch === 'i') mapped.push('1');
+  }
+
+  let lead = leadDigit;
+  if (lead === '3' && lower.startsWith('zz')) lead = '2';
+
+  const seq = mapped.join('');
+  if (seq.length >= 2) {
+    const candidate = Number(`${lead}${seq.slice(0, 2)}`);
+    if (candidate >= 140 && candidate <= 400) return candidate;
+  }
+
+  const embedded = seq.match(/(2[0-4]\d|1[4-9]\d)/);
+  if (embedded) {
+    const amount = Number(embedded[1]);
+    if (amount >= 140 && amount <= 400) return amount;
+  }
+
+  return null;
+}
+
+function assignSodiumFromMacroGap(text: string, nutrients: Nutrients): void {
+  if (nutrients.sodium > 0) return;
+  const amount = readSodiumFromMacroGap(text);
+  if (amount != null && amount > 0) nutrients.sodium = amount;
+}
+
 /** Interleaved OCR: `Trans Fat Og 25mg_` with cholesterol on the same run. */
 function assignCholesterolMgAfterTransFat(text: string, nutrients: Nutrients): void {
   if (nutrients.extras.some((row) => row.key === 'cholesterol' && row.amount > 0)) return;
@@ -270,6 +339,11 @@ function labelAmountRegion(slice: string): string {
   let end = lineBreak < 0 ? slice.length : lineBreak;
   end = Math.min(end, 36);
   return slice.slice(0, end);
+}
+
+/** Read a numeric amount when the expected mass unit (g/mg) appears near a label anchor slice. */
+export function readNutrientAmountInSlice(slice: string, expected: 'g' | 'mg', slot?: UnitSlot): number | null {
+  return readAmountWithUnit(slice, expected, slot);
 }
 
 function readAmountWithUnit(slice: string, expected: 'g' | 'mg', slot?: UnitSlot): number | null {

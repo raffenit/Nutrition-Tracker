@@ -112,6 +112,12 @@ function tokenMatchesCanonical(token: string, entry: SingleWordLabel): boolean {
     return false;
   }
 
+  if (entry.slot === 'sodium') {
+    const letters = t.replace(/\d/g, '');
+    if (/^sn[a-z]{2,10}$/i.test(letters) && levenshtein(letters, c) <= 4) return true;
+    if (/^s[a-z]{3,8}m$/i.test(letters) && levenshtein(letters, c) <= 2) return true;
+  }
+
   const lenDelta = Math.abs(t.length - c.length);
   if (lenDelta > 2) return false;
 
@@ -240,6 +246,16 @@ export function findVariantLabelAnchors(text: string, slot: VariantLabelSlot): n
       push(match.index ?? 0);
     }
     for (const match of text.matchAll(/\btrans\s+fat\s+o?g\b/gi)) {
+      push(match.index ?? 0);
+    }
+  }
+
+  if (slot === 'sodium') {
+    for (const match of text.matchAll(/\bSn[a-z0-9]{3,12}\b/g)) {
+      const word = match[0] ?? '';
+      if (matchVariantLabelToken(word) === 'sodium') push(match.index ?? 0);
+    }
+    for (const match of text.matchAll(/\bs[oei]?d[iu]?[a-z]{0,8}m\b/gi)) {
       push(match.index ?? 0);
     }
   }

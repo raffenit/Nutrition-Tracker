@@ -1,18 +1,23 @@
 import { PDFParse } from 'pdf-parse';
 import Tesseract, { PSM } from 'tesseract.js';
-import sharp, { type Sharp } from 'sharp';
-import { scoreLabelExtraction } from '../domain/labelSlots.js';
-import { adaptiveThresholdVariants } from './adaptiveThreshold.js';
-import { extractEasyOcrText } from './easyOcr.js';
-import { focusCropVariants } from './focusCrop.js';
-
-/** Laplacian-guided + center band crops on each orientation (depth-of-field). */
-const USE_FOCUS_CROPS = true;
-
-/** Target width for label OCR — upscales phone photos for Tesseract. */
-const OCR_TARGET_WIDTH = 2200;
+import {
+  mergeSlotReadingsAcrossCandidates,
+  primaryCandidateIndex,
+} from '../domain/labelSlotExtract.js';
+import type { Nutrients } from '../types.js';
+import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
+import { buildOcrImageVariants, easyOcrVariantSubset } from './ocrPreprocess.js';
 
 const PSM_MODES = [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN] as const;
+
+/** Cap OCR text candidates while still feeding the per-slot merge pool. */
+const MAX_OCR_CANDIDATES = 28;
+
+export type ImageLabelExtraction = {
+  text: string;
+  /** Best per-row values merged across OCR engines (label + unit driven). */
+  slotMergedNutrients: Nutrients | null;
+};
 
 export async function extractPdfText(bytes: Buffer): Promise<string> {
   const parser = new PDFParse({ data: bytes });
@@ -24,105 +29,68 @@ export async function extractPdfText(bytes: Buffer): Promise<string> {
   }
 }
 
+export async function extractImageLabel(
+  bytes: Buffer,
+  cachePath: string,
+  options?: { easyocrModelDir?: string },
+): Promise<ImageLabelExtraction> {
+  const candidates = await collectOcrCandidateTexts(bytes, cachePath, options?.easyocrModelDir);
+  const slotMergedNutrients = mergeSlotReadingsAcrossCandidates(candidates);
+  const primaryIdx = primaryCandidateIndex(candidates);
+  const text = candidates[primaryIdx] ?? candidates[0] ?? '';
+  return { text, slotMergedNutrients };
+}
+
+/** Legacy: single string (primary candidate after slot merge scoring). */
 export async function extractImageText(
   bytes: Buffer,
   cachePath: string,
   options?: { easyocrModelDir?: string },
 ): Promise<string> {
-  let best = { text: '', score: -1 };
-  const modelDir = options?.easyocrModelDir;
+  const result = await extractImageLabel(bytes, cachePath, options);
+  return result.text;
+}
+
+async function collectOcrCandidateTexts(
+  bytes: Buffer,
+  cachePath: string,
+  modelDir?: string,
+): Promise<string[]> {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+
+  const variants = await buildOcrImageVariants(bytes);
+
   if (modelDir) {
-    const mlText = await extractEasyOcrText(bytes, modelDir);
-    if (mlText) {
-      const score = scoreLabelExtraction(mlText);
-      best = { text: mlText, score };
+    const forEasyOcr = easyOcrVariantSubset(variants);
+    for (const mlText of await extractEasyOcrTextsFromVariants(forEasyOcr, modelDir)) {
+      push(mlText);
+      if (out.length >= MAX_OCR_CANDIDATES) return out;
     }
   }
 
-  const variants = await imageVariants(bytes);
   const worker = await Tesseract.createWorker('eng', 1, { cachePath });
   try {
     for (const image of variants) {
       for (const psm of PSM_MODES) {
+        if (out.length >= MAX_OCR_CANDIDATES) return out;
         await worker.setParameters({ tessedit_pageseg_mode: psm });
         const result = await worker.recognize(image);
         const text = result.data.text ?? '';
-        const score = scoreLabelExtraction(text);
-        if (score > best.score) best = { text, score };
-        if (best.score >= 20) return best.text;
+        push(text);
       }
     }
-    return best.text;
   } finally {
     await worker.terminate();
   }
-}
 
-type Preprocess = (image: Sharp) => Sharp;
-
-/** Contrast / denoise pipelines — adaptive threshold variants added separately. */
-const PREPROCESSORS: Preprocess[] = [
-  (image) => image.greyscale().normalize(),
-  (image) => image.greyscale().normalize().sharpen({ sigma: 1 }),
-  (image) => image.greyscale().linear(1.45, -35),
-  (image) => image.greyscale().normalize().linear(1.25, -15).sharpen({ sigma: 0.8 }),
-  (image) => image.greyscale().gamma(1.15).normalize(),
-  (image) => image.greyscale().median(3).normalize().sharpen({ sigma: 0.6 }),
-];
-
-/** Lighter stack for focus crops — extra variants without full OCR runtime blow-up. */
-const FOCUS_PREPROCESSORS: Preprocess[] = [
-  (image) => image.greyscale().normalize(),
-  (image) => image.greyscale().normalize().sharpen({ sigma: 1 }),
-  (image) => image.greyscale().normalize().linear(1.25, -15).sharpen({ sigma: 0.8 }),
-];
-
-async function imageVariants(bytes: Buffer): Promise<Buffer[]> {
-  try {
-    const orientations = [
-      sharp(bytes).rotate(),
-      sharp(bytes).rotate().rotate(90),
-      sharp(bytes).rotate().rotate(270),
-    ];
-    const buffers: Buffer[] = [];
-    for (const source of orientations) {
-      const meta = await source.metadata();
-      const width = meta.width ?? OCR_TARGET_WIDTH;
-      const scale = width < OCR_TARGET_WIDTH ? OCR_TARGET_WIDTH / width : 1;
-      const scaled =
-        scale > 1.05
-          ? source.clone().resize({ width: Math.round(width * scale), kernel: sharp.kernel.lanczos3 })
-          : source.clone();
-
-      await appendOcrVariants(buffers, scaled, PREPROCESSORS);
-      if (USE_FOCUS_CROPS) {
-        for (const cropped of await focusCropVariants(scaled)) {
-          await appendOcrVariants(buffers, cropped, FOCUS_PREPROCESSORS);
-        }
-      }
-    }
-    buffers.push(bytes);
-    return uniqueBuffers(buffers);
-  } catch {
-    return [bytes];
-  }
-}
-
-async function appendOcrVariants(buffers: Buffer[], source: Sharp, preprocessors: Preprocess[]): Promise<void> {
-  for (const preprocess of preprocessors) {
-    buffers.push(await preprocess(source.clone()).png().toBuffer());
-  }
-  buffers.push(...(await adaptiveThresholdVariants(source)));
-}
-
-function uniqueBuffers(buffers: Buffer[]): Buffer[] {
-  const seen = new Set<string>();
-  const out: Buffer[] = [];
-  for (const buffer of buffers) {
-    const key = `${buffer.length}:${buffer.subarray(0, 8).toString('hex')}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(buffer);
-  }
+  if (out.length === 0) push('');
   return out;
 }
