@@ -1,7 +1,17 @@
+export type ImportProgressStepStatus = 'done' | 'active' | 'pending';
+
+export type ImportProgressStep = {
+  label: string;
+  status: ImportProgressStepStatus;
+};
+
 export type ImportProgressState = {
   phase: 'upload' | 'process';
   percent: number | null;
   message: string;
+  detail?: string;
+  steps?: ImportProgressStep[];
+  elapsedSec?: number;
 };
 
 type ImportProgressProps = {
@@ -9,10 +19,32 @@ type ImportProgressProps = {
 };
 
 export function ImportProgress({ progress }: ImportProgressProps) {
-  const { phase, percent, message } = progress;
+  const { phase, percent, message, detail, steps, elapsedSec } = progress;
   return (
     <div className="import-progress" aria-busy="true">
-      <p className="import-progress-label">{message}</p>
+      <div className="import-progress-head">
+        <p className="import-progress-label">{message}</p>
+        {phase === 'process' && elapsedSec != null && elapsedSec > 0 && (
+          <span className="import-progress-elapsed" aria-hidden="true">
+            {elapsedSec}s
+          </span>
+        )}
+      </div>
+      {detail && <p className="muted import-progress-detail">{detail}</p>}
+      {steps && steps.length > 0 && (
+        <ol className="import-progress-steps" aria-label="Import steps">
+          {steps.map((step) => (
+            <li
+              key={step.label}
+              className={`import-progress-step import-progress-step-${step.status}`}
+              aria-current={step.status === 'active' ? 'step' : undefined}
+            >
+              <span className="import-progress-step-marker" aria-hidden="true" />
+              <span>{step.label}</span>
+            </li>
+          ))}
+        </ol>
+      )}
       <div
         className={`import-progress-track${percent === null ? ' indeterminate' : ''}`}
         role="progressbar"
@@ -27,9 +59,6 @@ export function ImportProgress({ progress }: ImportProgressProps) {
           <span className="import-progress-fill import-progress-fill-indeterminate" />
         )}
       </div>
-      {phase === 'process' && (
-        <p className="muted import-progress-note">OCR and PDF parsing can take up to a minute on the server.</p>
-      )}
     </div>
   );
 }

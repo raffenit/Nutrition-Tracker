@@ -973,8 +973,39 @@ label.import-field-review,
   .import-url-btn { width: 100%; min-width: 0; }
 }
 .import-status { margin: 0; font-size: 0.88rem; }
-.import-progress { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #1a1014; }
-.import-progress-label { margin: 0; font-size: 0.9rem; font-weight: 650; }
+.import-progress { display: grid; gap: 0.5rem; padding: 0.65rem 0.75rem; border-radius: 12px; border: 1px solid var(--line); background: #1a1014; }
+.import-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; min-width: 0; }
+.import-progress-label { margin: 0; font-size: 0.9rem; font-weight: 650; min-width: 0; }
+.import-progress-elapsed { flex-shrink: 0; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+.import-progress-detail { margin: 0; font-size: 0.8rem; line-height: 1.35; }
+.import-progress-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+}
+.import-progress-step {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+}
+.import-progress-step-active { color: var(--text); font-weight: 600; }
+.import-progress-step-done { color: var(--accent-soft); }
+.import-progress-step-marker {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--line);
+  flex-shrink: 0;
+}
+.import-progress-step-active .import-progress-step-marker {
+  background: var(--accent-warm);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-warm) 35%, transparent);
+}
+.import-progress-step-done .import-progress-step-marker { background: var(--accent-soft); }
 .import-progress-note { margin: 0; font-size: 0.8rem; }
 .import-progress-track {
   height: 8px;

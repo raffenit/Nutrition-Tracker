@@ -146,7 +146,10 @@ export function extractSlotReadingsFromText(text: string, candidateIndex: number
           slot: 'sodium',
           amount: gap,
           labelStrength: 28,
-          unitMatched: /\bmg\b|m[a-z]{1,3}|Ng/i.test(text) || /[\[(]\s*\d\s*g[a-z]/i.test(text),
+          unitMatched:
+            /\bmg\b|m[a-z]{1,3}|Ng/i.test(text)
+            || /[\[(]\s*\d\s*g[a-z]/i.test(text)
+            || /\d\s*g[a-z0-9]{2,12}\s*(?:%|\d\s*%)/i.test(text),
           candidateIndex,
         };
         if (!best || readingScore(layout) > readingScore(best)) best = layout;

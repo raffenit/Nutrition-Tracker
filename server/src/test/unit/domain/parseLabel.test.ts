@@ -321,6 +321,13 @@ Trans Fat Og 25mg_ 8 L [3gzzor5 "% J Total Carbohydrate 4g Protein 30g
   assert.equal(parsed.nutrients.sodium, 230);
 });
 
+test('reads sodium from glued E3gzo5 macro gap OCR (no bracket)', () => {
+  const parsed = parseNutritionLabel(`
+Fat2.Sg Trans Fat Og E3gzo5 5% J Total Carbohydrate 4g Protein 30g
+`);
+  assert.equal(parsed.nutrients.sodium, 230);
+});
+
 test('treats a restaurant menu as names rather than a label', () => {
   const text = 'Spring Menu\nRoasted chicken\nGarden salad\n';
   const parsed = parseNutritionLabel(text);

@@ -6,12 +6,17 @@ import {
 } from '../domain/labelSlotExtract.js';
 import type { Nutrients } from '../types.js';
 import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
-import { buildOcrImageVariants, easyOcrVariantSubset } from './ocrPreprocess.js';
-
-const PSM_MODES = [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN] as const;
+import { buildOcrImageVariants, easyOcrVariantSubset, tesseractVariantSubset } from './ocrPreprocess.js';
 
 /** Cap OCR text candidates while still feeding the per-slot merge pool. */
 const MAX_OCR_CANDIDATES = 28;
+
+function tesseractPsmModes(): PSM[] {
+  if (process.env.TESSERACT_DUAL_PSM === '1') {
+    return [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN];
+  }
+  return [PSM.SINGLE_BLOCK];
+}
 
 export type ImageLabelExtraction = {
   text: string;
@@ -51,46 +56,54 @@ export async function extractImageText(
   return result.text;
 }
 
-async function collectOcrCandidateTexts(
-  bytes: Buffer,
-  cachePath: string,
-  modelDir?: string,
-): Promise<string[]> {
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  const push = (text: string) => {
+function mergeUniqueCandidates(seen: Set<string>, out: string[], texts: string[]): void {
+  for (const text of texts) {
     const trimmed = text.trim();
-    if (!trimmed || seen.has(trimmed)) return;
+    if (!trimmed || seen.has(trimmed)) continue;
     seen.add(trimmed);
     out.push(trimmed);
-  };
-
-  const variants = await buildOcrImageVariants(bytes);
-
-  if (modelDir) {
-    const forEasyOcr = easyOcrVariantSubset(variants);
-    for (const mlText of await extractEasyOcrTextsFromVariants(forEasyOcr, modelDir)) {
-      push(mlText);
-      if (out.length >= MAX_OCR_CANDIDATES) return out;
-    }
+    if (out.length >= MAX_OCR_CANDIDATES) return;
   }
+}
 
+async function collectTesseractCandidateTexts(bytes: Buffer[], cachePath: string): Promise<string[]> {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const psmModes = tesseractPsmModes();
   const worker = await Tesseract.createWorker('eng', 1, { cachePath });
   try {
-    for (const image of variants) {
-      for (const psm of PSM_MODES) {
+    for (const image of bytes) {
+      for (const psm of psmModes) {
         if (out.length >= MAX_OCR_CANDIDATES) return out;
         await worker.setParameters({ tessedit_pageseg_mode: psm });
         const result = await worker.recognize(image);
-        const text = result.data.text ?? '';
-        push(text);
+        mergeUniqueCandidates(seen, out, [result.data.text ?? '']);
       }
     }
   } finally {
     await worker.terminate();
   }
+  return out;
+}
 
-  if (out.length === 0) push('');
+async function collectOcrCandidateTexts(
+  bytes: Buffer,
+  cachePath: string,
+  modelDir?: string,
+): Promise<string[]> {
+  const variants = await buildOcrImageVariants(bytes);
+  const forEasyOcr = modelDir ? easyOcrVariantSubset(variants) : [];
+  const forTesseract = tesseractVariantSubset(variants);
+
+  const [easyTexts, tessTexts] = await Promise.all([
+    modelDir ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir) : Promise.resolve([]),
+    collectTesseractCandidateTexts(forTesseract, cachePath),
+  ]);
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  mergeUniqueCandidates(seen, out, easyTexts);
+  mergeUniqueCandidates(seen, out, tessTexts);
+  if (out.length === 0) out.push('');
   return out;
 }

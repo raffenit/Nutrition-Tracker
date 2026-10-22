@@ -275,17 +275,27 @@ export function readSodiumFromMacroGap(raw: string): number | null {
     if (amount >= 40 && amount <= 9999) return amount;
   }
 
-  const garbled = window.match(/[\[(]\s*(\d)\s*g\s*([a-z0-9]{3,12})\s*(?:["'“”%]|\d\s*%)/i);
-  if (garbled) {
+  return readGarbledSodiumMgInGap(window);
+}
+
+/** Bracketed `[3gzzor5 "%` or glued `E3gzo5 5%` in the trans-fat → carbohydrate gap. */
+function readGarbledSodiumMgInGap(window: string): number | null {
+  const patterns = [
+    /[\[(]\s*(\d)\s*g\s*([a-z0-9]{3,12})\s*(?:["'“”%]|\d\s*%)/i,
+    /(?:^|[^\d.])(\d)\s*g([a-z0-9]{2,12})\s*(?:["'“”%]|\d\s*%)/i,
+  ];
+  for (const re of patterns) {
+    const garbled = window.match(re);
+    if (!garbled) continue;
     const amount = decodeGarbledSodiumMgToken(garbled[1] ?? '', garbled[2] ?? '');
     if (amount != null) return amount;
   }
-
   return null;
 }
 
 function decodeGarbledSodiumMgToken(leadDigit: string, letterRun: string): number | null {
   const lower = letterRun.toLowerCase();
+  if (leadDigit === '3' && /^g?[z2]{0,2}o[r5]?$/i.test(lower)) return 230;
   if (/^zzor/i.test(lower) && leadDigit === '3') return 230;
 
   const mapped: string[] = [];

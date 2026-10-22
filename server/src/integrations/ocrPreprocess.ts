@@ -64,8 +64,15 @@ export async function buildOcrImageVariants(bytes: Buffer): Promise<Buffer[]> {
 
 /** EasyOCR is heavier per image — same variants, capped count (see EASYOCR_MAX_VARIANTS). */
 export function easyOcrVariantSubset(variants: Buffer[]): Buffer[] {
-  const max = Number(process.env.EASYOCR_MAX_VARIANTS ?? '6');
-  const limit = Number.isFinite(max) && max > 0 ? Math.min(max, variants.length) : 6;
+  const max = Number(process.env.EASYOCR_MAX_VARIANTS ?? '4');
+  const limit = Number.isFinite(max) && max > 0 ? Math.min(max, variants.length) : 4;
+  return variants.slice(0, limit);
+}
+
+/** Tesseract is cheaper but still scales with variant × PSM count — cap preprocessed images. */
+export function tesseractVariantSubset(variants: Buffer[]): Buffer[] {
+  const max = Number(process.env.TESSERACT_MAX_VARIANTS ?? '12');
+  const limit = Number.isFinite(max) && max > 0 ? Math.min(max, variants.length) : 12;
   return variants.slice(0, limit);
 }
 

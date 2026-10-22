@@ -38,13 +38,12 @@ function easyOcrBaseEnv(): EasyOcrPassEnv {
 }
 
 /**
- * Default pass + optional A/B pass (contrast + looser detection thresholds).
- * Disable second pass with EASYOCR_AB=0.
+ * Default: one pass (faster). Optional A/B pass with EASYOCR_AB=1 (contrast + looser detection).
  */
 export function easyOcrPassEnvironments(): EasyOcrPassEnv[] {
   const base = easyOcrBaseEnv();
   const passes: EasyOcrPassEnv[] = [base];
-  if (process.env.EASYOCR_AB === '0') return passes;
+  if (process.env.EASYOCR_AB !== '1') return passes;
 
   const ab: EasyOcrPassEnv = {
     ...base,

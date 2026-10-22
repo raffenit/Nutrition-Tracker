@@ -3,6 +3,13 @@ import { api } from '../api/client';
 import { apiFormUpload } from '../api/uploadWithProgress';
 import { FoodImportPanel, type FoodImportStatus } from '../components/FoodImportPanel';
 import type { ImportProgressState } from '../components/ImportProgress';
+import {
+  formatUploadBytes,
+  IMAGE_IMPORT_STEPS,
+  PDF_IMPORT_STEPS,
+  URL_IMPORT_STEPS,
+  type ImportProcessStep,
+} from '../lib/importProcessingSteps';
 import { missingExtraImportNotes, partialLabelImportHint } from '../components/LabelCaptureHints';
 import type { ImportFieldReviewMap } from '../importFieldReview';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
@@ -40,27 +47,6 @@ type ImportResult = {
 };
 
 type ImportStatus = FoodImportStatus;
-
-const PROCESS_URL = [
-  'Fetching link…',
-  'Reading page content…',
-  'Looking for nutrition facts…',
-  'Almost done…',
-];
-
-const PROCESS_PDF = [
-  'Reading PDF on server…',
-  'Extracting text…',
-  'Parsing nutrition facts…',
-  'Large PDFs can take a minute…',
-];
-
-const PROCESS_IMAGE = [
-  'Running OCR on the label…',
-  'Still reading the photo…',
-  'This can take up to a minute…',
-  'Parsing nutrition facts…',
-];
 
 export function FoodPage({ custom = false, editId = null }: FoodPageProps) {
   return custom ? <RecipeEditor editId={editId} /> : <FoodEditor editId={editId} />;
@@ -223,16 +209,39 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }
   }
 
-  function startProcessMessages(steps: string[]): void {
+  function buildProcessProgress(steps: ImportProcessStep[], activeIndex: number, elapsedSec: number): ImportProgressState {
+    const clamped = Math.min(Math.max(activeIndex, 0), steps.length - 1);
+    const current = steps[clamped];
+    return {
+      phase: 'process',
+      percent: null,
+      message: current?.message ?? 'Processing…',
+      detail: current?.detail,
+      elapsedSec,
+      steps: steps.map((row, index) => ({
+        label: row.short,
+        status: index < clamped ? 'done' : index === clamped ? 'active' : 'pending',
+      })),
+    };
+  }
+
+  function startProcessMessages(steps: ImportProcessStep[]): void {
     processMessageStopRef.current?.();
     let step = 0;
-    setImportProgress({ phase: 'process', percent: null, message: steps[0] ?? 'Processing…' });
-    const timer = window.setInterval(() => {
-      step = (step + 1) % steps.length;
-      setImportProgress({ phase: 'process', percent: null, message: steps[step] ?? 'Processing…' });
-    }, 2800);
+    const startedAt = Date.now();
+    const publish = () => {
+      const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+      setImportProgress(buildProcessProgress(steps, step, elapsedSec));
+    };
+    publish();
+    const stepTimer = window.setInterval(() => {
+      step = Math.min(step + 1, steps.length - 1);
+      publish();
+    }, 3_200);
+    const elapsedTimer = window.setInterval(publish, 1_000);
     processMessageStopRef.current = () => {
-      window.clearInterval(timer);
+      window.clearInterval(stepTimer);
+      window.clearInterval(elapsedTimer);
       processMessageStopRef.current = null;
     };
   }
@@ -250,7 +259,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }
     setImportStatus(null);
     setSaveError(null);
-    startProcessMessages(PROCESS_URL);
+    startProcessMessages(URL_IMPORT_STEPS);
     try {
       const result = await api<ImportResult>('/api/import-url', {
         method: 'POST',
@@ -266,10 +275,16 @@ function FoodEditor({ editId }: { editId: string | null }) {
 
   async function uploadFile(file: File): Promise<void> {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    const processSteps = isPdf ? PROCESS_PDF : PROCESS_IMAGE;
+    const processSteps = isPdf ? PDF_IMPORT_STEPS : IMAGE_IMPORT_STEPS;
+    const fileDetail = `${file.name} · ${formatUploadBytes(file.size)}`;
     setImportStatus(null);
     setSaveError(null);
-    setImportProgress({ phase: 'upload', percent: 0, message: 'Uploading…' });
+    setImportProgress({
+      phase: 'upload',
+      percent: 0,
+      message: isPdf ? 'Uploading PDF…' : 'Uploading photo…',
+      detail: fileDetail,
+    });
     let processingStarted = false;
     try {
       const body = new FormData();
@@ -284,7 +299,12 @@ function FoodEditor({ editId }: { editId: string | null }) {
           }
           return;
         }
-        setImportProgress({ phase: 'upload', percent: pct, message: `Uploading… ${pct}%` });
+        setImportProgress({
+          phase: 'upload',
+          percent: pct,
+          message: `Uploading… ${pct}%`,
+          detail: fileDetail,
+        });
       });
       if (!processingStarted) startProcessMessages(processSteps);
       applyImport(result);
