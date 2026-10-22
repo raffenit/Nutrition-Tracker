@@ -11,3 +11,7 @@ Weight records are personal. Family and kiosk responses go through `server/src/d
 Host-specific URLs and deploy options belong in `.env`; `local/` is for test logs only (see `local.example/`).
 
 Do not restart production infrastructure (Caddy) or this container until the pending change has been reviewed.
+
+## Parsing and imports
+
+Prefer **universal layout algorithms** over hardcoded strings or one-off fixes for a single label photo. See `.cursor/rules/universal-algorithms.mdc` in this repo and the workspace copy under `Projects/.cursor/rules/`.

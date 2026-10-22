@@ -2,9 +2,25 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { apiFormUpload } from '../api/uploadWithProgress';
 import { ImportProgress, type ImportProgressState } from '../components/ImportProgress';
+import { LabelCaptureHints, partialLabelImportHint } from '../components/LabelCaptureHints';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { navigate } from '../nav';
-import { CORE_NUTRIENT_FIELDS, removeExtraAt, setCoreNutrient, setExtraAt } from '../nutrientFields';
+import {
+  CORE_NUTRIENT_FIELDS,
+  removeExtraAt,
+  setCoreNutrient,
+  setCoreUnit,
+  setExtraAt,
+  setExtraUnitAt,
+  unitOptionsFor,
+} from '../nutrientFields';
+import {
+  canonicalizeCoreNutrients,
+  DEFAULT_CORE_NUTRIENT_UNITS,
+  displayCoreNutrients,
+  type CoreNutrientUnits,
+} from '../nutrientUnits';
+import { supportsNativeLabelCamera } from '../lib/cameraCapture';
 import { EMPTY_NUTRIENTS, type Food, type Nutrients } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
@@ -13,7 +29,7 @@ type ImportResult = {
   uploadId: string | null;
   kind?: 'pdf' | 'image';
   textPreview?: string | null;
-  draft: { nutrients: Nutrients; servingLabel: string };
+  draft: { nutrients: Nutrients; servingLabel: string; servingsPerContainer: number | null };
   candidates: string[];
   menuItems?: Array<{ name: string; servingLabel: string; nutrients: Nutrients }>;
   warning: string | null;
@@ -51,6 +67,8 @@ export function FoodPage({ custom = false, editId = null }: FoodPageProps) {
 
 function FoodEditor({ editId }: { editId: string | null }) {
   const [nutrients, setNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
+  const [nutrientUnits, setNutrientUnits] = useState<CoreNutrientUnits>({ ...DEFAULT_CORE_NUTRIENT_UNITS });
+  const [servingsPerContainer, setServingsPerContainer] = useState('');
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [serving, setServing] = useState('1 serving');
@@ -71,6 +89,8 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const [stubBusy, setStubBusy] = useState(false);
   const [loading, setLoading] = useState(Boolean(editId));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [nativeLabelCamera] = useState(() => supportsNativeLabelCamera());
   const processMessageStopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => processMessageStopRef.current?.(), []);
@@ -82,7 +102,12 @@ function FoodEditor({ editId }: { editId: string | null }) {
       setName(food.name);
       setBrand(food.brand ?? '');
       setServing(food.servingLabel);
-      setNutrients(food.nutrients);
+      setServingsPerContainer(food.servingsPerContainer != null ? String(food.servingsPerContainer) : '');
+      setNutrientUnits(food.nutrientUnits ?? { ...DEFAULT_CORE_NUTRIENT_UNITS });
+      setNutrients({
+        ...displayCoreNutrients(food.nutrients, food.nutrientUnits ?? DEFAULT_CORE_NUTRIENT_UNITS),
+        extras: food.nutrients.extras,
+      });
       setIsDrink(food.isDrink);
       setDrinkMl(food.drinkMl ? String(food.drinkMl) : '355');
       setLoading(false);
@@ -111,9 +136,13 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }
     setNutrients(result.draft.nutrients);
     setServing(result.draft.servingLabel);
+    setServingsPerContainer(
+      result.draft.servingsPerContainer != null ? String(result.draft.servingsPerContainer) : '',
+    );
     const emptyNutrition = result.draft.nutrients.calories === 0 && result.draft.nutrients.protein === 0;
     if (result.warning) {
-      setImportStatus({ kind: 'warn', text: result.warning });
+      const extra = partialLabelImportHint(result.draft.nutrients);
+      setImportStatus({ kind: 'warn', text: extra ? `${result.warning} ${extra}` : result.warning });
       return;
     }
     if (emptyNutrition && result.candidates.length > 0) {
@@ -121,10 +150,17 @@ function FoodEditor({ editId }: { editId: string | null }) {
       return;
     }
     if (emptyNutrition) {
-      setImportStatus({ kind: 'warn', text: 'No nutrition values detected. Enter them below or try another file or URL.' });
+      setImportStatus({
+        kind: 'warn',
+        text: 'No nutrition values detected. Enter them below or try another file or URL.',
+      });
       return;
     }
-    setImportStatus({ kind: 'ok', text: 'Values filled below — review and save.' });
+    const partial = partialLabelImportHint(result.draft.nutrients);
+    setImportStatus({
+      kind: partial ? 'warn' : 'ok',
+      text: partial ?? 'Values filled below — review and save.',
+    });
   }
 
   function pickMenuItem(item: { name: string; servingLabel: string; nutrients: Nutrients }): void {
@@ -254,12 +290,14 @@ function FoodEditor({ editId }: { editId: string | null }) {
     const source = uploadId
       ? (importKind === 'pdf' ? 'pdf' as const : 'image' as const)
       : 'manual' as const;
+    const canonicalCore = canonicalizeCoreNutrients(nutrients, nutrientUnits);
     const payload = {
       name,
       brand: brand || null,
       kind: foodKind,
       servingLabel: serving,
-      nutrients,
+      servingsPerContainer: servingsPerContainer.trim() ? Number(servingsPerContainer) : null,
+      nutrients: { ...canonicalCore, extras: nutrients.extras, units: nutrientUnits },
       isDrink,
       drinkMl: isDrink ? Number(drinkMl) : null,
       isFavorite: false,
@@ -291,8 +329,18 @@ function FoodEditor({ editId }: { editId: string | null }) {
         <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
         <div className="form-row-2">
           <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
-          <label>Serving<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
+          <label>Serving size<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
         </div>
+        <label>Servings per container
+          <input
+            type="number"
+            min="0.25"
+            step="0.25"
+            placeholder="Optional — e.g. 1 for a single-serve bottle"
+            value={servingsPerContainer}
+            onChange={(event) => setServingsPerContainer(event.target.value)}
+          />
+        </label>
         <label className="checkbox-inline">
           <input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} />
           <span>Counts as a drink (hydration)</span>
@@ -302,16 +350,46 @@ function FoodEditor({ editId }: { editId: string | null }) {
 
       <section className="card form-section import-panel" aria-labelledby="food-import-heading">
         <h2 id="food-import-heading" className="form-section-title">Import from photo, PDF, or link</h2>
-        <p className="muted import-hint">Optional. Direct PDF or nutrition page links work best.</p>
+        <p className="muted import-hint">Optional. For labels, a sharp photo beats a PDF link.</p>
+        <LabelCaptureHints />
         <div className="import-actions">
+          {nativeLabelCamera ? (
+            <button
+              type="button"
+              className="primary import-file-btn"
+              disabled={importBusy}
+              onClick={() => cameraInputRef.current?.click()}
+            >
+              Take label photo
+            </button>
+          ) : (
+            <p className="import-camera-desktop-only" role="note">
+              Take label photo is only available on phones and tablets. On this device, use{' '}
+              <strong>Choose photo or PDF</strong> (or open the app on your phone).
+            </p>
+          )}
           <button
             type="button"
-            className="import-file-btn"
+            className={nativeLabelCamera ? 'import-file-btn' : 'primary import-file-btn'}
             disabled={importBusy}
             onClick={() => fileInputRef.current?.click()}
           >
-            Upload photo or PDF
+            Choose photo or PDF
           </button>
+          {nativeLabelCamera && (
+            <input
+              ref={cameraInputRef}
+              className="import-file-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void uploadFile(file);
+              }}
+            />
+          )}
           <input
             ref={fileInputRef}
             className="import-file-input"
@@ -426,7 +504,12 @@ function FoodEditor({ editId }: { editId: string | null }) {
       </section>
 
       <section className="card form-section">
-        <NutrientFields nutrients={nutrients} onChange={setNutrients} />
+        <NutrientFields
+          nutrients={nutrients}
+          units={nutrientUnits}
+          onChange={setNutrients}
+          onUnitsChange={setNutrientUnits}
+        />
       </section>
 
       {saveError && <p className="notice">{saveError}</p>}
@@ -561,7 +644,19 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   );
 }
 
-function NutrientFields({ nutrients, onChange }: { nutrients: Nutrients; onChange: (value: Nutrients) => void }) {
+const EXTRA_UNIT_OPTIONS = ['g', 'mg', 'mcg', 'kcal'] as const;
+
+function NutrientFields({
+  nutrients,
+  units,
+  onChange,
+  onUnitsChange,
+}: {
+  nutrients: Nutrients;
+  units: CoreNutrientUnits;
+  onChange: (value: Nutrients) => void;
+  onUnitsChange: (value: CoreNutrientUnits) => void;
+}) {
   return (
     <fieldset className="nutrient-fields">
       <legend>Per serving</legend>
@@ -576,7 +671,16 @@ function NutrientFields({ nutrients, onChange }: { nutrients: Nutrients; onChang
               value={nutrients[field.key]}
               onChange={(event) => onChange(setCoreNutrient(nutrients, field.key, Number(event.target.value)))}
             />
-            <span className="nutrient-unit">{field.unit}</span>
+            <select
+              className="nutrient-unit-select"
+              aria-label={`${field.label} unit`}
+              value={units[field.key]}
+              onChange={(event) => onUnitsChange(setCoreUnit(units, field.key, event.target.value))}
+            >
+              {unitOptionsFor(field.key).map((unit) => (
+                <option key={unit} value={unit}>{unit}</option>
+              ))}
+            </select>
           </span>
         </label>
       ))}
@@ -591,7 +695,16 @@ function NutrientFields({ nutrients, onChange }: { nutrients: Nutrients; onChang
               value={extra.amount}
               onChange={(event) => onChange(setExtraAt(nutrients, index, Number(event.target.value)))}
             />
-            <span className="nutrient-unit">{extra.unit}</span>
+            <select
+              className="nutrient-unit-select"
+              aria-label={`${extra.label} unit`}
+              value={extra.unit}
+              onChange={(event) => onChange(setExtraUnitAt(nutrients, index, event.target.value))}
+            >
+              {EXTRA_UNIT_OPTIONS.map((unit) => (
+                <option key={unit} value={unit}>{unit}</option>
+              ))}
+            </select>
           </span>
           <button type="button" className="link-button" onClick={() => onChange(removeExtraAt(nutrients, index))}>Remove</button>
         </label>

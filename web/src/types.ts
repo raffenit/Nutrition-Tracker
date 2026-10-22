@@ -56,13 +56,24 @@ export type IngredientLine = {
   childFoodId: string | null;
 };
 
+export type CoreNutrientUnits = {
+  calories: 'kcal';
+  protein: 'g' | 'mg';
+  fiber: 'g' | 'mg';
+  fat: 'g' | 'mg';
+  carbs: 'g' | 'mg';
+  sodium: 'mg' | 'g';
+};
+
 export type Food = {
   id: string;
   name: string;
   brand: string | null;
   kind: string;
   servingLabel: string;
+  servingsPerContainer: number | null;
   nutrients: Nutrients;
+  nutrientUnits: CoreNutrientUnits;
   isFavorite: boolean;
   isDrink: boolean;
   drinkMl: number | null;

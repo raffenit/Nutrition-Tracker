@@ -8,6 +8,7 @@ import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
+import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImport } from '../domain/nutritionImport.js';
 import { extractImageText, extractPdfText } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
@@ -76,7 +77,9 @@ async function createStubFoods(ctx: Ctx): Promise<void> {
       brand: null,
       kind: 'restaurant',
       servingLabel: '1 serving',
+      servingsPerContainer: null,
       nutrients: emptyStubNutrients(),
+      nutrientUnits: { ...DEFAULT_CORE_NUTRIENT_UNITS },
       isFavorite: false,
       isDrink: false,
       drinkMl: null,
@@ -128,7 +131,9 @@ async function composeFood(ctx: Ctx): Promise<void> {
     brand: null,
     kind: 'custom',
     servingLabel: '1 serving',
+    servingsPerContainer: null,
     nutrients,
+    nutrientUnits: { ...DEFAULT_CORE_NUTRIENT_UNITS },
     isFavorite: body.isFavorite === true,
     isDrink: false,
     drinkMl: null,
@@ -160,7 +165,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   if (!kind) throw new HttpError(400, 'Upload a JPEG, PNG, WEBP, or PDF');
   const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
   await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
-  const extracted = await readExtractedText(kind, file.bytes, ctx.config.tessdataDir);
+  const extracted = await readExtractedText(kind, file.bytes, ctx.config);
   const built = buildNutritionImport(extracted.text, kind);
   const warning = extracted.warning ?? built.warning;
   const saved = insertUpload(ctx.db, {
@@ -282,9 +287,18 @@ function extensionFor(filename: string): string {
   return '.jpg';
 }
 
-async function readExtractedText(kind: 'image' | 'pdf', bytes: Buffer, tessdata: string): Promise<{ text: string; warning: string | null }> {
+async function readExtractedText(
+  kind: 'image' | 'pdf',
+  bytes: Buffer,
+  config: { tessdataDir: string; easyocrModelDir: string; easyocrEnabled: boolean },
+): Promise<{ text: string; warning: string | null }> {
   try {
-    const text = kind === 'pdf' ? await extractPdfText(bytes) : await extractImageText(bytes, tessdata);
+    const text =
+      kind === 'pdf'
+        ? await extractPdfText(bytes)
+        : await extractImageText(bytes, config.tessdataDir, {
+            easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
+          });
     return { text, warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.' };
   } catch {
     return { text: '', warning: 'The file is saved, and the text could not be read. Enter the nutrition facts yourself.' };

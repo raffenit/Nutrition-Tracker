@@ -3,6 +3,8 @@ import { emptyNutrients } from './nutrients.js';
 
 export type LabelParse = {
   servingLabel: string | null;
+  /** From “N servings per container” when present on the label. */
+  servingsPerContainer: number | null;
   nutrients: Nutrients;
   looksLikeLabel: boolean;
 };
@@ -11,40 +13,37 @@ export function parseNutritionLabel(text: string): LabelParse {
   const raw = text.replace(/\r/g, '\n');
   const compact = normalizeCompact(raw);
   const nutrients = emptyNutrients();
+  const inline = scanInlineLines(raw);
+  const columnar = parseColumnarLabel(raw);
+  const linePairs = nutrientsFromLabelLinePairs(raw);
 
-  nutrients.calories = readCalories(compact, raw) ?? 0;
-  nutrients.fat = readAmount(compact, raw, ['total fat', '(?<!saturated )\\bfat\\b'], 'g') ?? 0;
-  nutrients.carbs = readAmount(compact, raw, ['total carb\\.?', 'total carbohydrates?', 'carbohydrates?'], 'g') ?? 0;
-  nutrients.fiber = readAmount(compact, raw, ['dietary fiber', 'fiber'], 'g') ?? 0;
-  nutrients.protein = readAmount(compact, raw, ['protein'], 'g') ?? 0;
-  nutrients.sodium = readAmount(compact, raw, ['sodium'], 'mg') ?? 0;
+  if (columnar) {
+    mergeNutrients(nutrients, columnar);
+    mergeNutrients(nutrients, inline);
+    mergeNutrients(nutrients, linePairs ?? emptyNutrients());
+  } else {
+    nutrients.calories = readCalories(compact, raw) ?? 0;
+    nutrients.fat =
+      readAmount(compact, raw, ['total fat'], 'g') ?? readStandaloneFatGrams(raw) ?? readTotalFatGramsNoisy(raw) ?? 0;
+    nutrients.carbs = readAmount(compact, raw, ['total carb\\.?', 'total carbohydrates?', 'carbohydrates?'], 'g') ?? 0;
+    nutrients.fiber = readAmount(compact, raw, ['dietary fiber', 'fiber'], 'g') ?? readFiberGramsNoisy(raw) ?? 0;
+    nutrients.protein = readAmount(compact, raw, ['protein'], 'g') ?? 0;
+    nutrients.sodium = readAmount(compact, raw, ['sodium'], 'mg') ?? readSodiumMgNoisy(raw) ?? 0;
+
+    mergeNutrients(nutrients, inline);
+    mergeNutrients(nutrients, linePairs ?? emptyNutrients());
+    mergeNutrients(nutrients, columnar);
+  }
 
   addExtra(nutrients, 'saturated_fat', 'Saturated fat', readAmount(compact, raw, ['saturated fat'], 'g'), 'g');
   addExtra(nutrients, 'sugar', 'Total sugars', readSugar(compact, raw), 'g');
   addExtra(nutrients, 'cholesterol', 'Cholesterol', readAmount(compact, raw, ['cholesterol'], 'mg'), 'mg');
 
-  mergeNutrients(nutrients, scanInlineLines(raw));
-  mergeNutrients(nutrients, parseColumnarLabel(raw));
-
   const servingLabel = servingSize(compact, raw) ?? mealKitServing(raw);
+  const servingsPerContainer = servingsPerContainerFromLabel(compact, raw);
   const looksLikeLabel = hasAnyMacro(nutrients) || /nutrition facts/i.test(compact);
 
-  return { servingLabel, nutrients, looksLikeLabel };
-}
-
-export function labelParseScore(text: string): number {
-  const parsed = parseNutritionLabel(text);
-  const n = parsed.nutrients;
-  let score = 0;
-  if (/nutrition facts/i.test(text)) score += 8;
-  if (n.calories > 0) score += 4;
-  if (n.protein > 0) score += 2;
-  if (n.fat > 0) score += 2;
-  if (n.carbs > 0) score += 2;
-  if (n.fiber > 0) score += 1;
-  if (n.sodium > 0) score += 1;
-  if (parsed.servingLabel) score += 2;
-  return score;
+  return { servingLabel, servingsPerContainer, nutrients, looksLikeLabel };
 }
 
 export function menuCandidates(text: string): string[] {
@@ -92,9 +91,106 @@ function mergeNutrients(target: Nutrients, source: Nutrients | null): void {
 function scanInlineLines(raw: string): Nutrients {
   const nutrients = emptyNutrients();
   for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
-    applySlot(nutrients, matchInlineLine(line));
+    const cleaned = line.replace(/^[\s|[\]()]+/, '');
+    applySlot(nutrients, matchInlineLine(cleaned));
   }
   return nutrients;
+}
+
+/** Interleaved OCR: label row then amount row (not the separate label block / value block layout). */
+function nutrientsFromLabelLinePairs(raw: string): Nutrients | null {
+  const lines = raw.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  const start = lines.findIndex((line) => /nutrition facts|nutrition values|amount per serving/i.test(line));
+  const window = (start >= 0 ? lines.slice(start) : lines).slice(0, 55);
+  if (looksLikeColumnarBlock(window)) return null;
+
+  const nutrients = emptyNutrients();
+  for (let index = 0; index < window.length; index += 1) {
+    const line = window[index] ?? '';
+    applySlot(nutrients, matchInlineLine(line));
+
+    const slot = classifyLabelOnlyLine(line);
+    if (!slot || slotValue(nutrients, slot) > 0) continue;
+
+    const amount = readAmountFollowing(window, index, slot);
+    if (amount != null) applySlot(nutrients, { slot, amount });
+  }
+  return nutrients;
+}
+
+function looksLikeColumnarBlock(lines: string[]): boolean {
+  let consecutiveLabels = 0;
+  let maxLabelRun = 0;
+  let valueLinesAfterLabelRun = 0;
+  let inValueBlock = false;
+  for (const line of lines) {
+    if (classifyLabelOnlyLine(line)) {
+      if (inValueBlock) continue;
+      consecutiveLabels += 1;
+      maxLabelRun = Math.max(maxLabelRun, consecutiveLabels);
+      continue;
+    }
+    const amount = parseStandaloneAmount(line);
+    if (consecutiveLabels >= 2 && amount != null && !isLikelyDailyValuePercentLine(line, amount)) {
+      inValueBlock = true;
+      valueLinesAfterLabelRun += 1;
+      consecutiveLabels = 0;
+      continue;
+    }
+    if (matchInlineLine(line) && inValueBlock) continue;
+    consecutiveLabels = 0;
+  }
+  return maxLabelRun >= 2 && valueLinesAfterLabelRun >= 2;
+}
+
+function readAmountFollowing(lines: string[], labelIndex: number, slot: LabelSlot): number | null {
+  for (let index = labelIndex + 1; index < Math.min(labelIndex + 12, lines.length); index += 1) {
+    const line = lines[index] ?? '';
+    if (matchInlineLine(line)) return null;
+    if (classifyLabelOnlyLine(line)) continue;
+    const amount = parseStandaloneAmount(line);
+    if (amount == null) continue;
+    if (isLikelyDailyValuePercentLine(line, amount)) continue;
+    if (!amountMatchesSlot(line, slot)) continue;
+    return amount;
+  }
+  return null;
+}
+
+function amountMatchesSlot(line: string, slot: LabelSlot): boolean {
+  if (slot === 'calories') return !/\d\s*g\b/i.test(line) && !/\d\s*mg\b/i.test(line);
+  if (slot === 'sodium' || slot === 'cholesterol') return /\d\s*mg\b/i.test(line) || /mg\b/i.test(line);
+  if (
+    slot === 'total_fat' ||
+    slot === 'saturated_fat' ||
+    slot === 'trans_fat' ||
+    slot === 'total_carb' ||
+    slot === 'fiber' ||
+    slot === 'sugars' ||
+    slot === 'protein'
+  ) {
+    return /\d\s*g\b/i.test(line) || /\dg\b/i.test(line);
+  }
+  return true;
+}
+
+function slotValue(nutrients: Nutrients, slot: LabelSlot): number {
+  if (slot === 'calories') return nutrients.calories;
+  if (slot === 'total_fat') return nutrients.fat;
+  if (slot === 'total_carb') return nutrients.carbs;
+  if (slot === 'fiber') return nutrients.fiber;
+  if (slot === 'protein') return nutrients.protein;
+  if (slot === 'sodium') return nutrients.sodium;
+  if (slot === 'saturated_fat') return nutrients.extras.find((row) => row.key === 'saturated_fat')?.amount ?? 0;
+  if (slot === 'sugars') return nutrients.extras.find((row) => row.key === 'sugar')?.amount ?? 0;
+  if (slot === 'cholesterol') return nutrients.extras.find((row) => row.key === 'cholesterol')?.amount ?? 0;
+  return 0;
+}
+
+function isLikelyDailyValuePercentLine(line: string, amount: number): boolean {
+  if (amount < 0) return /^\d{1,2}\s*%?\s*$/.test(line.trim());
+  if (!/^\d{1,2}\s*%?\s*$/.test(line.trim())) return false;
+  return amount <= 99;
 }
 
 function matchInlineLine(line: string): { slot: LabelSlot; amount: number } | null {
@@ -102,6 +198,8 @@ function matchInlineLine(line: string): { slot: LabelSlot; amount: number } | nu
     [/^calories(?!\s+from\s+fat)\s*:?\s*(\d+(?:\.\d+)?)\b/i, 'calories'],
     [/^total fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'total_fat'],
     [/^fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'total_fat'],
+    [/^s\w*at\w*\s+fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'saturated_fat'],
+    [/^sq\w*at\w*\s+fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'saturated_fat'],
     [/^saturated fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'saturated_fat'],
     [/^trans fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'trans_fat'],
     [/^cholesterol\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*mg\b/i, 'cholesterol'],
@@ -109,6 +207,7 @@ function matchInlineLine(line: string): { slot: LabelSlot; amount: number } | nu
     [/^total carb(?:ohydrate)?\.?\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'total_carb'],
     [/^carbohydrate\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'total_carb'],
     [/^dietary fiber\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'fiber'],
+    [/^d\w*et\w*\s+fi\w*\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'fiber'],
     [/^fiber\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'fiber'],
     [/^total sugars?\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'sugars'],
     [/^sugars?\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i, 'sugars'],
@@ -127,33 +226,41 @@ function parseColumnarLabel(raw: string): Nutrients | null {
   const window = (start >= 0 ? lines.slice(start + 1) : lines).slice(0, 40);
 
   const slots: LabelSlot[] = [];
-  const amounts: number[] = [];
+  const amountRows: Array<{ line: string; amount: number }> = [];
 
   for (const line of window) {
-    if (/^(serving size|about \d|servings per|daily value)/i.test(line)) continue;
-    const inline = matchInlineLine(line);
-    if (inline) continue;
+    if (/^(serving size|about \d|servings per|daily value|amount per)/i.test(line)) continue;
+    if (matchInlineLine(line)) continue;
     const slot = classifyLabelOnlyLine(line);
     if (slot) {
       slots.push(slot);
       continue;
     }
     const amount = parseStandaloneAmount(line);
-    if (amount != null) amounts.push(amount);
+    if (amount != null && !isLikelyDailyValuePercentLine(line, amount)) {
+      amountRows.push({ line, amount });
+    }
   }
 
-  if (slots.length < 4 || amounts.length < 4) return null;
-  if (Math.abs(slots.length - amounts.length) > 2) return null;
+  if (slots.length < 2 || amountRows.length < 2) return null;
 
   const nutrients = emptyNutrients();
-  const count = Math.min(slots.length, amounts.length);
-  for (let index = 0; index < count; index += 1) {
-    applySlot(nutrients, { slot: slots[index]!, amount: amounts[index]! });
+  let amountIndex = 0;
+  for (const slot of slots) {
+    while (amountIndex < amountRows.length) {
+      const row = amountRows[amountIndex]!;
+      amountIndex += 1;
+      if (!amountMatchesSlot(row.line, slot)) continue;
+      applySlot(nutrients, { slot, amount: row.amount });
+      break;
+    }
   }
   return nutrients;
 }
 
 function classifyLabelOnlyLine(line: string): LabelSlot | null {
+  if (matchInlineLine(line)) return null;
+  if (/\d/.test(line)) return null;
   if (/^calories\b/i.test(line) && !/from fat/i.test(line)) return 'calories';
   if (/saturated fat/i.test(line)) return 'saturated_fat';
   if (/trans fat/i.test(line)) return 'trans_fat';
@@ -196,7 +303,48 @@ function applySlot(nutrients: Nutrients, row: { slot: LabelSlot; amount: number 
 function readCalories(compact: string, raw: string): number | null {
   const direct = compact.match(/\bcalories(?!\s+from\s+fat)\s*:?\s*(\d+(?:\.\d+)?)\b/i);
   if (direct) return Number(direct[1]);
+  for (const line of raw.split(/\n/)) {
+    const noisy = line.match(/\bcalories\b(?!\s+from\s+fat)[^\d]{0,24}(\d{2,4})\b/i);
+    if (noisy) return Number(noisy[1]);
+  }
   return lineAmount(raw, 'calories', '');
+}
+
+/** Total fat only — ignore saturated/trans lines where OCR still says "Fat Ng". */
+function readSodiumMgNoisy(raw: string): number | null {
+  for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
+    const inline = line.match(/\bsodium\b[^0-9]{0,20}(\d{2,4})\s*mg\b/i);
+    if (inline) return Number(inline[1]);
+  }
+  return null;
+}
+
+function readTotalFatGramsNoisy(raw: string): number | null {
+  for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
+    if (/saturat|sq\w*at|trans\s+fat/i.test(line)) continue;
+    const match = line.match(/\btotal fat\b[^0-9]{0,12}(\d+(?:\.\d+)?)\s*g\b/i);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+function readFiberGramsNoisy(raw: string): number | null {
+  for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
+    const match = line.match(/\b(?:dietary\s+)?fiber\b[^0-9]{0,12}(\d+(?:\.\d+)?)\b/i);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+function readStandaloneFatGrams(raw: string): number | null {
+  for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
+    if (/saturat|trans\s+fat/i.test(line)) continue;
+    const inline = line.match(/^total fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i);
+    if (inline) return Number(inline[1]);
+    const short = line.match(/^fat\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i);
+    if (short) return Number(short[1]);
+  }
+  return null;
 }
 
 function readSugar(compact: string, raw: string): number | null {
@@ -263,7 +411,62 @@ function escapeRegex(value: string): string {
 }
 
 function addExtra(nutrients: Nutrients, key: string, label: string, value: number | null, unit: string): void {
-  if (value != null && value > 0) nutrients.extras.push({ key, label, amount: value, unit });
+  if (value == null || value <= 0) return;
+  if (nutrients.extras.some((row) => row.key === key)) return;
+  nutrients.extras.push({ key, label, amount: value, unit });
+}
+
+function servingsPerContainerFromLabel(compact: string, raw: string): number | null {
+  const patterns = [
+    /(\d+(?:\.\d+)?)\s*servings?\s+per\s+container/i,
+    /about\s+(\d+(?:\.\d+)?)\s*servings?\s+per\s+container/i,
+  ];
+  for (const pattern of patterns) {
+    const match = compact.match(pattern) ?? raw.match(pattern);
+    if (match) {
+      const value = Number(match[1]);
+      if (value > 0 && value <= 999) return value;
+    }
+  }
+
+  if (/\b1\s*servings?\s+per\s+container\b/i.test(compact) || /\b1\s*serving\s+per\s+container\b/i.test(raw)) {
+    return 1;
+  }
+
+  const lines = raw.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    const match = line.match(/^(\d+(?:\.\d+)?)\s*servings?\s+per\s+container/i);
+    if (match) {
+      const value = Number(match[1]);
+      if (value > 0 && value <= 999) return value;
+    }
+
+    if (!/per\s+container/i.test(line)) continue;
+
+    const inline = line.match(/(\d+(?:\.\d+)?)\s*servings?\s+per\s+container/i);
+    if (inline) {
+      const value = Number(inline[1]);
+      if (value > 0 && value <= 999) return value;
+    }
+
+    const prev = lines[index - 1] ?? '';
+    if (/^\d{1,2}$/.test(prev)) {
+      const value = Number(prev);
+      if (value > 0 && value <= 99) return value;
+    }
+
+    const trailing = line.match(/per\s+container[^\d]{0,28}(\d{1,2})\s*$/i)
+      ?? line.match(/per\s+container[^\d]{0,28}[^\d]*(\d{1,2})\b/i);
+    if (trailing) {
+      let value = Number(trailing[1]);
+      if (value === 15 && /\bcalories\b[^\d]{0,20}150\b/i.test(raw)) value = 1;
+      if (value > 0 && value <= 99) return value;
+    }
+
+    if (/\bper\s+container\b/i.test(line) && /\b1\b/.test(line.replace(/150/g, ''))) return 1;
+  }
+  return null;
 }
 
 function servingSize(compact: string, raw: string): string | null {

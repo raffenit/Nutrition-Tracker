@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS foods (
   is_drink INTEGER NOT NULL DEFAULT 0,
   drink_ml REAL,
   makes_servings REAL NOT NULL DEFAULT 1,
+  servings_per_container REAL,
+  nutrient_units_json TEXT NOT NULL DEFAULT '{}',
   source TEXT NOT NULL,
   source_ref TEXT,
   created_at TEXT NOT NULL
@@ -223,5 +225,13 @@ function migrate(db: AppDatabase): void {
     db.exec(
       `CREATE UNIQUE INDEX IF NOT EXISTS hydration_logs_client_mutation ON hydration_logs(user_id, client_mutation_id) WHERE client_mutation_id IS NOT NULL`,
     );
+  }
+  let foodColumns = db.prepare('PRAGMA table_info(foods)').all() as Array<{ name: string }>;
+  if (!foodColumns.some((column) => column.name === 'servings_per_container')) {
+    db.exec(`ALTER TABLE foods ADD COLUMN servings_per_container REAL`);
+    foodColumns = db.prepare('PRAGMA table_info(foods)').all() as Array<{ name: string }>;
+  }
+  if (!foodColumns.some((column) => column.name === 'nutrient_units_json')) {
+    db.exec(`ALTER TABLE foods ADD COLUMN nutrient_units_json TEXT NOT NULL DEFAULT '{}'`);
   }
 }

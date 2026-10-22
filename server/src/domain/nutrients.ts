@@ -2,6 +2,7 @@ import { HttpError } from '../http/errors.js';
 import type { ExtraNutrient, MacroShares, Nutrients, Targets } from '../types.js';
 import { DEFAULT_DATE_FORMAT, parseDateFormat } from './dateFormat.js';
 import { isRecord, nonNegative, optionalText, requiredNumber, requiredText } from './guards.js';
+import { readNutrientsWithUnits } from './nutrientUnits.js';
 
 export const DEFAULT_TARGETS: Targets = {
   calories: 2000,
@@ -56,16 +57,7 @@ export function macroShares(nutrients: Nutrients): MacroShares {
 }
 
 export function readNutrients(value: unknown): Nutrients {
-  if (!isRecord(value)) throw new HttpError(400, 'Nutrition facts are required');
-  return {
-    calories: nonNegative(requiredNumber(value.calories, 'Calories'), 'Calories'),
-    protein: nonNegative(requiredNumber(value.protein, 'Protein'), 'Protein'),
-    fiber: nonNegative(requiredNumber(value.fiber, 'Fiber'), 'Fiber'),
-    fat: nonNegative(requiredNumber(value.fat, 'Fat'), 'Fat'),
-    carbs: nonNegative(requiredNumber(value.carbs, 'Carbs'), 'Carbs'),
-    sodium: nonNegative(requiredNumber(value.sodium, 'Sodium'), 'Sodium'),
-    extras: readExtras(value.extras),
-  };
+  return readNutrientsWithUnits(value).nutrients;
 }
 
 export function readTargets(value: unknown): Targets {

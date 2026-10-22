@@ -48,7 +48,9 @@ export function App() {
       {path === '/add' && <AddLogPage />}
       {path === '/plan' && <PlanPage />}
       {path === '/library' && <LibraryPage />}
-      {path === '/settings' && session.user && <SettingsPage user={session.user} household={session.household} />}
+      {path === '/settings' && session.user && (
+        <SettingsPage user={session.user} household={session.household} onSessionChange={setSession} />
+      )}
       {path === '/weight' && <WeightPage />}
       {(path === '/foods/new' || path === '/foods/edit') && <FoodPage editId={path === '/foods/edit' ? editId : null} />}
       {(path === '/recipes/new' || path === '/recipes/edit') && <FoodPage custom editId={path === '/recipes/edit' ? editId : null} />}

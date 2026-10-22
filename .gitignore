@@ -9,3 +9,4 @@ data/
 
 # Host-specific test logs and notes (see local.example/); config is .env only
 local/
+.cursor/

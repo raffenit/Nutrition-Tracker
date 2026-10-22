@@ -152,7 +152,7 @@ export function AddLogPage() {
                     value={quickNutrients[field.key]}
                     onChange={(event) => setQuickNutrients(setCoreNutrient(quickNutrients, field.key, Number(event.target.value)))}
                   />
-                  <span className="nutrient-unit">{field.unit}</span>
+                  <span className="nutrient-unit">{field.key === 'calories' ? 'kcal' : field.key === 'sodium' ? 'mg' : 'g'}</span>
                 </span>
               </label>
             ))}

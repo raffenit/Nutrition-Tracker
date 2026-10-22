@@ -20,8 +20,25 @@ ENV NODE_ENV=production
 ENV PORT=3010
 ENV DATA_DIR=/data
 ENV PUBLIC_DIR=/app/public
+# Runtime toggle (no rebuild): set EASYOCR_ENABLED=0 in .env to skip neural OCR and use Tesseract only.
+ENV EASYOCR_ENABLED=1
+
+COPY --from=server /app/python/requirements.txt /tmp/easyocr-requirements.txt
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libgomp1 \
+    libgl1 \
+  && pip3 install --break-system-packages --no-cache-dir -r /tmp/easyocr-requirements.txt \
+  && rm -rf /var/lib/apt/lists/* /tmp/easyocr-requirements.txt
+
 COPY --from=server /app/node_modules ./node_modules
 COPY --from=server /app/dist ./dist
+COPY --from=server /app/python ./python
 COPY --from=server /app/package.json ./package.json
 COPY --from=web /web/dist ./public
 EXPOSE 3010

@@ -9,16 +9,17 @@ import {
   type Units,
 } from '../units';
 import { disablePushNotifications, enablePushNotifications, fetchPushStatus, type PushStatus } from '../push';
-import type { DietPresetPublic, Targets, User, WeightStatus } from '../types';
+import type { DietPresetPublic, Session, Targets, User, WeightStatus } from '../types';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 type SettingsPageProps = {
   user: User;
   household: { name: string; timezone: string } | null;
+  onSessionChange: (session: Session) => void;
 };
 
-export function SettingsPage({ user, household }: SettingsPageProps) {
+export function SettingsPage({ user, household, onSessionChange }: SettingsPageProps) {
   const [targets, setTargets] = useState<Targets | null>(null);
   const [weight, setWeight] = useState<WeightStatus | null>(null);
   const [kioskUrl, setKioskUrl] = useState<string | null>(null);
@@ -52,6 +53,28 @@ export function SettingsPage({ user, household }: SettingsPageProps) {
       <WeightSettings weight={weight} onChange={setWeight} />
       <PushSettings push={push} onChange={setPush} />
       <OfflineSettings />
+      <section className="card settings-account">
+        <h2>Account</h2>
+        <p className="muted">
+          Signed in as <strong>{user.name}</strong>
+          {user.role === 'admin' ? ' (admin)' : ''}.
+        </p>
+        <button
+          type="button"
+          className="settings-secondary-btn"
+          onClick={() =>
+            void api('/api/auth/logout', { method: 'POST' })
+              .then(() => api<Session>('/api/session'))
+              .then((session) => {
+                onSessionChange(session);
+                navigate('/login');
+              })
+          }
+        >
+          Sign out
+        </button>
+        <p className="muted">Use sign-in to switch to another household member on this device.</p>
+      </section>
       {user.role === 'admin' && (
         <section className="card settings-household">
           <h2>Household</h2>

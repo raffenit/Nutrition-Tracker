@@ -1,4 +1,5 @@
 import { api, ApiError } from '../api/client';
+import { randomUUID } from '../uuid';
 import { addOutboxEntry } from './db';
 import type { OutboxDeleteMealEntry, OutboxHydrationEntry, OutboxMealEntry } from './types';
 
@@ -16,7 +17,7 @@ async function scheduleOutboxSync(): Promise<void> {
 }
 
 function newMutationId(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 function isNetworkFailure(error: unknown): boolean {

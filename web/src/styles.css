@@ -556,7 +556,40 @@ label > select { width: 100%; min-width: 0; }
 .checkbox-inline input { width: auto; min-height: auto; }
 .import-panel { gap: 10px; }
 .import-hint { margin: 0; font-size: 0.82rem; }
-.import-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.label-photo-tips {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, var(--text) 8%);
+  font-size: 0.88rem;
+}
+.label-photo-tips summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style-position: outside;
+}
+.label-photo-tips ul {
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 6px;
+}
+.label-photo-tips-note {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+}
+.import-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.import-camera-desktop-only {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  font-size: 0.88rem;
+  color: var(--muted, var(--text));
+  opacity: 0.92;
+}
 .import-file-input {
   position: absolute;
   width: 1px;

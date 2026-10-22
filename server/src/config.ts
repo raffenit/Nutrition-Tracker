@@ -13,6 +13,8 @@ export type AppConfig = {
   databasePath: string;
   uploadDir: string;
   tessdataDir: string;
+  easyocrModelDir: string;
+  easyocrEnabled: boolean;
   publicDir: string;
   usdaApiKey: string | null;
   timezone: string;
@@ -30,8 +32,11 @@ export function loadConfig(): AppConfig {
   const dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), 'data');
   const uploadDir = path.join(dataDir, 'uploads');
   const tessdataDir = path.join(dataDir, 'tessdata');
+  const easyocrModelDir = path.join(dataDir, 'easyocr-models');
   mkdirSync(uploadDir, { recursive: true });
   mkdirSync(tessdataDir, { recursive: true });
+  mkdirSync(easyocrModelDir, { recursive: true });
+  const easyocrEnabled = process.env.EASYOCR_ENABLED !== '0' && process.env.EASYOCR_ENABLED !== 'false';
   const publicUrl =
     blankToNull(process.env.TAILSCALE_SERVER_URL) ?? blankToNull(process.env.PUBLIC_URL);
   const publishedPort = readPort(process.env.NUTRITION_PORT ?? process.env.PUBLIC_PORT);
@@ -41,6 +46,8 @@ export function loadConfig(): AppConfig {
     databasePath: path.join(dataDir, 'nutrition.sqlite'),
     uploadDir,
     tessdataDir,
+    easyocrModelDir,
+    easyocrEnabled,
     publicDir: process.env.PUBLIC_DIR ?? path.join(process.cwd(), 'public'),
     usdaApiKey: blankToNull(process.env.USDA_API_KEY),
     timezone: process.env.TZ?.trim() || 'America/Chicago',

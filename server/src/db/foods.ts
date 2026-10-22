@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Food, FoodKind, FoodSource, IngredientLine, Nutrients } from '../types.js';
+import type { CoreNutrientUnits, Food, FoodKind, FoodSource, IngredientLine, Nutrients } from '../types.js';
+import { DEFAULT_CORE_NUTRIENT_UNITS, readCoreNutrientUnits } from '../domain/nutrientUnits.js';
 import { parseStoredExtras } from '../domain/nutrients.js';
 import type { AppDatabase } from './database.js';
 
@@ -9,7 +10,9 @@ export type NewFood = {
   brand: string | null;
   kind: FoodKind;
   servingLabel: string;
+  servingsPerContainer: number | null;
   nutrients: Nutrients;
+  nutrientUnits: CoreNutrientUnits;
   isFavorite: boolean;
   isDrink: boolean;
   drinkMl: number | null;
@@ -36,6 +39,8 @@ type FoodSql = {
   is_drink: number;
   drink_ml: number | null;
   makes_servings: number;
+  servings_per_container: number | null;
+  nutrient_units_json: string;
   source: FoodSource;
   source_ref: string | null;
 };
@@ -46,10 +51,12 @@ export function insertFood(db: AppDatabase, food: NewFood): Food {
     db.prepare(
       `INSERT INTO foods (
         id, created_by, name, brand, kind, serving_label, calories, protein, fiber, fat, carbs, sodium,
-        extras_json, is_favorite, is_drink, drink_ml, makes_servings, source, source_ref, created_at
+        extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json,
+        source, source_ref, created_at
       ) VALUES (
         @id, @createdBy, @name, @brand, @kind, @servingLabel, @calories, @protein, @fiber, @fat, @carbs, @sodium,
-        @extras, @isFavorite, @isDrink, @drinkMl, @makesServings, @source, @sourceRef, @createdAt
+        @extras, @isFavorite, @isDrink, @drinkMl, @makesServings, @servingsPerContainer, @nutrientUnitsJson,
+        @source, @sourceRef, @createdAt
       )`,
     ).run({ id, ...foodParams(food), createdAt: new Date().toISOString() });
     replaceIngredients(db, id, food.ingredients);
@@ -66,7 +73,8 @@ export function updateFood(db: AppDatabase, id: string, food: NewFood): Food | n
         name = @name, brand = @brand, kind = @kind, serving_label = @servingLabel,
         calories = @calories, protein = @protein, fiber = @fiber, fat = @fat, carbs = @carbs, sodium = @sodium,
         extras_json = @extras, is_favorite = @isFavorite, is_drink = @isDrink, drink_ml = @drinkMl,
-        makes_servings = @makesServings, source = @source, source_ref = @sourceRef
+        makes_servings = @makesServings, servings_per_container = @servingsPerContainer,
+        nutrient_units_json = @nutrientUnitsJson, source = @source, source_ref = @sourceRef
        WHERE id = @id`,
     ).run({ id, ...foodParams(food) });
     replaceIngredients(db, id, food.ingredients);
@@ -144,6 +152,7 @@ function toFood(row: FoodSql, ingredients: IngredientLine[]): Food {
     brand: row.brand,
     kind: row.kind,
     servingLabel: row.serving_label,
+    servingsPerContainer: row.servings_per_container,
     nutrients: {
       calories: row.calories,
       protein: row.protein,
@@ -153,6 +162,7 @@ function toFood(row: FoodSql, ingredients: IngredientLine[]): Food {
       sodium: row.sodium,
       extras: parseStoredExtras(row.extras_json),
     },
+    nutrientUnits: parseStoredNutrientUnits(row.nutrient_units_json),
     isFavorite: row.is_favorite === 1,
     isDrink: row.is_drink === 1,
     drinkMl: row.drink_ml,
@@ -181,9 +191,20 @@ function foodParams(food: NewFood): Record<string, string | number | null> {
     isDrink: food.isDrink ? 1 : 0,
     drinkMl: food.drinkMl,
     makesServings: food.makesServings,
+    servingsPerContainer: food.servingsPerContainer,
+    nutrientUnitsJson: JSON.stringify(food.nutrientUnits),
     source: food.source,
     sourceRef: food.sourceRef,
   };
+}
+
+function parseStoredNutrientUnits(json: string | undefined): CoreNutrientUnits {
+  if (!json) return { ...DEFAULT_CORE_NUTRIENT_UNITS };
+  try {
+    return readCoreNutrientUnits(JSON.parse(json));
+  } catch {
+    return { ...DEFAULT_CORE_NUTRIENT_UNITS };
+  }
 }
 
 function likeTerm(query: string): string {
@@ -191,4 +212,4 @@ function likeTerm(query: string): string {
 }
 
 const FOOD_COLUMNS = `SELECT id, name, brand, kind, serving_label, calories, protein, fiber, fat, carbs, sodium,
-  extras_json, is_favorite, is_drink, drink_ml, makes_servings, source, source_ref`;
+  extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json, source, source_ref`;

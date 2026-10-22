@@ -10,9 +10,11 @@ export function testConfig(): AppConfig {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'nutrition-test-'));
   const uploadDir = path.join(dataDir, 'uploads');
   const tessdataDir = path.join(dataDir, 'tessdata');
+  const easyocrModelDir = path.join(dataDir, 'easyocr-models');
   const publicDir = path.join(dataDir, 'public');
   mkdirSync(uploadDir, { recursive: true });
   mkdirSync(tessdataDir, { recursive: true });
+  mkdirSync(easyocrModelDir, { recursive: true });
   mkdirSync(publicDir, { recursive: true });
   return {
     port: 0,
@@ -20,6 +22,8 @@ export function testConfig(): AppConfig {
     databasePath: path.join(dataDir, 'nutrition.sqlite'),
     uploadDir,
     tessdataDir,
+    easyocrModelDir,
+    easyocrEnabled: false,
     publicDir,
     usdaApiKey: null,
     timezone: 'America/Chicago',

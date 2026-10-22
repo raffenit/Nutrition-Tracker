@@ -13,6 +13,15 @@ export type ExtraNutrient = {
   unit: string;
 };
 
+export type CoreNutrientUnits = {
+  calories: 'kcal';
+  protein: 'g' | 'mg';
+  fiber: 'g' | 'mg';
+  fat: 'g' | 'mg';
+  carbs: 'g' | 'mg';
+  sodium: 'mg' | 'g';
+};
+
 export type Nutrients = {
   calories: number;
   protein: number;
@@ -64,7 +73,11 @@ export type Food = {
   brand: string | null;
   kind: FoodKind;
   servingLabel: string;
+  /** Packaged labels: how many servings in the full container (null if unknown). */
+  servingsPerContainer: number | null;
   nutrients: Nutrients;
+  /** Units for editing/display; amounts in `nutrients` are stored canonically (g, mg, kcal). */
+  nutrientUnits: CoreNutrientUnits;
   isFavorite: boolean;
   isDrink: boolean;
   drinkMl: number | null;

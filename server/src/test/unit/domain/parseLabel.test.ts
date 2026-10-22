@@ -154,6 +154,90 @@ test('pairs OCR columns when labels and values are in separate blocks', () => {
   assert.equal(parsed.nutrients.extras.find((extra) => extra.key === 'sugar')?.amount, 1);
 });
 
+/** OCR often emits % Daily Value as bare 1–2 digit lines between macro amounts (any FDA panel). */
+const FDA_OCR_PERCENT_NOISE = `
+Nutrition Facts
+1 serving per container
+Serving size 1 bottle (340 mL)
+Amount per serving
+Calories
+Total Fat
+Saturated Fat
+Trans Fat
+Cholesterol
+Sodium
+Total Carbohydrate
+Dietary Fiber
+Total Sugars
+Protein
+150
+2.5g
+1.5g
+0g
+25mg
+230mg
+4g
+1g
+2g
+30g
+3
+10
+1
+60
+`;
+
+test('skips daily-value percent lines when pairing label columns', () => {
+  const parsed = parseNutritionLabel(FDA_OCR_PERCENT_NOISE);
+  assert.equal(parsed.nutrients.calories, 150);
+  assert.equal(parsed.nutrients.fat, 2.5);
+  assert.equal(parsed.nutrients.carbs, 4);
+  assert.equal(parsed.nutrients.fiber, 1);
+  assert.equal(parsed.nutrients.protein, 30);
+  assert.equal(parsed.nutrients.sodium, 230);
+});
+
+test('reads servings per container from label headings', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+1 serving per container
+Serving size 1 bottle (340 mL)
+Calories 150
+`);
+  assert.equal(parsed.servingsPerContainer, 1);
+});
+
+test('infers one serving per container from noisy OCR near calories 150', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+pee] per container —~15
+Amount per serving
+calories 150
+Protein 30g
+`);
+  assert.equal(parsed.servingsPerContainer, 1);
+});
+
+test('reads macros when labels precede amounts with percent noise in between', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Amount per serving
+Calories
+Total Fat
+Total Carbohydrate
+150
+2.5g
+3
+4g
+Protein 30g
+Sodium 230mg
+`);
+  assert.equal(parsed.nutrients.calories, 150);
+  assert.equal(parsed.nutrients.fat, 2.5);
+  assert.equal(parsed.nutrients.carbs, 4);
+  assert.equal(parsed.nutrients.protein, 30);
+  assert.equal(parsed.nutrients.sodium, 230);
+});
+
 test('treats a restaurant menu as names rather than a label', () => {
   const text = 'Spring Menu\nRoasted chicken\nGarden salad\n';
   const parsed = parseNutritionLabel(text);

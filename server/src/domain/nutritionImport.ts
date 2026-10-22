@@ -8,6 +8,7 @@ export type NutritionImportDraft = {
     brand: string | null;
     kind: 'packaged' | 'restaurant';
     servingLabel: string;
+    servingsPerContainer: number | null;
     nutrients: Nutrients;
     isDrink: boolean;
     drinkMl: null;
@@ -31,6 +32,7 @@ export function buildNutritionImport(
         brand: null,
         kind: 'restaurant',
         servingLabel: '1 serving',
+        servingsPerContainer: null,
         nutrients: empty(),
         isDrink: false,
         drinkMl: null,
@@ -58,6 +60,7 @@ export function buildNutritionImport(
       brand: null,
       kind: foodKind,
       servingLabel: parsed.servingLabel ?? '1 serving',
+      servingsPerContainer: parsed.servingsPerContainer,
       nutrients: parsed.nutrients,
       isDrink: false,
       drinkMl: null,

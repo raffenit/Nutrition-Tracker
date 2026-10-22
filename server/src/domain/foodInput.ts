@@ -3,6 +3,7 @@ import { HttpError } from '../http/errors.js';
 import type { FoodKind, FoodSource, IngredientLine } from '../types.js';
 import { isRecord, nonNegative, optionalText, requiredNumber, requiredText } from './guards.js';
 import { readNutrients } from './nutrients.js';
+import { readNutrientsWithUnits } from './nutrientUnits.js';
 
 const KINDS = ['packaged', 'ingredient', 'restaurant', 'custom'] as const;
 const SOURCES = ['manual', 'image', 'pdf', 'api', 'composed'] as const;
@@ -14,13 +15,23 @@ export function readFoodInput(body: unknown, createdBy: string): NewFood {
   if (isDrink && (!drinkMl || drinkMl <= 0)) throw new HttpError(400, 'A drink needs a volume');
   const makesServings = body.makesServings === undefined ? 1 : requiredNumber(body.makesServings, 'Servings');
   if (makesServings <= 0) throw new HttpError(400, 'Servings must be greater than zero');
+  const servingsPerContainer =
+    body.servingsPerContainer === null || body.servingsPerContainer === undefined
+      ? null
+      : requiredNumber(body.servingsPerContainer, 'Servings per container');
+  if (servingsPerContainer != null && servingsPerContainer <= 0) {
+    throw new HttpError(400, 'Servings per container must be greater than zero');
+  }
+  const { nutrients, units } = readNutrientsWithUnits(body.nutrients);
   return {
     createdBy,
     name: requiredText(body.name, 'Name'),
     brand: optionalText(body.brand),
     kind: oneOf(body.kind, KINDS, 'Food type'),
     servingLabel: requiredText(body.servingLabel, 'Serving'),
-    nutrients: readNutrients(body.nutrients),
+    servingsPerContainer,
+    nutrients,
+    nutrientUnits: units,
     isFavorite: body.isFavorite === true,
     isDrink,
     drinkMl,
