@@ -432,6 +432,46 @@ label > select { width: 100%; min-width: 0; }
 .hydration-card h2 { margin: 0; font-size: 0.95rem; }
 .hydration-amount { margin: 2px 0 0; font-size: 0.88rem; font-weight: 650; line-height: 1.3; }
 .hydration-card-body { display: grid; gap: 8px; min-height: 0; }
+.hydration-glass-column {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  justify-items: center;
+  align-items: stretch;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+.hydration-amount-mobile {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+}
+.hydration-amount-in-glass {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 0 0.35rem;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: clamp(0.68rem, 0.62rem + 0.35vw, 0.82rem);
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--text);
+}
+.hydration-amount-in-glass .muted {
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+.hydration-amount-in-glass.hydration-amount-on-water {
+  color: var(--ink);
+}
+.hydration-amount-in-glass.hydration-amount-on-water .muted {
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+}
 .hydration-card-stack { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
 .hydration-empty { margin: 0; font-size: 0.88rem; }
 .hydration-bar { height: 8px; flex-shrink: 0; }
@@ -450,6 +490,7 @@ label > select { width: 100%; min-width: 0; }
   min-width: 2px;
   border-radius: 99px;
   background: linear-gradient(90deg, var(--water), var(--water-deep));
+  z-index: 0;
 }
 .hydration-add-form {
   display: grid;
@@ -479,6 +520,7 @@ label > select { width: 100%; min-width: 0; }
   border: 1px solid color-mix(in srgb, var(--water) 45%, transparent);
 }
 .hydration-list { flex: 1 1 auto; min-height: 0; }
+.hydration-list li { align-items: center; }
 .remove-icon-btn {
   width: 2.25rem;
   min-height: 2.25rem;
@@ -561,6 +603,39 @@ label > select { width: 100%; min-width: 0; }
   align-items: center;
   column-gap: 8px;
   min-width: 0;
+}
+.import-field-hint {
+  margin-left: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.import-field-hint-missing { color: var(--danger); }
+.import-field-hint-review { color: var(--accent-warm); }
+.import-field-missing,
+label.import-field-missing {
+  outline: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.import-field-review,
+label.import-field-review,
+.nutrient-field.import-field-review {
+  outline: 1px solid color-mix(in srgb, var(--accent-warm) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.import-field-gaps {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  list-style: none;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-size: 0.84rem;
+  display: grid;
+  gap: 0.35rem;
 }
 .nutrient-field > span:first-child {
   min-width: 0;
@@ -819,18 +894,25 @@ label > select { width: 100%; min-width: 0; }
     gap: 16px;
     align-items: start;
   }
-  .food-form-column-side {
+  .food-form-column-import {
     position: sticky;
     top: 8px;
+    align-self: start;
+  }
+  .food-form-column-import .import-tiles:not(.import-tiles-single) {
+    grid-template-columns: 1fr;
+  }
+  .food-form-column-side {
+    align-self: start;
   }
   .food-form .form-head h1 { font-size: 1.35rem; }
   .food-form .form-section { padding: 14px 16px; }
-  .food-form-column-side .nutrient-fields {
+  .food-form-column-manual .nutrient-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 14px;
     row-gap: 6px;
   }
-  .food-form-column-side .nutrient-fields legend { grid-column: 1 / -1; }
+  .food-form-column-manual .nutrient-fields legend { grid-column: 1 / -1; }
 }
 .menu-pick-list { min-width: 0; }
 .pdf-review { display: grid; gap: 8px; }
@@ -1194,8 +1276,19 @@ label > select { width: 100%; min-width: 0; }
     gap: clamp(8px, 0.9vw, 12px);
     align-items: stretch;
   }
-  .dashboard-hero .hydration-card-body:not(:has(.hydration-bar)) {
+  .dashboard-hero .hydration-card-body:not(:has(.hydration-glass-column)) {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .dashboard-hero .hydration-glass-column {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .dashboard-hero .hydration-amount-mobile {
+    display: none;
+  }
+  .dashboard-hero .hydration-amount-in-glass {
+    display: flex;
   }
   .dashboard-hero .hydration-bar {
     height: 100%;
@@ -1227,6 +1320,7 @@ label > select { width: 100%; min-width: 0; }
     min-width: 0;
     min-height: 2px;
     border-radius: 0;
+    z-index: 0;
     background: linear-gradient(180deg, var(--water) 0%, var(--water-deep) 100%);
     box-shadow: inset 0 2px 0 color-mix(in srgb, #fff 22%, var(--water));
   }
@@ -1252,15 +1346,11 @@ label > select { width: 100%; min-width: 0; }
     padding: 6px 0;
     font-size: clamp(0.8rem, 0.76rem + 0.15cqw, 0.88rem);
     line-height: 1.35;
-    align-items: flex-start;
     gap: 8px;
   }
   .dashboard-hero .hydration-list li > span {
     min-width: 0;
     flex: 1 1 auto;
-  }
-  .dashboard-hero .hydration-list li > .remove-icon-btn {
-    align-self: center;
   }
   .dashboard-hero .hydration-add-form {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

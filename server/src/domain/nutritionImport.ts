@@ -1,3 +1,4 @@
+import { assessLabelFieldReview, type LabelFieldReviewMap } from './labelFieldReview.js';
 import { menuCandidates, parseNutritionLabel } from './parseLabel.js';
 import { parseMenuFromSource, type MenuItemDraft } from './parseMenuTable.js';
 import type { Nutrients } from '../types.js';
@@ -17,6 +18,7 @@ export type NutritionImportDraft = {
   candidates: string[];
   menuItems: MenuItemDraft[];
   warning: string | null;
+  fieldReview: LabelFieldReviewMap;
 };
 
 export function buildNutritionImport(
@@ -41,10 +43,12 @@ export function buildNutritionImport(
       candidates: menuItems.map((item) => item.name),
       menuItems,
       warning: `Found ${menuItems.length} menu items. Tap one to load its nutrition.`,
+      fieldReview: {},
     };
   }
 
   const parsed = parseNutritionLabel(text);
+  const fieldReview = assessLabelFieldReview(text, parsed);
   let warning: string | null = null;
   if (!text.trim()) {
     warning = 'No text was found. Enter nutrition values yourself.';
@@ -69,6 +73,7 @@ export function buildNutritionImport(
     candidates: parsed.looksLikeLabel ? [] : menuCandidates(text),
     menuItems: [],
     warning,
+    fieldReview,
   };
 }
 

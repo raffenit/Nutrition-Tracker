@@ -1,4 +1,13 @@
 import type { Nutrients } from '../types.js';
+import {
+  correctAmountIfUnitMisreadAsSuffix,
+  findEmbeddedCanonicalSpan,
+  parseAmountWithFuzzyUnit,
+} from './ocrConfusables.js';
+import { classifyVariantLabelLine, embeddedCanonicalForSlot, matchVariantLabelToken } from './labelVariants.js';
+import { parseServingsPerContainerVariant, parseServingSizeVariant } from './labelHeaderParse.js';
+import { estimateSaturatedFatFromOcrSlice } from './labelUnits.js';
+import { inferNutrientsFromUnits, normalizeOcrUnitNoise, parseMeasuredAmount } from './labelUnits.js';
 import { emptyNutrients } from './nutrients.js';
 
 export type LabelParse = {
@@ -35,12 +44,22 @@ export function parseNutritionLabel(text: string): LabelParse {
     mergeNutrients(nutrients, columnar);
   }
 
-  addExtra(nutrients, 'saturated_fat', 'Saturated fat', readAmount(compact, raw, ['saturated fat'], 'g'), 'g');
+  mergeNutrients(nutrients, inferNutrientsFromUnits(raw));
+
+  addExtra(
+    nutrients,
+    'saturated_fat',
+    'Saturated fat',
+    readAmount(compact, raw, ['saturated fat'], 'g') ?? readSaturatedFatGramsNoisy(raw, nutrients.fat),
+    'g',
+  );
   addExtra(nutrients, 'sugar', 'Total sugars', readSugar(compact, raw), 'g');
   addExtra(nutrients, 'cholesterol', 'Cholesterol', readAmount(compact, raw, ['cholesterol'], 'mg'), 'mg');
 
-  const servingLabel = servingSize(compact, raw) ?? mealKitServing(raw);
-  const servingsPerContainer = servingsPerContainerFromLabel(compact, raw);
+  const servingLabel =
+    servingSize(compact, raw) ?? parseServingSizeVariant(raw) ?? mealKitServing(raw);
+  const servingsPerContainer =
+    servingsPerContainerFromLabel(compact, raw) ?? parseServingsPerContainerVariant(raw);
   const looksLikeLabel = hasAnyMacro(nutrients) || /nutrition facts/i.test(compact);
 
   return { servingLabel, servingsPerContainer, nutrients, looksLikeLabel };
@@ -152,14 +171,46 @@ function readAmountFollowing(lines: string[], labelIndex: number, slot: LabelSlo
     if (amount == null) continue;
     if (isLikelyDailyValuePercentLine(line, amount)) continue;
     if (!amountMatchesSlot(line, slot)) continue;
-    return amount;
+    return finalizeMassAmountForSlot(line, amount, slot);
   }
   return null;
 }
 
+function isGramMacroSlot(slot: LabelSlot): boolean {
+  return (
+    slot === 'total_fat' ||
+    slot === 'saturated_fat' ||
+    slot === 'trans_fat' ||
+    slot === 'total_carb' ||
+    slot === 'fiber' ||
+    slot === 'sugars' ||
+    slot === 'protein'
+  );
+}
+
+function finalizeMassAmountForSlot(line: string, amount: number, slot: LabelSlot): number {
+  const literal = line.match(/^<?\s*(\d+(?:\.\d+)?)/)?.[1] ?? String(amount);
+  if (isGramMacroSlot(slot)) {
+    return correctAmountIfUnitMisreadAsSuffix(literal, 'g', line);
+  }
+  if (slot === 'sodium' || slot === 'cholesterol') {
+    return correctAmountIfUnitMisreadAsSuffix(literal, 'mg', line);
+  }
+  return amount;
+}
+
 function amountMatchesSlot(line: string, slot: LabelSlot): boolean {
+  const normalized = normalizeOcrUnitNoise(line);
+  const measured = parseMeasuredAmount(normalized);
+  if (measured) {
+    if (slot === 'calories') return measured.unit === 'kcal';
+    if (slot === 'sodium' || slot === 'cholesterol') return measured.unit === 'mg';
+    if (slot === 'total_fat' || slot === 'saturated_fat' || slot === 'trans_fat' || slot === 'total_carb' || slot === 'fiber' || slot === 'sugars' || slot === 'protein') {
+      return measured.unit === 'g';
+    }
+  }
   if (slot === 'calories') return !/\d\s*g\b/i.test(line) && !/\d\s*mg\b/i.test(line);
-  if (slot === 'sodium' || slot === 'cholesterol') return /\d\s*mg\b/i.test(line) || /mg\b/i.test(line);
+  if (slot === 'sodium' || slot === 'cholesterol') return /\d\s*mg\b/i.test(line) || /mg\b/i.test(line) || /Ng\b/i.test(normalized);
   if (
     slot === 'total_fat' ||
     slot === 'saturated_fat' ||
@@ -169,7 +220,7 @@ function amountMatchesSlot(line: string, slot: LabelSlot): boolean {
     slot === 'sugars' ||
     slot === 'protein'
   ) {
-    return /\d\s*g\b/i.test(line) || /\dg\b/i.test(line);
+    return /\d\s*g\b/i.test(line) || /\dg\b/i.test(line) || /\d\s*gm\b/i.test(normalized);
   }
   return true;
 }
@@ -217,6 +268,49 @@ function matchInlineLine(line: string): { slot: LabelSlot; amount: number } | nu
     const match = line.match(pattern);
     if (match) return { slot, amount: Number(match[1]) };
   }
+  return matchVariantInlineLine(line);
+}
+
+function matchVariantInlineLine(line: string): { slot: LabelSlot; amount: number } | null {
+  const trimmed = line.trim();
+  const gluedBlob = trimmed.match(/^([A-Za-z][A-Za-z0-9]{5,40})/);
+  if (gluedBlob) {
+    const blob = gluedBlob[1] ?? '';
+    const slot = matchVariantLabelToken(blob);
+    if (slot) {
+      const canonical = embeddedCanonicalForSlot(blob, slot);
+      const span = canonical ? findEmbeddedCanonicalSpan(blob, canonical) : null;
+      const parsed = span ? parseAmountWithFuzzyUnit(blob.slice(span.end)) : null;
+      if (parsed) {
+        if (slot === 'sodium' || slot === 'cholesterol') {
+          if (parsed.unit === 'mg') return { slot, amount: parsed.amount };
+        } else if (parsed.unit === 'g') {
+          return { slot, amount: parsed.amount };
+        }
+      }
+    }
+  }
+
+  const labelFirst = trimmed.match(/^([A-Za-z][A-Za-z_]{0,22}[A-Za-z]|[A-Za-z]{3,22})\s*:?\s*(.+)$/);
+  if (!labelFirst) return null;
+
+  const slot = matchVariantLabelToken(labelFirst[1] ?? '');
+  if (!slot) return null;
+
+  const rest = (labelFirst[2] ?? '').trim();
+  const measured = parseMeasuredAmount(normalizeOcrUnitNoise(rest));
+  if (measured) {
+    if (slot === 'sodium' || slot === 'cholesterol') {
+      if (measured.unit !== 'mg') return null;
+    } else if (slot !== 'calories' && measured.unit !== 'g') {
+      return null;
+    }
+    return { slot, amount: measured.amount };
+  }
+
+  const bare = rest.match(/^<?\s*(\d+(?:\.\d+)?)\s*(?:g|mg|kcal)\b/i);
+  if (bare) return { slot, amount: Number(bare[1]) };
+
   return null;
 }
 
@@ -276,10 +370,12 @@ function classifyLabelOnlyLine(line: string): LabelSlot | null {
   if (/total sugars?/i.test(line)) return 'sugars';
   if (/^sugars?\b/i.test(line)) return 'sugars';
   if (/^protein\b/i.test(line)) return 'protein';
-  return null;
+  return classifyVariantLabelLine(line);
 }
 
 function parseStandaloneAmount(line: string): number | null {
+  const measured = parseMeasuredAmount(normalizeOcrUnitNoise(line));
+  if (measured) return measured.amount;
   const withUnit = line.match(/^<?\s*(\d+(?:\.\d+)?)\s*(?:g|mg|kcal)\b/i);
   if (withUnit) return Number(withUnit[1]);
   if (/^\d+(?:\.\d+)?$/.test(line)) return Number(line);
@@ -301,20 +397,52 @@ function applySlot(nutrients: Nutrients, row: { slot: LabelSlot; amount: number 
 }
 
 function readCalories(compact: string, raw: string): number | null {
+  const slashCompact = compact.match(/\bcalories(?!\s+from\s+fat)\s*:?\s*(\d{2,4})\/(\d{1,2})\b/i);
+  if (slashCompact) return caloriesFromSlashOcr(slashCompact[1] ?? '', slashCompact[2] ?? '');
+
   const direct = compact.match(/\bcalories(?!\s+from\s+fat)\s*:?\s*(\d+(?:\.\d+)?)\b/i);
   if (direct) return Number(direct[1]);
+
   for (const line of raw.split(/\n/)) {
+    const slashDv = line.match(/\bcalories\b(?!\s+from\s+fat)[^\d]{0,32}(\d{2,4})\/(\d{1,2})\b/i);
+    if (slashDv) return caloriesFromSlashOcr(slashDv[1] ?? '', slashDv[2] ?? '');
+
     const noisy = line.match(/\bcalories\b(?!\s+from\s+fat)[^\d]{0,24}(\d{2,4})\b/i);
     if (noisy) return Number(noisy[1]);
   }
   return lineAmount(raw, 'calories', '');
 }
 
+/** OCR often glues kcal to the daily-value column: `152/22` for 150 cal + 22% DV. */
+function caloriesFromSlashOcr(main: string, dvPart: string): number {
+  const merged = Number(main);
+  const dv = Number(dvPart);
+  if (dv >= 1 && dv <= 99 && merged >= 100 && merged % 10 !== 0) {
+    return merged - (merged % 10);
+  }
+  return merged;
+}
+
 /** Total fat only — ignore saturated/trans lines where OCR still says "Fat Ng". */
 function readSodiumMgNoisy(raw: string): number | null {
-  for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
-    const inline = line.match(/\bsodium\b[^0-9]{0,20}(\d{2,4})\s*mg\b/i);
+  const text = normalizeOcrUnitNoise(raw);
+  for (const line of text.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
+    const variant = matchVariantInlineLine(line);
+    if (variant?.slot === 'sodium') return variant.amount;
+
+    const inline = line.match(/\bsod\w*\b[^0-9]{0,20}(\d{2,4})\s*(?:mg|m\s*g|Ng)\b/i);
     if (inline) return Number(inline[1]);
+  }
+  return null;
+}
+
+function readSaturatedFatGramsNoisy(raw: string, totalFatG: number): number | null {
+  const flat = raw.replace(/\s+/g, ' ');
+  for (const match of flat.matchAll(/\bs\w*at\w*[^a-z]{0,10}fat\b/gi)) {
+    const index = match.index ?? 0;
+    const slice = flat.slice(index, index + 48);
+    const amount = estimateSaturatedFatFromOcrSlice(slice, totalFatG);
+    if (amount != null && amount > 0) return amount;
   }
   return null;
 }

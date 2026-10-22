@@ -3,7 +3,8 @@ import { api } from '../api/client';
 import { apiFormUpload } from '../api/uploadWithProgress';
 import { FoodImportPanel, type FoodImportStatus } from '../components/FoodImportPanel';
 import type { ImportProgressState } from '../components/ImportProgress';
-import { partialLabelImportHint } from '../components/LabelCaptureHints';
+import { missingExtraImportNotes, partialLabelImportHint } from '../components/LabelCaptureHints';
+import type { ImportFieldReviewMap } from '../importFieldReview';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { RemoveButton } from '../components/RemoveButton';
 import { navigate } from '../nav';
@@ -35,6 +36,7 @@ type ImportResult = {
   candidates: string[];
   menuItems?: Array<{ name: string; servingLabel: string; nutrients: Nutrients }>;
   warning: string | null;
+  fieldReview?: ImportFieldReviewMap;
 };
 
 type ImportStatus = FoodImportStatus;
@@ -82,6 +84,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const [importUrl, setImportUrl] = useState('');
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
+  const [importFieldReview, setImportFieldReview] = useState<ImportFieldReviewMap | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [batchSelect, setBatchSelect] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(() => new Set());
@@ -113,8 +116,18 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }).catch(() => setSaveError('Could not load this food'));
   }, [editId]);
 
+  function clearImportFieldReviewKey(key: string): void {
+    setImportFieldReview((prev) => {
+      if (!prev?.[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return Object.keys(next).length > 0 ? next : null;
+    });
+  }
+
   function applyImport(result: ImportResult): void {
     setUploadId(result.uploadId);
+    setImportFieldReview(result.fieldReview ?? null);
     setImportKind(result.kind ?? null);
     setTextPreview(result.textPreview ?? null);
     if (result.kind === 'pdf' && (result.candidates.length > 0 || (result.menuItems?.length ?? 0) === 0)) {
@@ -140,7 +153,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
     );
     const emptyNutrition = result.draft.nutrients.calories === 0 && result.draft.nutrients.protein === 0;
     if (result.warning) {
-      const extra = partialLabelImportHint(result.draft.nutrients);
+      const extra = partialLabelImportHint(result.draft.nutrients, result.fieldReview);
       setImportStatus({ kind: 'warn', text: extra ? `${result.warning} ${extra}` : result.warning });
       return;
     }
@@ -155,7 +168,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       });
       return;
     }
-    const partial = partialLabelImportHint(result.draft.nutrients);
+    const partial = partialLabelImportHint(result.draft.nutrients, result.fieldReview);
     setImportStatus({
       kind: partial ? 'warn' : 'ok',
       text: partial ?? 'Values filled below — review and save.',
@@ -325,30 +338,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       </header>
 
       <div className="food-form-layout">
-        <div className="food-form-column">
-          <section className="card form-section">
-            <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-            <div className="form-row-2">
-              <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
-              <label>Serving size<input value={serving} onChange={(event) => setServing(event.target.value)} required /></label>
-            </div>
-            <label>Servings per container
-              <input
-                type="number"
-                min="0.25"
-                step="0.25"
-                placeholder="Optional — e.g. 1 for a single-serve bottle"
-                value={servingsPerContainer}
-                onChange={(event) => setServingsPerContainer(event.target.value)}
-              />
-            </label>
-            <label className="checkbox-inline">
-              <input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} />
-              <span>Counts as a drink (hydration)</span>
-            </label>
-            {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
-          </section>
-
+        <div className="food-form-column food-form-column-import">
           <FoodImportPanel
             nativeLabelCamera={nativeLabelCamera}
             importBusy={importBusy}
@@ -432,13 +422,65 @@ function FoodEditor({ editId }: { editId: string | null }) {
           </FoodImportPanel>
         </div>
 
-        <div className="food-form-column food-form-column-side">
+        <div className="food-form-column food-form-column-manual">
+          <section className="card form-section">
+            <h2 className="form-section-title">Food details</h2>
+            <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+            <div className="form-row-2">
+              <label>Brand<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Optional" /></label>
+              <label className={importFieldClass(importFieldReview, 'servingLabel')}>
+                Serving size
+                <ImportFieldHint entry={importFieldReview?.servingLabel} />
+                <input
+                  value={serving}
+                  onChange={(event) => {
+                    clearImportFieldReviewKey('servingLabel');
+                    setServing(event.target.value);
+                  }}
+                  required
+                  aria-invalid={importFieldReview?.servingLabel?.status === 'missing'}
+                />
+              </label>
+            </div>
+            <label className={importFieldClass(importFieldReview, 'servingsPerContainer')}>
+              Servings per container
+              <ImportFieldHint entry={importFieldReview?.servingsPerContainer} />
+              <input
+                type="number"
+                min="0.25"
+                step="0.25"
+                placeholder="Optional — e.g. 1 for a single-serve bottle"
+                value={servingsPerContainer}
+                onChange={(event) => {
+                  clearImportFieldReviewKey('servingsPerContainer');
+                  setServingsPerContainer(event.target.value);
+                }}
+                aria-invalid={importFieldReview?.servingsPerContainer?.status === 'missing'}
+              />
+            </label>
+            <label className="checkbox-inline">
+              <input type="checkbox" checked={isDrink} onChange={(event) => setIsDrink(event.target.checked)} />
+              <span>Counts as a drink (hydration)</span>
+            </label>
+            {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
+          </section>
+
+          {missingExtraImportNotes(importFieldReview).length > 0 && (
+            <ul className="import-field-gaps" role="status">
+              {missingExtraImportNotes(importFieldReview).map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          )}
+
           <section className="card form-section">
             <NutrientFields
               nutrients={nutrients}
               units={nutrientUnits}
+              fieldReview={importFieldReview}
               onChange={setNutrients}
               onUnitsChange={setNutrientUnits}
+              onFieldEdited={clearImportFieldReviewKey}
             />
           </section>
 
@@ -580,30 +622,59 @@ function RecipeEditor({ editId }: { editId: string | null }) {
 
 const EXTRA_UNIT_OPTIONS = ['g', 'mg', 'mcg', 'kcal'] as const;
 
+function importFieldClass(review: ImportFieldReviewMap | null, key: string): string {
+  const entry = review?.[key];
+  if (!entry) return '';
+  if (entry.status === 'missing') return 'import-field-missing';
+  if (entry.status === 'review') return 'import-field-review';
+  return '';
+}
+
+function ImportFieldHint({ entry }: { entry?: { status: string; reason: string } }) {
+  if (!entry || entry.status === 'ok') return null;
+  return (
+    <span className={`import-field-hint import-field-hint-${entry.status}`} title={entry.reason}>
+      {entry.status === 'missing' ? 'Not read' : 'Check value'}
+    </span>
+  );
+}
+
 function NutrientFields({
   nutrients,
   units,
+  fieldReview,
   onChange,
   onUnitsChange,
+  onFieldEdited,
 }: {
   nutrients: Nutrients;
   units: CoreNutrientUnits;
+  fieldReview?: ImportFieldReviewMap | null;
   onChange: (value: Nutrients) => void;
   onUnitsChange: (value: CoreNutrientUnits) => void;
+  onFieldEdited?: (key: string) => void;
 }) {
   return (
     <fieldset className="nutrient-fields">
       <legend>Per serving</legend>
       {CORE_NUTRIENT_FIELDS.map((field) => (
-        <label key={field.key} className="nutrient-field">
-          <span>{field.label}</span>
+        <label key={field.key} className={`nutrient-field ${importFieldClass(fieldReview ?? null, field.key)}`}>
+          <span>
+            {field.label}
+            <ImportFieldHint entry={fieldReview?.[field.key]} />
+          </span>
           <span className="nutrient-input-wrap">
             <input
               type="number"
               inputMode="decimal"
               step={field.step}
               value={nutrients[field.key]}
-              onChange={(event) => onChange(setCoreNutrient(nutrients, field.key, Number(event.target.value)))}
+              aria-invalid={fieldReview?.[field.key]?.status === 'missing'}
+              aria-describedby={fieldReview?.[field.key] ? `${field.key}-import-hint` : undefined}
+              onChange={(event) => {
+                onFieldEdited?.(field.key);
+                onChange(setCoreNutrient(nutrients, field.key, Number(event.target.value)));
+              }}
             />
             <select
               className="nutrient-unit-select"
@@ -619,15 +690,25 @@ function NutrientFields({
         </label>
       ))}
       {nutrients.extras.map((extra, index) => (
-        <label key={`${extra.key}-${index}`} className="nutrient-field">
-          <span>{extra.label}</span>
+        <label
+          key={`${extra.key}-${index}`}
+          className={`nutrient-field ${importFieldClass(fieldReview ?? null, extra.key)}`}
+        >
+          <span>
+            {extra.label}
+            <ImportFieldHint entry={fieldReview?.[extra.key]} />
+          </span>
           <span className="nutrient-input-wrap">
             <input
               type="number"
               inputMode="decimal"
               step="0.1"
               value={extra.amount}
-              onChange={(event) => onChange(setExtraAt(nutrients, index, Number(event.target.value)))}
+              aria-invalid={fieldReview?.[extra.key]?.status === 'missing'}
+              onChange={(event) => {
+                onFieldEdited?.(extra.key);
+                onChange(setExtraAt(nutrients, index, Number(event.target.value)));
+              }}
             />
             <select
               className="nutrient-unit-select"

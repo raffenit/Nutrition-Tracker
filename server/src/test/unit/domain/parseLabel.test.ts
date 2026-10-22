@@ -238,6 +238,66 @@ Sodium 230mg
   assert.equal(parsed.nutrients.sodium, 230);
 });
 
+test('rewrites gram amounts when OCR merges g as a trailing digit', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Calories 150
+Fat 2.59 8
+Protein 30g
+`);
+  assert.equal(parsed.nutrients.fat, 2.5);
+});
+
+test('infers mg and g from fuzzy OCR units when label words are garbled', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Calories 152
+Sedium 230mg_
+Fat 2.59 8
+Total Carbohydrate 4g
+Protein 30g
+`);
+  assert.equal(parsed.nutrients.sodium, 230);
+  assert.equal(parsed.nutrients.fat, 2.5);
+  assert.equal(parsed.nutrients.protein, 30);
+  assert.equal(parsed.nutrients.carbs, 4);
+});
+
+test('reads cholesterol and fiber from embedded label and confusable amount OCR', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Icholesterol25mng
+Dietary Fiber Ig
+Protein 30g
+`);
+  const cholesterol = parsed.nutrients.extras.find((row) => row.key === 'cholesterol');
+  assert.equal(cholesterol?.amount, 25);
+  assert.equal(parsed.nutrients.fiber, 1);
+});
+
+const FAIRLIFE_STYLE_OCR = `
+RLiRilrait AleR OPENING Nutrition Facts Tsering per conlaier Bottle  (4omL)] 1 Senvng size rper senving il Anunt calories 152/22 Dal Valuer Fat 2.59 8 (Total[ 39 Salurated [ Fat 4.59 8% U Trans Fat Og Icholesterol25mng 8% 8 L (Sedium 230mg_ 10% 1 [Total Carbohydrate 4g 1% 1 Dietary Fiber Ig 00 2 { 1 Total Sugars 2g 1 Includes Og AddedE Sugars 0% Q 1 Protein 30g 60% 2 6
+`;
+
+test('parses fairlife-style one-line OCR for headers and saturated fat from DV', () => {
+  const parsed = parseNutritionLabel(FAIRLIFE_STYLE_OCR);
+  assert.equal(parsed.servingsPerContainer, 1);
+  assert.equal(parsed.servingLabel, '1 bottle (340 ml)');
+  assert.equal(parsed.nutrients.calories, 150);
+  assert.equal(parsed.nutrients.fat, 2.5);
+  assert.equal(parsed.nutrients.extras.find((row) => row.key === 'saturated_fat')?.amount, 1.5);
+});
+
+test('reads sodium when OCR uses underscore gap in label word', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Calories 152
+S_dium 230mg
+Protein 30g
+`);
+  assert.equal(parsed.nutrients.sodium, 230);
+});
+
 test('treats a restaurant menu as names rather than a label', () => {
   const text = 'Spring Menu\nRoasted chicken\nGarden salad\n';
   const parsed = parseNutritionLabel(text);

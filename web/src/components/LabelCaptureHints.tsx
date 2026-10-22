@@ -27,15 +27,34 @@ export function LabelCaptureHints() {
   );
 }
 
+import type { ImportFieldReviewMap } from '../importFieldReview';
+import { importFieldsNeedingAttention, importReviewBannerText } from '../importFieldReview';
+
 /** Short nudge when OCR only partially filled macros. */
-export function partialLabelImportHint(nutrients: {
-  calories: number;
-  fat: number;
-  carbs: number;
-  protein: number;
-}): string | null {
+export function partialLabelImportHint(
+  nutrients: {
+    calories: number;
+    fat: number;
+    carbs: number;
+    protein: number;
+  },
+  fieldReview?: ImportFieldReviewMap | null,
+): string | null {
+  const fromReview = importReviewBannerText(fieldReview);
+  if (fromReview) return fromReview;
+
   const core = [nutrients.calories, nutrients.fat, nutrients.carbs, nutrients.protein];
   const filled = core.filter((value) => value > 0).length;
   if (filled >= 4) return null;
   return 'Some values may be missing — check the fields below or retake the photo using the tips above (focus, lighting, fill the frame).';
+}
+
+export function missingExtraImportNotes(review: ImportFieldReviewMap | null | undefined): string[] {
+  const labels: Record<string, string> = {
+    cholesterol: 'Cholesterol',
+    sugar: 'Total sugars',
+  };
+  return importFieldsNeedingAttention(review)
+    .filter(([key, entry]) => entry.status === 'missing' && labels[key])
+    .map(([key, entry]) => `${labels[key] ?? key}: ${entry.reason}`);
 }

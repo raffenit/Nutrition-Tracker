@@ -183,6 +183,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
     draft: { ...built.draft, source: kind },
     candidates: built.candidates,
     menuItems: built.menuItems,
+    fieldReview: built.fieldReview,
   });
 }
 
@@ -202,6 +203,7 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
     draft: built.draft,
     candidates: built.candidates,
     menuItems: built.menuItems,
+    fieldReview: built.fieldReview,
   });
 }
 

@@ -61,16 +61,21 @@ export function HydrationMeter({
   }
 
   const showEmpty = entries.length === 0;
+  const amountOnWater = pct > 45;
+
+  const amountText = (
+    <>
+      {formatVolume(amountMl, units)}
+      {targetMl > 0 && <span className="muted"> / {formatVolume(targetMl, units)}</span>}
+    </>
+  );
 
   return (
     <section className="card hydration-card day-log-card" aria-label="Hydration">
       <header className="card-head">
         <div className="hydration-head-copy">
           <h2>Hydration</h2>
-          <p className="hydration-amount">
-            {formatVolume(amountMl, units)}
-            {targetMl > 0 && <span className="muted"> / {formatVolume(targetMl, units)}</span>}
-          </p>
+          {targetMl <= 0 && <p className="hydration-amount">{amountText}</p>}
         </div>
         {isToday && (
           <button
@@ -87,20 +92,29 @@ export function HydrationMeter({
 
       <div className="hydration-card-body">
         {targetMl > 0 && (
-          <div
-            className="bar hydration-bar"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(pct)}
-            aria-label="Hydration progress"
-          >
+          <div className="hydration-glass-column">
+            <p className="hydration-amount hydration-amount-mobile">{amountText}</p>
             <div
-              className="hydration-glass-vessel"
-              aria-hidden="true"
-              style={{ '--hydration-pct': `${pct}%` } as CSSProperties}
+              className="bar hydration-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(pct)}
+              aria-label="Hydration progress"
+              aria-valuetext={`${formatVolume(amountMl, units)} of ${formatVolume(targetMl, units)}`}
             >
-              <span className="hydration-bar-fill" />
+              <div
+                className="hydration-glass-vessel"
+                style={{ '--hydration-pct': `${pct}%` } as CSSProperties}
+              >
+                <span className="hydration-bar-fill" aria-hidden="true" />
+                <p
+                  className={`hydration-amount hydration-amount-in-glass${amountOnWater ? ' hydration-amount-on-water' : ''}`}
+                  aria-hidden="true"
+                >
+                  {amountText}
+                </p>
+              </div>
             </div>
           </div>
         )}
