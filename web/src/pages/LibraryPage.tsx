@@ -78,7 +78,7 @@ export function LibraryPage() {
 
   return (
     <div className="page library-page">
-      <header className="library-toolbar card">
+      <div className="library-page-head">
         <div className="library-toolbar-top">
           <div className="segmented compact shelf-tabs" role="tablist" aria-label="Library shelf">
             <button type="button" role="tab" aria-selected={shelf === 'foods'} className={shelf === 'foods' ? 'active' : ''} onClick={() => goShelf('foods')}>Foods</button>
@@ -88,24 +88,26 @@ export function LibraryPage() {
             +
           </button>
         </div>
-        <input
-          className="library-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={shelf === 'foods' ? 'Search foods…' : 'Search recipes…'}
-          aria-label="Search library"
-        />
-        <label className="library-sort-label">
-          Sort
-          <select className="library-sort" value={sort} onChange={(event) => goSort(readLibrarySort(event.target.value))}>
-            {LIBRARY_SORTS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        {error && <p className="notice library-error">{error}</p>}
-        <p className="library-count muted">{loading ? 'Loading…' : countLabel(sortedFoods.length, shelf)}</p>
-      </header>
+        <div className="library-filters card">
+          <input
+            className="library-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={shelf === 'foods' ? 'Search foods…' : 'Search recipes…'}
+            aria-label="Search library"
+          />
+          <label className="library-sort-label">
+            Sort
+            <select className="library-sort" value={sort} onChange={(event) => goSort(readLibrarySort(event.target.value))}>
+              {LIBRARY_SORTS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          {error && <p className="notice library-error">{error}</p>}
+          <p className="library-count muted">{loading ? 'Loading…' : countLabel(sortedFoods.length, shelf)}</p>
+        </div>
+      </div>
 
       <ul className="library-list card">
         {sortedFoods.map((food) => (
@@ -151,6 +153,7 @@ function LibraryRow({
                 {[food.brand, food.servingLabel].filter(Boolean).join(' · ')}
               </span>
             )}
+            <span className="library-item-macros">{macroSummary(food, shelf)}</span>
           </span>
           <span className="library-item-kcal">{Math.round(food.nutrients.calories)} kcal</span>
         </button>
@@ -171,4 +174,21 @@ function libraryHref(shelf: Shelf, sort: LibrarySort): string {
 function countLabel(count: number, shelf: Shelf): string {
   const noun = shelf === 'foods' ? 'food' : 'recipe';
   return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
+}
+
+function macroSummary(food: Food, shelf: Shelf): string {
+  const { protein, carbs, fat, fiber, sodium } = food.nutrients;
+  const macros = `P ${Math.round(protein)}g · C ${Math.round(carbs)}g · F ${Math.round(fat)}g`;
+  if (shelf === 'recipes') {
+    const count = food.ingredients.length;
+    const servings = food.makesServings > 0 ? `${food.makesServings} servings` : null;
+    const recipeMeta = [count > 0 ? `${count} ingredients` : null, servings].filter(Boolean).join(' · ');
+    return recipeMeta ? `${recipeMeta} · ${macros}` : macros;
+  }
+  const extras = [
+    fiber > 0 ? `Fiber ${Math.round(fiber)}g` : null,
+    sodium > 0 ? `Na ${Math.round(sodium)}mg` : null,
+    food.isDrink && food.drinkMl ? `${Math.round(food.drinkMl)} ml drink` : null,
+  ].filter(Boolean);
+  return extras.length > 0 ? `${macros} · ${extras.join(' · ')}` : macros;
 }
