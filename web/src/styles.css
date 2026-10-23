@@ -1376,9 +1376,6 @@ label.import-field-review,
     position: sticky;
     top: 12px;
   }
-  .app-frame:has(.dashboard-page) .app-brand-bar {
-    padding: 2px 0 clamp(8px, 1.2vh, 14px);
-  }
   .main:has(> .dashboard-page) {
     flex: 1 1 auto;
     min-height: 0;
