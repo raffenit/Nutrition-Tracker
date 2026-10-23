@@ -87,6 +87,26 @@ export function IconSignIn({ className }: IconProps) {
   );
 }
 
+/** Collapse sidebar to icons only (desktop) */
+export function IconSidebarCollapse({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path {...stroke} d="M9 5H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4" />
+      <path {...stroke} d="M15 12H9m6 0-2-2m2 2-2 2" />
+    </svg>
+  );
+}
+
+/** Expand sidebar to show labels (desktop) */
+export function IconSidebarExpand({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path {...stroke} d="M15 5h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-4" />
+      <path {...stroke} d="M9 12H15m-6 0 2-2m-2 2 2 2" />
+    </svg>
+  );
+}
+
 export function IconTrash({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">

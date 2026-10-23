@@ -1,8 +1,18 @@
 import type { ReactNode } from 'react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
 import { navigate } from '../nav';
 import { HelixMark } from './HelixMark';
-import { IconFamily, IconHome, IconLibrary, IconPlan, IconSettings, IconSignIn } from './NavIcons';
+import {
+  IconFamily,
+  IconHome,
+  IconLibrary,
+  IconPlan,
+  IconSettings,
+  IconSidebarCollapse,
+  IconSidebarExpand,
+  IconSignIn,
+} from './NavIcons';
 import { OfflineBanner } from './OfflineBanner';
 
 const LINKS = [
@@ -18,11 +28,14 @@ type AppShellProps = { path: string; kiosk: boolean; children: ReactNode };
 export function AppShell({ path, kiosk, children }: AppShellProps) {
   const links = kiosk ? [] : LINKS;
   const { offline, pendingCount } = useOfflineStatus();
+  const sidebar = useSidebarCollapsed();
+  const appClass = sidebar.collapsed && !kiosk ? 'app sidebar-collapsed' : 'app';
+
   return (
-    <div className="app">
+    <div className={appClass}>
       {!kiosk && links.length > 0 && (
         <aside className="app-sidebar" aria-label="Primary">
-          <nav className="app-nav" aria-label="Main">
+          <nav className="app-nav" id="app-main-nav" aria-label="Main">
             {links.map(({ href, label, Icon }) => (
               <a
                 key={href}
@@ -38,6 +51,25 @@ export function AppShell({ path, kiosk, children }: AppShellProps) {
               </a>
             ))}
           </nav>
+          {sidebar.canToggle && (
+            <button
+              type="button"
+              className="sidebar-collapse-toggle"
+              aria-expanded={!sidebar.collapsed}
+              aria-controls="app-main-nav"
+              aria-label={sidebar.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onClick={sidebar.toggle}
+            >
+              {sidebar.collapsed ? (
+                <IconSidebarExpand className="sidebar-collapse-toggle-icon" />
+              ) : (
+                <IconSidebarCollapse className="sidebar-collapse-toggle-icon" />
+              )}
+              <span className="sidebar-collapse-toggle-label">
+                {sidebar.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              </span>
+            </button>
+          )}
         </aside>
       )}
       <div className="app-frame">
