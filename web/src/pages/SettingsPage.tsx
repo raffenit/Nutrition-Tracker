@@ -37,32 +37,11 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
         <header className="settings-layout-span settings-page-head">
           <h1 className="page-title">Settings</h1>
         </header>
-        <div className="settings-layout-col settings-layout-col--intro">
-          <DisplayPreferences
-            units={targets.units}
-            dateFormat={targets.dateFormat}
-            onChange={async (patch) => {
-              const next = { ...targets, ...patch };
-              const result = await api<{ targets: Targets }>('/api/targets', { method: 'PUT', body: JSON.stringify(next) });
-              setTargets(result.targets);
-            }}
-          />
-          <DietPresetPicker
-            onApplied={async (next) => {
-              setTargets(next);
-            }}
-          />
-        </div>
-        <div className="settings-layout-col settings-layout-col--targets">
+        <div className="settings-layout-col settings-layout-col--left">
           <TargetForm targets={targets} onSave={async (next) => {
             const result = await api<{ targets: Targets }>('/api/targets', { method: 'PUT', body: JSON.stringify(next) });
             setTargets(result.targets);
           }} />
-        </div>
-        <div className="settings-layout-col settings-layout-col--rest">
-          <WeightSettings weight={weight} onChange={setWeight} />
-          <PushSettings push={push} onChange={setPush} />
-          <OfflineSettings />
           <section className="card settings-account">
             <h2>Account</h2>
             <p className="muted">
@@ -85,28 +64,47 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
             </button>
             <p className="muted">Use sign-in to switch to another household member on this device.</p>
           </section>
+          {user.role === 'admin' && (
+            <section className="card settings-household">
+              <h2>Household</h2>
+              <p className="muted">
+                <strong>{household?.name ?? 'Home'}</strong> · times use {household?.timezone ?? 'the server timezone'}.
+              </p>
+              <MemberForm />
+              <div className="settings-subsection">
+                <h3>Family display (kiosk)</h3>
+                <p className="muted">Generate a link for a wall tablet or Home Assistant panel. No logins or weight data.</p>
+                <button
+                  type="button"
+                  className="settings-secondary-btn"
+                  onClick={() => void api<{ url: string }>('/api/household/kiosk', { method: 'POST', body: '{}' }).then((result) => setKioskUrl(result.url))}
+                >
+                  Create family display link
+                </button>
+                {kioskUrl && <p className="settings-kiosk-url muted">Paste into a panel: {kioskUrl}</p>}
+              </div>
+            </section>
+          )}
         </div>
-        {user.role === 'admin' && (
-          <section className="card settings-household settings-layout-span">
-            <h2>Household</h2>
-            <p className="muted">
-              <strong>{household?.name ?? 'Home'}</strong> · times use {household?.timezone ?? 'the server timezone'}.
-            </p>
-            <MemberForm />
-            <div className="settings-subsection">
-              <h3>Family display (kiosk)</h3>
-              <p className="muted">Generate a link for a wall tablet or Home Assistant panel. No logins or weight data.</p>
-              <button
-                type="button"
-                className="settings-secondary-btn"
-                onClick={() => void api<{ url: string }>('/api/household/kiosk', { method: 'POST', body: '{}' }).then((result) => setKioskUrl(result.url))}
-              >
-                Create family display link
-              </button>
-              {kioskUrl && <p className="settings-kiosk-url muted">Paste into a panel: {kioskUrl}</p>}
-            </div>
-          </section>
-        )}
+        <div className="settings-layout-col settings-layout-col--right">
+          <DisplayPreferences
+            units={targets.units}
+            dateFormat={targets.dateFormat}
+            onChange={async (patch) => {
+              const next = { ...targets, ...patch };
+              const result = await api<{ targets: Targets }>('/api/targets', { method: 'PUT', body: JSON.stringify(next) });
+              setTargets(result.targets);
+            }}
+          />
+          <DietPresetPicker
+            onApplied={async (next) => {
+              setTargets(next);
+            }}
+          />
+          <WeightSettings weight={weight} onChange={setWeight} />
+          <PushSettings push={push} onChange={setPush} />
+          <OfflineSettings />
+        </div>
       </div>
     </div>
   );

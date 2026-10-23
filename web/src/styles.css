@@ -1865,20 +1865,13 @@ label.import-field-review,
     gap: clamp(12px, 1.2vw, 16px);
     align-items: start;
   }
-  .settings-layout-col--intro {
+  .settings-layout-col--left {
     grid-column: 1;
     grid-row: 2;
   }
-  .settings-layout-col--targets {
+  .settings-layout-col--right {
     grid-column: 2;
-    grid-row: 2 / span 2;
-    position: sticky;
-    top: 12px;
-    align-self: start;
-  }
-  .settings-layout-col--rest {
-    grid-column: 1;
-    grid-row: 3;
+    grid-row: 2;
   }
   .settings-layout-span { grid-column: 1 / -1; }
   .settings-page-head {
