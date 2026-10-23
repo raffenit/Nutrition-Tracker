@@ -16,6 +16,8 @@ Types are mirrored in `server/src/types.ts` and `web/src/types.ts` unless noted.
 | SPA route → page | `web/src/App.tsx` | path → component map |
 | API client (cookies) | `web/src/api/client.ts` | `api()` |
 | Upload progress XHR | `web/src/api/uploadWithProgress.ts` | `apiFormUpload` |
+| Windows batch → WSL deploy | `deploy-from-windows.bat` → `deploy.sh` | WSL: auto `scripts/wsl-preflight.sh` in `deploy.sh` |
+| Windows/WSL ops doc | `docs/WINDOWS-TROUBLESHOOTING.md`, `docs/SETUP-WINDOWS-WSL.md` | — |
 | Offline cache + sync outbox | `web/src/offline/` | `sync.ts`, `mutations.ts` |
 | Service worker (shell + push) | `web/public/sw.js` | — |
 | Global styles | `web/src/styles.css` | `.import-progress*` for import UI |

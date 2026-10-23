@@ -8,5 +8,6 @@ Short guides for common agent work. Each lists **files and symbol names** to sea
 | [food-import-ui.md](./food-import-ui.md) | Upload progress, import UX, `/api/uploads` client flow |
 | [family-privacy.md](./family-privacy.md) | Family/kiosk APIs, weight must not leak |
 | [server-deploy-frankenstein.md](./server-deploy-frankenstein.md) | Apps vs `docker-files` mount, `./deploy.sh` |
+| [../WINDOWS-TROUBLESHOOTING.md](../WINDOWS-TROUBLESHOOTING.md) | WSL, CRLF, `.env`, Docker, `deploy-from-windows.bat` |
 
 Full feature index: [CODE-MAP.md](../CODE-MAP.md).

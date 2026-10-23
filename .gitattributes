@@ -1,0 +1,13 @@
+* text=auto
+
+# Bash deploy/test scripts — LF only (WSL, Linux server, Docker).
+*.sh text eol=lf
+
+# Env templates and local .env (when tracked) — bash source breaks on CRLF / spaced keys.
+.env.example text eol=lf
+
+# EasyOCR helper invoked in the container.
+server/python/*.py text eol=lf
+
+# Windows cmd launcher.
+*.bat text eol=crlf

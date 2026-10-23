@@ -10,6 +10,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Windows/WSL host checks (CRLF, Docker, .env hints) — skip on Linux server or SKIP_WSL_PREFLIGHT=1
+if [[ "${SKIP_WSL_PREFLIGHT:-}" != "1" ]]; then
+  if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE '(microsoft|wsl)' /proc/version 2>/dev/null; then
+    bash "$SCRIPT_DIR/scripts/wsl-preflight.sh"
+  fi
+fi
+
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
   set -a
   # shellcheck disable=SC1091

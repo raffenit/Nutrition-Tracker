@@ -14,6 +14,8 @@ deploy-from-windows.bat --skip-test --skip-git
 
 Prefer cloning under **`~/Nutrition-Tracker`** in Ubuntu for Docker speed; the batch file still works if the repo lives on `C:\` (slower builds).
 
+**Full Windows/WSL checklist** (line endings, `.env`, Docker group, Node path, batch wrapper): **[WINDOWS-TROUBLESHOOTING.md](./WINDOWS-TROUBLESHOOTING.md)**.
+
 ---
 
 ## A. Install WSL2 and Ubuntu (README Step 2)
@@ -45,6 +47,8 @@ Reboot if Windows asks you to.
 In **Ubuntu (WSL)**:
 
 ```bash
+sudo usermod -aG docker "$USER"
+newgrp docker
 docker version
 docker compose version
 ```
@@ -64,7 +68,7 @@ node -v    # v22.x or newer
 npm -v
 ```
 
-Alternative: [nvm](https://github.com/nvm-sh/nvm) — `nvm install 22` after installing nvm (see [README Host Node.js](../README.md#host-nodejs-for-deploysh-tests)).
+Alternative: [nvm](https://github.com/nvm-sh/nvm) — `nvm install 22` after installing nvm (see [README Host Node.js](../README.md#host-nodejs-for-deploysh-tests)). **Do not** rely on Windows-only Node when the repo lives under WSL — see [WINDOWS-TROUBLESHOOTING.md §5](./WINDOWS-TROUBLESHOOTING.md#5-wsl-native-paths-avoid-mntc).
 
 Skip tests on deploy:
 
@@ -123,7 +127,7 @@ Edit `.env`:
 | **vim** | `vim .env` — `i` insert, `Esc` then `:wq` save |
 | **nano** | `nano .env` |
 
-Minimum:
+Minimum (no spaces around `=`):
 
 ```env
 CADDY_STYLE=STANDALONE
@@ -132,7 +136,7 @@ TAILSCALE_SERVER_URL=http://YOUR_TAILSCALE_IP
 NUTRITION_PORT=3010
 ```
 
-All config lives in **`.env` only** (no `local/deploy.env`).
+All config lives in **`.env` only** (no `local/deploy.env`). Save **LF** line endings — see [WINDOWS-TROUBLESHOOTING.md §2](./WINDOWS-TROUBLESHOOTING.md#2-env-syntax).
 
 ---
 
@@ -213,9 +217,13 @@ git pull
 
 ## Troubleshooting
 
+See **[WINDOWS-TROUBLESHOOTING.md](./WINDOWS-TROUBLESHOOTING.md)** for CRLF, `.env`, Docker socket, `/mnt/c`, and batch wrapper details.
+
 | Problem | Check |
 | --- | --- |
 | `docker: command not found` in WSL | Docker Desktop running; WSL integration on |
+| `permission denied` on `docker` | `usermod -aG docker`; `newgrp docker` |
+| `$'\r'` / `bad interpreter` on `.sh` | LF endings; `./deploy.sh` runs WSL preflight automatically — WINDOWS-TROUBLESHOOTING §1 |
 | `permission denied` on `./deploy.sh` | `chmod +x deploy.sh standalone-deploy.sh external-deploy.sh` |
 | Phone cannot reach `:3010` | Tailscale on both; try PC firewall |
 | Health check fails | Section G logs command |

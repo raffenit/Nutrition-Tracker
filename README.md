@@ -320,6 +320,7 @@ Without Docker: run built `server/` on port 3010 and `web/` `npm run dev` (Vite 
 ## More documentation
 
 - [docs/SETUP-WINDOWS-WSL.md](./docs/SETUP-WINDOWS-WSL.md) — expanded Windows/WSL steps (matches Setup **Step 2** here)  
+- [docs/WINDOWS-TROUBLESHOOTING.md](./docs/WINDOWS-TROUBLESHOOTING.md) — CRLF, `.env`, Docker/WSL, batch wrapper  
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — data model, API, privacy  
 - [docs/ROADMAP.md](./docs/ROADMAP.md) — feature phases  
 

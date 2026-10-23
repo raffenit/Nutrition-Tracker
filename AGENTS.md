@@ -1,5 +1,11 @@
 # Nutrition Tracker
 
+## Working directory (workspace)
+
+**All application source** — edit, test, commit, and push **only** from `Projects/Apps/Nutrition-Tracker/`.
+
+**Frankenstein / mount** (`Projects/docker-files/Nutrition-Tracker/`, same tree on the server): **only for local, uncommitted server files** from this workspace — e.g. `.env`, `data/` (SQLite, uploads, models), other gitignored runtime state. Do **not** change tracked paths (`server/`, `web/`, `docs/`, …) on the mount; do **not** `git commit` there. Ship code changes from **Apps** → push → on Frankenstein `git pull` + `./deploy.sh` (see [server-deploy-frankenstein.md](./docs/playbooks/server-deploy-frankenstein.md)).
+
 TypeScript only: API in `server/` (Node 22), UI in `web/` (React 19 + Vite). Household data stays in `data/` and is not committed.
 
 Default server release: **`./deploy.sh`** (`CADDY_STYLE` in `.env`). Tests: `npm test` (all `server/dist-test/**/*.test.js`); log `local/test-last-run.log`. Server test layout: [server/src/test/README.md](./server/src/test/README.md). Windows hosts: WSL2 — [docs/SETUP-WINDOWS-WSL.md](./docs/SETUP-WINDOWS-WSL.md).

@@ -1,37 +1,37 @@
-# Playbook — deploy Nutrition Tracker on Frankenstein
+# Playbook — Frankenstein / docker-files Nutrition Tracker
 
-## Source of truth
+## Two paths, two jobs
 
-| Layer | Path | Use for |
-| --- | --- | --- |
-| **Application git repo** | `Projects/Apps/Nutrition-Tracker/` | Feature fixes, tests, `docs/CODE-MAP.md` |
-| **Live stack on server** | `Projects/docker-files/Nutrition-Tracker/` (SSHFS mount) | `./deploy.sh`, compose, server `.env`, `./data` volume |
+| Path | Role in Cursor workspace |
+| --- | --- |
+| **`Projects/Apps/Nutrition-Tracker/`** | **Working directory** — all git-tracked app code, tests, docs, commit, push |
+| **`Projects/docker-files/Nutrition-Tracker/`** (Frankenstein stack on SSHFS) | **Local uncommitted only** — `.env`, `data/`, other gitignored server/runtime files. **Never** edit `server/`, `web/`, or `docs/` here |
 
-Edit code in **Apps**, push to GitHub, then on the server (in the mounted tree) `git pull` and deploy. Do not rely on the mount copy for navigation docs — it may lag until pull.
+Same repo on disk at the mount, but agents treat the mount as **runtime/config**, not a second source tree.
 
-## Before touching `docker-files/`
+## Allowed on the mount (examples)
 
-1. Read [`.devinFrankenstein/AGENTS.md`](../../../../.devinFrankenstein/AGENTS.md).
-2. Confirm the mount is live and lists expected stacks (`infrastructure`, `Nutrition-Tracker`, …).
-3. If the mount is empty or wrong, stop and use [`.devinFrankenstein/RUNBOOK.md`](../../../../.devinFrankenstein/RUNBOOK.md).
+- `.env` — `TAILSCALE_SERVER_URL`, `EASYOCR_*`, ports, secrets (never commit)
+- `data/` — database, uploads, tessdata, EasyOCR models
+- Investigating logs or compose-adjacent local state Rachael keeps uncommitted
 
-## Typical deploy
+## Not allowed on the mount (from workspace agents)
 
-On Frankenstein, in `Nutrition-Tracker/` (mount path):
+- Feature fixes in `server/`, `web/`, playbooks, CODE-MAP
+- `git commit` / `git push` of application changes from the laptop via the mount clone
 
-```bash
-git pull
-./deploy.sh --skip-git    # after you already pushed from dev machine
-```
+## Shipping new app versions
 
-Optional: `--skip-test` only when you intentionally skip host tests (see repo `AGENTS.md`).
+1. Change code in **Apps/Nutrition-Tracker/** → `npm test` → commit → push.
+2. On **Frankenstein** (SSH or on-box shell), in the stack directory: `git pull`, `./deploy.sh --skip-git` (or full `deploy.sh` per habit).
 
-## Find code while debugging production
+## Before touching the mount
 
-1. [CODE-MAP.md](../CODE-MAP.md) or [label-ocr-and-parsing.md](./label-ocr-and-parsing.md) in **Apps** repo.
-2. Confirm running image matches expected commit (`docker inspect`, frontend bundle hash, server logs).
-3. Local `npm run dev` ≠ Docker (EasyOCR, production build, `./data` paths).
+1. [.devinFrankenstein/AGENTS.md](../../../../.devinFrankenstein/AGENTS.md) — verify SSHFS mount is live.
+2. [.devinFrankenstein/RUNBOOK.md](../../../../.devinFrankenstein/RUNBOOK.md) if mount is empty or stale.
 
-## Workspace index
+## Debugging production
+
+Use **Apps** [CODE-MAP.md](../CODE-MAP.md) / [label-ocr-and-parsing.md](./label-ocr-and-parsing.md). Confirm running commit (image id, built JS hash). `npm run dev` in Apps ≠ Docker (EasyOCR, prod build, `./data` on server).
 
 [Projects/docs/AGENT-INDEX.md](../../../../docs/AGENT-INDEX.md)
