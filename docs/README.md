@@ -9,7 +9,8 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 | [../AGENTS.md](../AGENTS.md) | Repo rules, deploy, privacy, Frankenstein mount notes (workspace parent) |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Data model, API summary, privacy rules, testing gates |
 | [CODE-MAP.md](./CODE-MAP.md) | **Feature → file paths and symbol names** (start here to find code) |
-| [playbooks/](./playbooks/README.md) | Task guides (OCR, import UI, privacy) — no line numbers |
+| [playbooks/](./playbooks/README.md) | Task guides (OCR, import UI, privacy, Frankenstein deploy) |
+| [../../docs/AGENT-INDEX.md](../../docs/AGENT-INDEX.md) | Whole-workspace repo index (parent `Projects/`) |
 | [ROADMAP.md](./ROADMAP.md) | Phases, acceptance criteria, what’s next vs done |
 
 **Workflow:** [CODE-MAP.md](./CODE-MAP.md) or a [playbook](./playbooks/README.md) → grep the listed **symbol** → read [ARCHITECTURE.md](./ARCHITECTURE.md) if the shape of the system changes → implement → update CODE-MAP if you added modules → `npm test` (see [Testing](#testing)).

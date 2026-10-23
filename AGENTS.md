@@ -12,7 +12,7 @@ Default server release: **`./deploy.sh`** (`CADDY_STYLE` in `.env`). Tests: `npm
 
 Do not rely on remembered line numbers or line-based structure docs. This repo uses **CODE-MAP + playbooks**, not `STRUCTURE.md`. Workspace rule: [`.devin/rules/navigation.md`](../.devin/rules/navigation.md).
 
-Read [docs/README.md](./docs/README.md) for the doc index and [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) before structural changes. Planned work is in [docs/ROADMAP.md](./docs/ROADMAP.md).
+Read [docs/README.md](./docs/README.md) for the doc index and [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) before structural changes. Planned work is in [docs/ROADMAP.md](./docs/ROADMAP.md). Frankenstein deploy: [docs/playbooks/server-deploy-frankenstein.md](./docs/playbooks/server-deploy-frankenstein.md). Workspace repo picker: [../../docs/AGENT-INDEX.md](../../docs/AGENT-INDEX.md).
 
 When you add or move domain/integration/import modules, update **CODE-MAP** (and a playbook if it’s a common task) in the same change.
 
