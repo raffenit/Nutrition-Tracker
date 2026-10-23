@@ -8,7 +8,7 @@ Household nutrition app for phones, tablets, and a Home Assistant panel. One sel
 | --- | --- |
 | Manual nutrition for individual items | Library → **New from a label** (typed fields, no scan required) → log via **+** |
 | Meals from ingredients ÷ servings | **Custom meal** (`POST /api/foods/compose`); nutrients stored per serving on the food record |
-| Scan nutrition labels | Image upload → Tesseract OCR → `parseNutritionLabel` → review → save |
+| Scan nutrition labels | Image upload → Sharp preprocess → Tesseract + optional EasyOCR → per-slot merge → `buildNutritionImport` / `parseNutritionLabel` → review → save |
 | Scan restaurant PDF sheets | PDF text → if not label-shaped, `menuCandidates` names; user enters nutrition manually |
 | Weight over time (optional) | Opt-in in Settings; `weight_entries`; sparkline on Today **Trends**; never on `/api/family` |
 | Stats: calories, protein, fiber, salt | Today dashboard: macro pie, goal cards (sodium = salt), 7/14d trends |
@@ -74,7 +74,7 @@ Root scripts: `npm test` (via `scripts/run-tests.sh` → `local/test-last-run.lo
 
 All application code is **TypeScript**. There is no second runtime (no Python/Rust service in this repo).
 
-- **Server:** Node 22, native `http`, hand-rolled router (`server/src/http/router.ts`), `better-sqlite3`, `busboy` uploads, `tesseract.js`, `sharp`, `pdf-parse`.
+- **Server:** Node 22, native `http`, hand-rolled router (`server/src/http/router.ts`), `better-sqlite3`, `busboy` uploads, `tesseract.js`, optional EasyOCR via `python3` + `server/python/easyocr_label.py`, `sharp`, `pdf-parse`.
 - **Web:** React 19 + Vite, no React Router — path → page map in `web/src/App.tsx`.
 - **Auth:** Cookie sessions (`sessions` table); kinds `user` and `kiosk` (family display).
 
@@ -124,7 +124,9 @@ Day boundaries use household timezone (`America/Chicago` default via `TZ` / hous
 | `domain/units.ts` | Glass volume for imperial vs metric hydration UI |
 | `domain/time.ts` | Chicago/household TZ, local dates |
 | `integrations/usda.ts`, `openFoodFacts.ts` | Ingredient search for custom meals |
-| `integrations/extractText.ts` | PDF and image OCR |
+| `integrations/extractText.ts` | PDF text; image OCR orchestration (parallel engines) |
+| `integrations/ocrPreprocess.ts`, `easyOcr.ts`, `python/easyocr_label.py` | Shared preprocess variants; neural OCR |
+| `domain/labelSlotExtract.ts`, `labelUnits.ts`, `labelVariants.ts` | Merge OCR candidates per nutrient row; unit/gap heuristics |
 
 ## Web app structure
 
@@ -171,6 +173,7 @@ Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Serv
 ## Related docs
 
 - [README.md](./README.md) — documentation table of contents and roadmap status snapshot.
-- [CODE-MAP.md](./CODE-MAP.md) — feature → source file paths.
+- [CODE-MAP.md](./CODE-MAP.md) — feature → source file paths and symbol names.
+- [playbooks/](./playbooks/README.md) — task walkthroughs (OCR, import UI, privacy).
 - [ROADMAP.md](./ROADMAP.md) — planned work, phases, acceptance criteria.
 - [../README.md](../README.md) — build, test, deploy commands.

@@ -8,10 +8,11 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 | --- | --- |
 | [../AGENTS.md](../AGENTS.md) | Repo rules, deploy, privacy, Frankenstein mount notes (workspace parent) |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Data model, API summary, privacy rules, testing gates |
-| [CODE-MAP.md](./CODE-MAP.md) | **Feature → file paths** (fastest way to find code) |
+| [CODE-MAP.md](./CODE-MAP.md) | **Feature → file paths and symbol names** (start here to find code) |
+| [playbooks/](./playbooks/README.md) | Task guides (OCR, import UI, privacy) — no line numbers |
 | [ROADMAP.md](./ROADMAP.md) | Phases, acceptance criteria, what’s next vs done |
 
-**Workflow:** identify the feature in [CODE-MAP.md](./CODE-MAP.md) → read the matching route/domain section in [ARCHITECTURE.md](./ARCHITECTURE.md) → implement → run `npm test` (see [Testing](#testing)).
+**Workflow:** [CODE-MAP.md](./CODE-MAP.md) or a [playbook](./playbooks/README.md) → grep the listed **symbol** → read [ARCHITECTURE.md](./ARCHITECTURE.md) if the shape of the system changes → implement → update CODE-MAP if you added modules → `npm test` (see [Testing](#testing)).
 
 ## Product docs
 
@@ -19,7 +20,8 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 | --- | --- |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Client spec matrix, deployment, SQLite schema overview, domain modules, web routes |
 | [ROADMAP.md](./ROADMAP.md) | Phases 0–9 (quick log, alerts, PDF, OpenCookbook, offline sync, polish) |
-| [CODE-MAP.md](./CODE-MAP.md) | Tables linking user-facing areas to `server/` and `web/` files |
+| [CODE-MAP.md](./CODE-MAP.md) | Tables linking features to `server/` and `web/` files and key exports |
+| [playbooks/](./playbooks/README.md) | Short agent walkthroughs for OCR, import UI, privacy |
 | [../README.md](../README.md) | Setup overview, STANDALONE vs EXTERNAL Caddy |
 | [SETUP-WINDOWS-WSL.md](./SETUP-WINDOWS-WSL.md) | **Windows:** WSL2, Docker Desktop, Tailscale, deploy |
 
