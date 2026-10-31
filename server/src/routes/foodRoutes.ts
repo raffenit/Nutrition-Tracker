@@ -6,11 +6,11 @@ import { attachUpload, findUpload, insertUpload } from '../db/uploads.js';
 import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood, type FoodShelf } from '../db/foods.js';
 import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
-import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
+import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImport } from '../domain/nutritionImport.js';
-import { extractImageLabel, extractPdfText } from '../integrations/extractText.js';
+import { extractImageLabel } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
 import { searchUsda } from '../integrations/usda.js';
@@ -86,6 +86,7 @@ async function createStubFoods(ctx: Ctx): Promise<void> {
       makesServings: 1,
       source,
       sourceRef: null,
+      instructions: null,
       ingredients: [],
     });
     foods.push(food);
@@ -124,13 +125,18 @@ async function composeFood(ctx: Ctx): Promise<void> {
   }
   const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
   const makesServings = requiredNumber(body.makesServings, 'Servings');
-  const nutrients = roundNutrients(perServing(sumIngredientNutrients(lines), makesServings));
+  const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(lines), makesServings));
+  const fromLabel = isRecord(body.nutrients) ? roundNutrients(readNutrients(body.nutrients)) : fromIngredients;
+  const nutrients = hasMacroTotals(fromIngredients) ? fromIngredients : fromLabel;
+  const instructions = optionalInstructions(body.instructions);
   const food = insertFood(ctx.db, {
     createdBy: user.id,
     name: requiredText(body.name, 'Name'),
-    brand: null,
+    brand: optionalText(body.brand),
     kind: 'custom',
-    servingLabel: '1 serving',
+    servingLabel: typeof body.servingLabel === 'string' && body.servingLabel.trim()
+      ? body.servingLabel.trim()
+      : '1 serving',
     servingsPerContainer: null,
     nutrients,
     nutrientUnits: { ...DEFAULT_CORE_NUTRIENT_UNITS },
@@ -140,6 +146,7 @@ async function composeFood(ctx: Ctx): Promise<void> {
     makesServings,
     source: 'composed',
     sourceRef: null,
+    instructions,
     ingredients: lines.map(({ nutrients: _nutrients, ...line }) => line),
   });
   sendJson(ctx.res, 201, { food });
@@ -170,7 +177,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   if (extracted.slotMergedNutrients) {
     applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
   }
-  const warning = extracted.warning ?? built.warning;
+  const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
   const saved = insertUpload(ctx.db, {
     kind,
     originalName: path.basename(file.filename).slice(0, 180) || 'upload',
@@ -187,6 +194,8 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
     candidates: built.candidates,
     menuItems: built.menuItems,
     fieldReview: built.fieldReview,
+    recipeCard: built.recipeCard,
+    usedOcr: extracted.usedOcr ?? false,
   });
 }
 
@@ -207,6 +216,7 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
     candidates: built.candidates,
     menuItems: built.menuItems,
     fieldReview: built.fieldReview,
+    recipeCard: built.recipeCard,
   });
 }
 
@@ -311,15 +321,19 @@ async function readExtractedText(
   kind: 'image' | 'pdf',
   bytes: Buffer,
   config: { tessdataDir: string; easyocrModelDir: string; easyocrEnabled: boolean },
-): Promise<{ text: string; warning: string | null; slotMergedNutrients: Nutrients | null }> {
+): Promise<{ text: string; warning: string | null; slotMergedNutrients: Nutrients | null; usedOcr?: boolean }> {
   try {
     if (kind === 'pdf') {
-      const text = await extractPdfText(bytes);
-      return {
-        text,
-        warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.',
-        slotMergedNutrients: null,
-      };
+      const { extractPdfTextWithOcrFallback } = await import('../integrations/ocrScannedPdf.js');
+      const { text, usedOcr } = await extractPdfTextWithOcrFallback(
+        bytes,
+        config.tessdataDir,
+        config.easyocrEnabled ? config.easyocrModelDir : undefined,
+      );
+      let warning: string | null = null;
+      if (!text.trim()) warning = 'No text was found. Enter the nutrition facts yourself.';
+      else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
+      return { text, warning, slotMergedNutrients: null, usedOcr };
     }
     const { text, slotMergedNutrients } = await extractImageLabel(bytes, config.tessdataDir, {
       easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
@@ -336,6 +350,16 @@ async function readExtractedText(
       slotMergedNutrients: null,
     };
   }
+}
+
+function hasMacroTotals(nutrients: Nutrients): boolean {
+  return nutrients.calories > 0 || nutrients.protein > 0 || nutrients.fat > 0 || nutrients.carbs > 0;
+}
+
+function optionalInstructions(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; bytes: Buffer }> {

@@ -89,6 +89,7 @@ export type Food = {
   makesServings: number;
   source: string;
   sourceRef: string | null;
+  instructions: string | null;
   ingredients: IngredientLine[];
 };
 

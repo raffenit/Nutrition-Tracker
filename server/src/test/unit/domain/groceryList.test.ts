@@ -18,6 +18,7 @@ const yogurt: Food = {
   makesServings: 1,
   source: 'manual',
   sourceRef: null,
+  instructions: null,
   ingredients: [],
 };
 
@@ -36,6 +37,7 @@ const chili: Food = {
   makesServings: 4,
   source: 'composed',
   sourceRef: null,
+  instructions: null,
   ingredients: [{ name: 'Greek yogurt', servings: 2, sourceRef: null, childFoodId: 'y1' }],
 };
 

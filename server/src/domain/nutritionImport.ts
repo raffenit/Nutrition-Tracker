@@ -1,7 +1,18 @@
 import { assessLabelFieldReview, type LabelFieldReviewMap } from './labelFieldReview.js';
 import { menuCandidates, parseNutritionLabel } from './parseLabel.js';
+import { parseRecipeCard } from './parseRecipeCard.js';
 import { parseMenuFromSource, type MenuItemDraft } from './parseMenuTable.js';
 import type { Nutrients } from '../types.js';
+
+export type RecipeCardImportDraft = {
+  name: string;
+  brand: string | null;
+  makesServings: number;
+  servingLabel: string;
+  nutrients: Nutrients;
+  ingredients: Array<{ name: string; servings: number }>;
+  instructions: string;
+};
 
 export type NutritionImportDraft = {
   draft: {
@@ -19,6 +30,7 @@ export type NutritionImportDraft = {
   menuItems: MenuItemDraft[];
   warning: string | null;
   fieldReview: LabelFieldReviewMap;
+  recipeCard: RecipeCardImportDraft | null;
 };
 
 export function buildNutritionImport(
@@ -44,13 +56,17 @@ export function buildNutritionImport(
       menuItems,
       warning: `Found ${menuItems.length} menu items. Tap one to load its nutrition.`,
       fieldReview: {},
+      recipeCard: null,
     };
   }
 
   const parsed = parseNutritionLabel(text);
+  const recipeCard = buildRecipeCardDraft(text, parsed);
   const fieldReview = assessLabelFieldReview(text, parsed);
   let warning: string | null = null;
-  if (!text.trim()) {
+  if (recipeCard) {
+    warning = 'Found a recipe card with ingredients and instructions. Review below, then save as a recipe.';
+  } else if (!text.trim()) {
     warning = 'No text was found. Enter nutrition values yourself.';
   } else if (/nutrition facts/i.test(text) && parsed.nutrients.calories === 0 && parsed.nutrients.protein === 0) {
     warning = 'Found a Nutrition Facts section but could not read the numbers. Edit the fields below.';
@@ -74,6 +90,27 @@ export function buildNutritionImport(
     menuItems: [],
     warning,
     fieldReview,
+    recipeCard,
+  };
+}
+
+function buildRecipeCardDraft(
+  text: string,
+  nutrition: ReturnType<typeof parseNutritionLabel>,
+): RecipeCardImportDraft | null {
+  const card = parseRecipeCard(text);
+  if (!card.looksLikeRecipeCard) return null;
+  const name = card.title ?? 'Imported recipe';
+  const servesMatch = text.match(/\bserves?\s+(\d+)\b/i);
+  const makesServings = servesMatch ? Math.max(1, Number(servesMatch[1])) : 1;
+  return {
+    name,
+    brand: card.brand,
+    makesServings,
+    servingLabel: nutrition.servingLabel ?? '1 serving',
+    nutrients: nutrition.nutrients,
+    ingredients: card.ingredientLines.map((line) => ({ name: line, servings: 1 })),
+    instructions: card.instructions,
   };
 }
 

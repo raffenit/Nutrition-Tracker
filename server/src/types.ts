@@ -84,6 +84,8 @@ export type Food = {
   makesServings: number;
   source: FoodSource;
   sourceRef: string | null;
+  /** Cooking directions for custom recipes (meal-kit imports, composed recipes). */
+  instructions: string | null;
   ingredients: IngredientLine[];
 };
 

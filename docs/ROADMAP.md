@@ -205,6 +205,35 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ---
 
+## Phase 10 — Meal-kit recipe cards (import + follow-ups)
+
+**Status:** In progress — scanned PDF OCR, `recipeCard` upload payload, `instructions` on custom recipes, recipe editor PDF import (see `parseRecipeCard.ts`, `ocrScannedPdf.ts`).
+
+**Goal:** One library **recipe** holds **shopping ingredient lines**, **cooking instructions**, and **per-serving nutrition** (meal-kit cards such as Green Chef), integrated with Plan → grocery and logging.
+
+**Foundation (in tree / landing)**
+
+- PDF with no text layer → page rasterize (`poppler`) + existing OCR pipeline.
+- Section parser: Ingredients / Instructions / Nutrition (layout patterns, not brand-specific).
+- Compose saves text ingredient lines; nutrition from label panel when lines are not linked to library foods.
+- Grocery aggregation already uses recipe ingredient **names** for shop lists.
+
+**Next (nice-to-have backlog)**
+
+- [ ] **Cooking mode on Plan** — show saved `instructions` on the meal plan (and/or a read-only “while cooking” view tuned for phone).
+- [ ] **Richer grocery lines** — parse quantity and unit from ingredient text (e.g. `12 oz chicken`) so shop list shows structured qty/unit instead of only “1 serving” per line.
+- [ ] **Photo import** — apply the same `parseRecipeCard` flow to **image** uploads (recipe card photos), not only PDF.
+- [ ] **Link ingredients after import** — UI to attach imported lines to library foods when desired (macro rollup from components vs label nutrition).
+
+**Tests**
+
+- Unit: `parseRecipeCard.test.ts` (+ OCR/layout fixtures as patterns, not proprietary copy).
+- Integration: compose with text-only ingredients + label nutrients; grocery list names from imported lines.
+
+**Files (expected):** `parseRecipeCard.ts`, `nutritionImport.ts`, `ocrScannedPdf.ts`, `foodRoutes.ts`, `FoodPage.tsx` (`RecipeEditor`), `PlanPage.tsx` (instructions display), `groceryList.ts` (qty/unit), `Dockerfile` (`poppler-utils`).
+
+---
+
 ## Phase 8 — Polish and client handoff
 
 - **Barcode scan:** native camera barcode → Open Food Facts lookup (stretch; not in original MVP table).
@@ -312,6 +341,7 @@ Phase 5 PDF workflow       ──► larger UX, iterative
 Phase 4b Push (optional)   ──► after 4a rules stable
 Phase 6 Walk doc/automation► only if client confirms
 Phase 7 OpenCookbook next   ► plan/grocery (in progress)
+Phase 10 Meal-kit recipes   ► PDF/photo import; Plan cooking UX; grocery qty parse
 Phase 8 Polish              ► parallel / handoff
 Phase 9 Offline PWA + sync  ► after core online flows stable (1–4, logging API)
 ```

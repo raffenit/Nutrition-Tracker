@@ -233,5 +233,9 @@ function migrate(db: AppDatabase): void {
   }
   if (!foodColumns.some((column) => column.name === 'nutrient_units_json')) {
     db.exec(`ALTER TABLE foods ADD COLUMN nutrient_units_json TEXT NOT NULL DEFAULT '{}'`);
+    foodColumns = db.prepare('PRAGMA table_info(foods)').all() as Array<{ name: string }>;
+  }
+  if (!foodColumns.some((column) => column.name === 'instructions')) {
+    db.exec(`ALTER TABLE foods ADD COLUMN instructions TEXT`);
   }
 }

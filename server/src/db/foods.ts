@@ -19,6 +19,7 @@ export type NewFood = {
   makesServings: number;
   source: FoodSource;
   sourceRef: string | null;
+  instructions: string | null;
   ingredients: IngredientLine[];
 };
 
@@ -43,6 +44,7 @@ type FoodSql = {
   nutrient_units_json: string;
   source: FoodSource;
   source_ref: string | null;
+  instructions: string | null;
 };
 
 export function insertFood(db: AppDatabase, food: NewFood): Food {
@@ -52,11 +54,11 @@ export function insertFood(db: AppDatabase, food: NewFood): Food {
       `INSERT INTO foods (
         id, created_by, name, brand, kind, serving_label, calories, protein, fiber, fat, carbs, sodium,
         extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json,
-        source, source_ref, created_at
+        source, source_ref, instructions, created_at
       ) VALUES (
         @id, @createdBy, @name, @brand, @kind, @servingLabel, @calories, @protein, @fiber, @fat, @carbs, @sodium,
         @extras, @isFavorite, @isDrink, @drinkMl, @makesServings, @servingsPerContainer, @nutrientUnitsJson,
-        @source, @sourceRef, @createdAt
+        @source, @sourceRef, @instructions, @createdAt
       )`,
     ).run({ id, ...foodParams(food), createdAt: new Date().toISOString() });
     replaceIngredients(db, id, food.ingredients);
@@ -74,7 +76,8 @@ export function updateFood(db: AppDatabase, id: string, food: NewFood): Food | n
         calories = @calories, protein = @protein, fiber = @fiber, fat = @fat, carbs = @carbs, sodium = @sodium,
         extras_json = @extras, is_favorite = @isFavorite, is_drink = @isDrink, drink_ml = @drinkMl,
         makes_servings = @makesServings, servings_per_container = @servingsPerContainer,
-        nutrient_units_json = @nutrientUnitsJson, source = @source, source_ref = @sourceRef
+        nutrient_units_json = @nutrientUnitsJson, source = @source, source_ref = @sourceRef,
+        instructions = @instructions
        WHERE id = @id`,
     ).run({ id, ...foodParams(food) });
     replaceIngredients(db, id, food.ingredients);
@@ -169,6 +172,7 @@ function toFood(row: FoodSql, ingredients: IngredientLine[]): Food {
     makesServings: row.makes_servings,
     source: row.source,
     sourceRef: row.source_ref,
+    instructions: row.instructions,
     ingredients,
   };
 }
@@ -195,6 +199,7 @@ function foodParams(food: NewFood): Record<string, string | number | null> {
     nutrientUnitsJson: JSON.stringify(food.nutrientUnits),
     source: food.source,
     sourceRef: food.sourceRef,
+    instructions: food.instructions,
   };
 }
 
@@ -212,4 +217,4 @@ function likeTerm(query: string): string {
 }
 
 const FOOD_COLUMNS = `SELECT id, name, brand, kind, serving_label, calories, protein, fiber, fat, carbs, sodium,
-  extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json, source, source_ref`;
+  extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json, source, source_ref, instructions`;

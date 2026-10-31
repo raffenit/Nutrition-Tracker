@@ -1135,6 +1135,18 @@ label.import-field-review,
   background: var(--raise);
   border: 1px solid var(--line);
 }
+.recipe-instructions-label { display: grid; gap: 0.35rem; margin: 0; }
+.recipe-instructions {
+  width: 100%;
+  min-height: 8rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
 .recipe-ingredients { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .recipe-ingredient {
   display: grid;

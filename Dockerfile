@@ -33,6 +33,7 @@ RUN apt-get update \
     libxext6 \
     libgomp1 \
     libgl1 \
+    poppler-utils \
   && pip3 install --break-system-packages --no-cache-dir -r /tmp/easyocr-requirements.txt \
   && rm -rf /var/lib/apt/lists/* /tmp/easyocr-requirements.txt
 

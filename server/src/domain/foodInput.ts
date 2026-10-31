@@ -38,8 +38,16 @@ export function readFoodInput(body: unknown, createdBy: string): NewFood {
     makesServings,
     source: body.source === undefined ? 'manual' : oneOf(body.source, SOURCES, 'Source'),
     sourceRef: optionalText(body.sourceRef),
+    instructions: readInstructions(body.instructions),
     ingredients: readIngredients(body.ingredients),
   };
+}
+
+function readInstructions(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new HttpError(400, 'Instructions must be text');
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 export function favoriteOnly(body: unknown): boolean | null {

@@ -35,6 +35,16 @@ import { EMPTY_NUTRIENTS, type Food, type Nutrients } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
 
+type RecipeCardImport = {
+  name: string;
+  brand: string | null;
+  makesServings: number;
+  servingLabel: string;
+  nutrients: Nutrients;
+  ingredients: Array<{ name: string; servings: number }>;
+  instructions: string;
+};
+
 type ImportResult = {
   uploadId: string | null;
   kind?: 'pdf' | 'image';
@@ -44,6 +54,7 @@ type ImportResult = {
   menuItems?: Array<{ name: string; servingLabel: string; nutrients: Nutrients }>;
   warning: string | null;
   fieldReview?: ImportFieldReviewMap;
+  recipeCard?: RecipeCardImport | null;
 };
 
 type ImportStatus = FoodImportStatus;
@@ -514,17 +525,25 @@ function FoodEditor({ editId }: { editId: string | null }) {
 
 function RecipeEditor({ editId }: { editId: string | null }) {
   const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
   const [makesServings, setMakesServings] = useState('1');
+  const [instructions, setInstructions] = useState('');
+  const [labelNutrients, setLabelNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
   const [lines, setLines] = useState<Array<{ foodId: string | null; name: string; servings: number; servingLabel: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(editId));
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!editId) return;
     void api<{ food: Food }>(`/api/foods/${editId}`).then(async (result) => {
       const food = result.food;
       setName(food.name);
+      setBrand(food.brand ?? '');
       setMakesServings(String(food.makesServings));
+      setInstructions(food.instructions ?? '');
+      setLabelNutrients(food.nutrients);
       const nextLines = await Promise.all(food.ingredients.map(async (line) => {
         if (line.childFoodId) {
           const hit = await api<{ food: Food }>(`/api/foods/${line.childFoodId}`);
@@ -551,13 +570,48 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     });
   }
 
+  function applyRecipeImport(result: ImportResult): void {
+    if (result.recipeCard) {
+      const card = result.recipeCard;
+      setName(card.name);
+      setBrand(card.brand ?? '');
+      setMakesServings(String(card.makesServings));
+      setInstructions(card.instructions);
+      setLabelNutrients(card.nutrients);
+      setLines(card.ingredients.map((line) => ({
+        foodId: null,
+        name: line.name,
+        servings: line.servings,
+        servingLabel: '1 item',
+      })));
+      setImportStatus(result.warning ?? 'Recipe card imported — review and save.');
+      return;
+    }
+    setImportStatus(result.warning ?? 'No recipe sections found in that file.');
+  }
+
+  async function uploadRecipePdf(file: File): Promise<void> {
+    setImportStatus(null);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.set('file', file);
+      const result = await apiFormUpload<ImportResult>('/api/uploads', body);
+      applyRecipeImport(result);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Import failed');
+    }
+  }
+
   async function save(): Promise<void> {
     const payload = {
       name,
+      brand: brand.trim() || null,
       kind: 'custom' as const,
       makesServings: Number(makesServings),
       servingLabel: '1 serving',
-      nutrients: EMPTY_NUTRIENTS,
+      nutrients: labelNutrients,
+      instructions: instructions.trim() || null,
       isFavorite: false,
       isDrink: false,
       drinkMl: null,
@@ -590,10 +644,45 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       </header>
 
       <section className="card form-section">
+        <h2 className="form-section-title">Import meal-kit PDF</h2>
+        <p className="muted">Upload a scanned recipe card (e.g. Green Chef). We OCR each page, pull ingredients, cooking steps, and nutrition into this recipe.</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void uploadRecipePdf(file);
+          }}
+        />
+        <button type="button" className="settings-secondary-btn" onClick={() => fileInputRef.current?.click()}>
+          Choose PDF…
+        </button>
+        {importStatus && <p className="muted">{importStatus}</p>}
+      </section>
+
+      <section className="card form-section">
         <div className="form-row-2">
           <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
           <label>Makes (servings)<input type="number" min="1" step="1" value={makesServings} onChange={(event) => setMakesServings(event.target.value)} required /></label>
         </div>
+        <label>Brand (optional)<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Green Chef" /></label>
+      </section>
+
+      <section className="card form-section">
+        <h2 className="form-section-title">Cooking instructions</h2>
+        <label className="recipe-instructions-label">
+          <span className="sr-only">Cooking instructions</span>
+          <textarea
+            className="recipe-instructions"
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            rows={8}
+            placeholder="Steps from the recipe card…"
+          />
+        </label>
       </section>
 
       <div className="food-form-layout">
