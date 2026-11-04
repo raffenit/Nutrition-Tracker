@@ -596,7 +596,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     try {
       const body = new FormData();
       body.set('file', file);
-      const result = await apiFormUpload<ImportResult>('/api/uploads', body);
+      const result = await apiFormUpload<ImportResult>('/api/uploads', body, () => {});
       applyRecipeImport(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Import failed');
