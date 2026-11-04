@@ -7,8 +7,9 @@
 # Prefer this script. standalone-deploy.sh / external-deploy.sh are helpers; use them directly only in edge cases (see README deploy reference).
 
 set -euo pipefail
+cd "$(dirname "$0")"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(pwd)"
 
 # Windows/WSL host checks (CRLF, Docker, .env hints) — skip on Linux server or SKIP_WSL_PREFLIGHT=1
 if [[ "${SKIP_WSL_PREFLIGHT:-}" != "1" ]]; then
