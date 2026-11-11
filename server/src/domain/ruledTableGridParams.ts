@@ -9,7 +9,7 @@ export type RuledTableGridParams = {
   valueRowScanTopSkipFraction: number;
   /** Skip bottom of band (footnotes). */
   valueRowScanBottomSkipFraction: number;
-  /** Gutter must exceed this fraction of peak brightness in the value region profile. */
+  /** Gutter column means must exceed this fraction of classified paper background luminance. */
   gutterBrightnessMinFraction: number;
   /** Minimum gutter width as fraction of value-region width. */
   gutterMinWidthFraction: number;
@@ -21,6 +21,16 @@ export type RuledTableGridParams = {
   horizontalRuleThresholdFraction: number;
   /** Minimum column width as fraction of value-region width. */
   minColumnWidthFraction: number;
+  /** Max width CV among product columns before spurious gutter trim is skipped. */
+  trimSpuriousColumnMaxUniformCv: number;
+  /** Horizontal rule level: median edge strength multiplier. */
+  horizontalRuleMedianMultiplier: number;
+  /** Horizontal rule level: fraction of column peak (with median term). */
+  horizontalRulePeakLevelFraction: number;
+  /** Vertical gutter: ink probe spans up to this many gutter run widths. */
+  verticalGutterInkProbeGutterWidths: number;
+  /** Vertical gutter: leading edge margin as fraction of min gutter spacing. */
+  verticalGutterInkEdgeMarginOfMinSpacing: number;
 };
 
 const W = IMAGE_ANALYSIS_WIDTH;
@@ -34,4 +44,9 @@ export const DEFAULT_RULED_TABLE_GRID_PARAMS: RuledTableGridParams = {
   minHorizontalRulesPerColumn: 4,
   horizontalRuleThresholdFraction: 0.42,
   minColumnWidthFraction: 28 / W,
+  trimSpuriousColumnMaxUniformCv: 0.14,
+  horizontalRuleMedianMultiplier: 2.5,
+  horizontalRulePeakLevelFraction: 0.28,
+  verticalGutterInkProbeGutterWidths: 4,
+  verticalGutterInkEdgeMarginOfMinSpacing: 0.35,
 };
