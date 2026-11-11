@@ -238,4 +238,11 @@ function migrate(db: AppDatabase): void {
   if (!foodColumns.some((column) => column.name === 'instructions')) {
     db.exec(`ALTER TABLE foods ADD COLUMN instructions TEXT`);
   }
+  const ingredientColumns = db.prepare('PRAGMA table_info(food_ingredients)').all() as Array<{ name: string }>;
+  if (!ingredientColumns.some((column) => column.name === 'shop_equivalent_food_id')) {
+    db.exec(`ALTER TABLE food_ingredients ADD COLUMN shop_equivalent_food_id TEXT REFERENCES foods(id) ON DELETE SET NULL`);
+  }
+  if (!ingredientColumns.some((column) => column.name === 'shop_equivalent_label')) {
+    db.exec(`ALTER TABLE food_ingredients ADD COLUMN shop_equivalent_label TEXT`);
+  }
 }

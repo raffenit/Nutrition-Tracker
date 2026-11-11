@@ -629,7 +629,16 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [instructions, setInstructions] = useState('');
   const [labelNutrients, setLabelNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [lines, setLines] = useState<Array<{ foodId: string | null; name: string; servings: number; servingLabel: string }>>([]);
+  const [lines, setLines] = useState<Array<{
+    foodId: string | null;
+    name: string;
+    servings: number;
+    servingLabel: string;
+    shopEquivalentFoodId: string | null;
+    shopEquivalentLabel: string;
+  }>>([]);
+  const [shopPickIndex, setShopPickIndex] = useState<number | null>(null);
+  const [nutritionPickIndex, setNutritionPickIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(editId));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -644,11 +653,21 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       setInstructions(food.instructions ?? '');
       setLabelNutrients(food.nutrients);
       const nextLines = await Promise.all(food.ingredients.map(async (line) => {
+        let shopLabel = line.shopEquivalentLabel ?? '';
+        if (line.shopEquivalentFoodId) {
+          const equiv = await api<{ food: Food }>(`/api/foods/${line.shopEquivalentFoodId}`);
+          if (!shopLabel) shopLabel = equiv.food.name;
+        }
+        const base = {
+          servings: line.servings,
+          shopEquivalentFoodId: line.shopEquivalentFoodId,
+          shopEquivalentLabel: shopLabel,
+        };
         if (line.childFoodId) {
           const hit = await api<{ food: Food }>(`/api/foods/${line.childFoodId}`);
-          return { foodId: line.childFoodId, name: hit.food.name, servings: line.servings, servingLabel: hit.food.servingLabel };
+          return { foodId: line.childFoodId, name: line.name, servingLabel: hit.food.servingLabel, ...base };
         }
-        return { foodId: null, name: line.name, servings: line.servings, servingLabel: '1 serving' };
+        return { foodId: null, name: line.name, servingLabel: '1 item', ...base };
       }));
       setLines(nextLines);
       setLoading(false);
@@ -665,7 +684,14 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         next[index] = { ...next[index], servings: next[index].servings + 1 };
         return next;
       }
-      return [...prev, { foodId: food.id, name: food.name, servings: 1, servingLabel: food.servingLabel }];
+      return [...prev, {
+        foodId: food.id,
+        name: food.name,
+        servings: 1,
+        servingLabel: food.servingLabel,
+        shopEquivalentFoodId: null,
+        shopEquivalentLabel: '',
+      }];
     });
   }
 
@@ -682,6 +708,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         name: line.name,
         servings: line.servings,
         servingLabel: '1 item',
+        shopEquivalentFoodId: null,
+        shopEquivalentLabel: '',
       })));
       setImportStatus(result.warning ?? 'Recipe card imported — review and save.');
       return;
@@ -689,7 +717,22 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     setImportStatus(result.warning ?? 'No recipe sections found in that file.');
   }
 
-  async function uploadRecipePdf(file: File): Promise<void> {
+  function linkLineNutrition(index: number, food: Food): void {
+    setLines((prev) => {
+      const line = prev[index];
+      if (!line) return prev;
+      const next = [...prev];
+      next[index] = {
+        ...line,
+        foodId: food.id,
+        servingLabel: food.servingLabel,
+      };
+      return next;
+    });
+    setNutritionPickIndex(null);
+  }
+
+  async function uploadRecipeCard(file: File): Promise<void> {
     setImportStatus(null);
     setError(null);
     try {
@@ -719,6 +762,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         name: line.name,
         servings: line.servings,
         foodId: line.foodId,
+        shopEquivalentFoodId: line.shopEquivalentFoodId,
+        shopEquivalentLabel: line.shopEquivalentLabel.trim() || null,
       })),
     };
     try {
@@ -743,21 +788,21 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       </header>
 
       <section className="card form-section">
-        <h2 className="form-section-title">Import meal-kit PDF</h2>
-        <p className="muted">Upload a scanned recipe card (e.g. Green Chef). We OCR each page, pull ingredients, cooking steps, and nutrition into this recipe.</p>
+        <h2 className="form-section-title">Import meal-kit card</h2>
+        <p className="muted">Upload a scanned recipe card PDF or photo (e.g. Green Chef). We OCR it and pull ingredients, steps, and nutrition into this recipe.</p>
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf,.pdf"
+          accept="application/pdf,.pdf,image/jpeg,image/png,image/webp"
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) void uploadRecipePdf(file);
+            if (file) void uploadRecipeCard(file);
           }}
         />
         <button type="button" className="settings-secondary-btn" onClick={() => fileInputRef.current?.click()}>
-          Choose PDF…
+          Choose PDF or photo…
         </button>
         {importStatus && <p className="muted">{importStatus}</p>}
       </section>
@@ -798,24 +843,103 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         <ul className="recipe-ingredients">
           {lines.map((line, index) => (
             <li key={`${line.foodId ?? line.name}-${index}`} className="recipe-ingredient">
-              <span className="recipe-ingredient-name">{line.name}</span>
-              <label className="recipe-ingredient-qty">
-                <span className="sr-only">Servings of {line.name}</span>
-                <input
-                  type="number"
-                  min="0.25"
-                  step="0.25"
-                  value={line.servings}
-                  aria-label={`Servings of ${line.name}`}
-                  onChange={(event) => {
-                    const next = [...lines];
-                    next[index] = { ...line, servings: Number(event.target.value) };
-                    setLines(next);
-                  }}
-                />
-                <span className="muted">× {line.servingLabel}</span>
-              </label>
-              <RemoveButton label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))} />
+              <div className="recipe-ingredient-main">
+                <span className="recipe-ingredient-name">{line.name}</span>
+                <label className="recipe-ingredient-qty">
+                  <span className="sr-only">Servings of {line.name}</span>
+                  <input
+                    type="number"
+                    min="0.25"
+                    step="0.25"
+                    value={line.servings}
+                    aria-label={`Servings of ${line.name}`}
+                    onChange={(event) => {
+                      const next = [...lines];
+                      next[index] = { ...line, servings: Number(event.target.value) };
+                      setLines(next);
+                    }}
+                  />
+                  <span className="muted">× {line.servingLabel}</span>
+                </label>
+                <RemoveButton label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))} />
+              </div>
+              <div className="recipe-ingredient-shop">
+                <label className="recipe-shop-label">
+                  Buy at store
+                  <input
+                    value={line.shopEquivalentLabel}
+                    placeholder="e.g. jarred chimichurri"
+                    onChange={(event) => {
+                      const next = [...lines];
+                      next[index] = { ...line, shopEquivalentLabel: event.target.value, shopEquivalentFoodId: null };
+                      setLines(next);
+                    }}
+                  />
+                </label>
+                {line.shopEquivalentFoodId ? (
+                  <p className="muted">
+                    Linked: {line.shopEquivalentLabel || 'library item'}{' '}
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => {
+                        const next = [...lines];
+                        next[index] = { ...line, shopEquivalentFoodId: null };
+                        setLines(next);
+                      }}
+                    >
+                      Clear link
+                    </button>
+                  </p>
+                ) : (
+                  <button type="button" className="linkish" onClick={() => setShopPickIndex(shopPickIndex === index ? null : index)}>
+                    {shopPickIndex === index ? 'Cancel link' : 'Link library food instead'}
+                  </button>
+                )}
+                {shopPickIndex === index && (
+                  <FoodLibraryPicker
+                    shelf="foods"
+                    onSelect={(food) => {
+                      const next = [...lines];
+                      next[index] = {
+                        ...line,
+                        shopEquivalentFoodId: food.id,
+                        shopEquivalentLabel: food.name,
+                      };
+                      setLines(next);
+                      setShopPickIndex(null);
+                    }}
+                    excludeIds={excludeIds}
+                    actionLabel="Link"
+                  />
+                )}
+                {!line.foodId && (
+                  <button
+                    type="button"
+                    className="linkish"
+                    onClick={() => setNutritionPickIndex(nutritionPickIndex === index ? null : index)}
+                  >
+                    {nutritionPickIndex === index ? 'Cancel nutrition link' : 'Link library food for nutrition rollup'}
+                  </button>
+                )}
+                {line.foodId && (
+                  <p className="muted">Nutrition linked to library item ·{' '}
+                    <button type="button" className="linkish" onClick={() => {
+                      const next = [...lines];
+                      next[index] = { ...line, foodId: null, servingLabel: '1 item' };
+                      setLines(next);
+                    }}>Clear link</button>
+                  </p>
+                )}
+                {nutritionPickIndex === index && (
+                  <FoodLibraryPicker
+                    shelf="foods"
+                    onSelect={(food) => linkLineNutrition(index, food)}
+                    excludeIds={excludeIds}
+                    actionLabel="Link"
+                  />
+                )}
+              </div>
             </li>
           ))}
         </ul>

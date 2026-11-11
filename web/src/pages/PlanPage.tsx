@@ -21,6 +21,7 @@ type GroceryLineItem = {
   quantity: number;
   unit: string;
   foodId: string | null;
+  recipeLineName?: string | null;
 };
 
 type PlanView = 'week' | 'shop';
@@ -32,7 +33,8 @@ export function PlanPage() {
   const [weekStart, setWeekStart] = useState(() => weekStartMonday(weekParam ?? new Date().toISOString().slice(0, 10)));
   const [entries, setEntries] = useState<PlanEntry[]>([]);
   const [today, setToday] = useState('');
-  const [recipes, setRecipes] = useState<Food[]>([]);
+  const [planFoods, setPlanFoods] = useState<Food[]>([]);
+  const [cooking, setCooking] = useState<{ title: string; instructions: string } | null>(null);
   const [grocery, setGrocery] = useState<{ lineItems: GroceryLineItem[]; markdown: string } | null>(null);
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -58,7 +60,9 @@ export function PlanPage() {
   useEffect(() => {
     const anchor = weekParam ?? new Date().toISOString().slice(0, 10);
     void loadPlan(weekStartMonday(anchor)).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not load plan'));
-    void api<{ foods: Food[] }>('/api/foods?shelf=recipes').then((result) => setRecipes(result.foods));
+    void api<{ foods: Food[] }>('/api/foods?shelf=all').then((result) => {
+      setPlanFoods(result.foods.filter((food) => food.kind === 'custom' || food.kind === 'packaged'));
+    });
   }, [href]);
 
   useEffect(() => {
@@ -135,6 +139,13 @@ export function PlanPage() {
                       <button
                         type="button"
                         className="library-action"
+                        onClick={() => void openCooking(entry, setCooking, setError)}
+                      >
+                        Cook
+                      </button>
+                      <button
+                        type="button"
+                        className="library-action"
                         onClick={() => void logFromPlan(entry, setError)}
                       >
                         Log
@@ -181,6 +192,9 @@ export function PlanPage() {
                   <span className={checks[item.key] ? 'shop-item-done' : undefined}>
                     <strong>{item.name}</strong>
                     <span className="muted"> · {formatQty(item.quantity)} {item.unit}</span>
+                    {item.recipeLineName && (
+                      <span className="muted shop-kit-line"> · recipe: {item.recipeLineName}</span>
+                    )}
                   </span>
                 </label>
               </li>
@@ -194,10 +208,20 @@ export function PlanPage() {
         </section>
       )}
 
+      {cooking && (
+        <div className="plan-dialog-backdrop" role="presentation" onClick={() => setCooking(null)}>
+          <div className="card plan-dialog cooking-dialog" onClick={(event) => event.stopPropagation()}>
+            <h2>{cooking.title}</h2>
+            <pre className="cooking-instructions">{cooking.instructions}</pre>
+            <button type="button" className="primary" onClick={() => setCooking(null)}>Done</button>
+          </div>
+        </div>
+      )}
+
       {addDay && (
         <AddPlanMealDialog
           day={addDay}
-          recipes={recipes}
+          recipes={planFoods}
           onClose={() => setAddDay(null)}
           onAdd={(draft) => {
             setAddDay(null);
@@ -247,14 +271,14 @@ function AddPlanMealDialog({
       >
         <h2>Add to {day}</h2>
         {recipes.length === 0 ? (
-          <p className="muted">Create a recipe in Library first.</p>
+          <p className="muted">Add a recipe or packaged food in Library first.</p>
         ) : (
           <>
             <label>
-              Recipe
+              Food or recipe
               <select value={foodId} onChange={(event) => setFoodId(event.target.value)}>
                 {recipes.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
+                  <option key={item.id} value={item.id}>{item.name}{item.kind === 'packaged' ? ' (packaged)' : ''}</option>
                 ))}
               </select>
             </label>
@@ -280,6 +304,25 @@ function AddPlanMealDialog({
       </form>
     </div>
   );
+}
+
+async function openCooking(
+  entry: PlanEntry,
+  setCooking: (value: { title: string; instructions: string } | null) => void,
+  setError: (value: string | null) => void,
+): Promise<void> {
+  try {
+    const result = await api<{ food: Food }>(`/api/foods/${entry.foodId}`);
+    const text = result.food.instructions?.trim();
+    if (!text) {
+      setError('This item has no cooking instructions. Edit the recipe to add steps from the meal card.');
+      return;
+    }
+    setCooking({ title: entry.foodName, instructions: text });
+    setError(null);
+  } catch (caught: unknown) {
+    setError(caught instanceof Error ? caught.message : 'Could not load instructions');
+  }
 }
 
 async function logFromPlan(entry: PlanEntry, setError: (value: string | null) => void): Promise<void> {

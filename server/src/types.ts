@@ -94,6 +94,10 @@ export type IngredientLine = {
   servings: number;
   sourceRef: string | null;
   childFoodId: string | null;
+  /** Library food to buy when the recipe line is kit-specific (e.g. meal-kit sauce pouch). */
+  shopEquivalentFoodId: string | null;
+  /** Free-text shopping name when there is no library equivalent. */
+  shopEquivalentLabel: string | null;
 };
 
 export type MealLog = {

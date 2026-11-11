@@ -364,6 +364,18 @@ Without Docker: run built `server/` on port 3010 and `web/` `npm run dev` (Vite 
 
 ---
 
+## Client feature matrix
+
+Original client requirements vs what ships today — full table in [docs/ARCHITECTURE.md — Goals and client spec](./docs/ARCHITECTURE.md#goals-and-client-spec-baseline). Highlights:
+
+| Area | Shipped |
+| --- | --- |
+| Label scan + library | Image/PDF/URL import, manual entry, favorites |
+| Custom meals & meal kits | Recipe compose, PDF/photo card import, store equivalents, plan → shop → log |
+| Goals & alerts | Targets, extras, in-app + optional push alerts |
+| Family | Shared board + kiosk; weight never exposed |
+| Hosting | Docker, Tailscale HTTPS, PWA offline sync, automatic DB backups |
+
 ## More documentation
 
 - [docs/SETUP-WINDOWS-WSL.md](./docs/SETUP-WINDOWS-WSL.md) — expanded Windows/WSL steps (matches Setup **Step 2** here)  

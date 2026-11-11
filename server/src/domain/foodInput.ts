@@ -67,11 +67,14 @@ function readIngredient(value: unknown): IngredientLine {
   if (!isRecord(value)) throw new HttpError(400, 'Each ingredient needs a name');
   const servings = requiredNumber(value.servings, 'Ingredient amount');
   if (servings <= 0) throw new HttpError(400, 'Ingredient amount must be greater than zero');
+  const childFoodId = optionalText(value.childFoodId) ?? optionalText(value.foodId);
   return {
     name: requiredText(value.name, 'Ingredient'),
     servings,
     sourceRef: optionalText(value.sourceRef),
-    childFoodId: optionalText(value.childFoodId),
+    childFoodId,
+    shopEquivalentFoodId: optionalText(value.shopEquivalentFoodId),
+    shopEquivalentLabel: optionalText(value.shopEquivalentLabel),
   };
 }
 

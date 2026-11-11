@@ -38,7 +38,30 @@ const chili: Food = {
   source: 'composed',
   sourceRef: null,
   instructions: null,
-  ingredients: [{ name: 'Greek yogurt', servings: 2, sourceRef: null, childFoodId: 'y1' }],
+  ingredients: [{
+    name: 'Greek yogurt',
+    servings: 2,
+    sourceRef: null,
+    childFoodId: 'y1',
+    shopEquivalentFoodId: null,
+    shopEquivalentLabel: null,
+  }],
+};
+
+const kitSauceLine = {
+  name: 'Green Chef chimichurri pouch',
+  servings: 1,
+  sourceRef: null,
+  childFoodId: null as string | null,
+  shopEquivalentFoodId: 'y1',
+  shopEquivalentLabel: null as string | null,
+};
+
+const mealKit: Food = {
+  ...chili,
+  id: 'r2',
+  name: 'Steak kit',
+  ingredients: [kitSauceLine],
 };
 
 test('aggregateGroceryLineItems scales recipe ingredients by planned servings', () => {
@@ -50,4 +73,38 @@ test('aggregateGroceryLineItems scales recipe ingredients by planned servings', 
   assert.equal(items.length, 1);
   assert.equal(items[0]?.name, 'Greek yogurt');
   assert.equal(items[0]?.quantity, 4);
+});
+
+test('aggregateGroceryLineItems parses oz quantities from ingredient text', () => {
+  const chicken: Food = {
+    ...yogurt,
+    id: 'chicken',
+    name: 'Chicken thighs',
+    kind: 'custom',
+    makesServings: 2,
+    ingredients: [{
+      name: '12 oz boneless chicken thighs',
+      servings: 1,
+      sourceRef: null,
+      childFoodId: null,
+      shopEquivalentFoodId: null,
+      shopEquivalentLabel: null,
+    }],
+  };
+  const map = new Map<string, Food>([['chicken', chicken]]);
+  const items = aggregateGroceryLineItems([{ foodId: 'chicken', servings: 4 }], (id) => map.get(id) ?? null);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.quantity, 24);
+  assert.equal(items[0]?.unit, 'oz');
+});
+
+test('aggregateGroceryLineItems uses shop equivalent for kit-specific ingredients', () => {
+  const map = new Map<string, Food>([
+    ['y1', yogurt],
+    ['r2', mealKit],
+  ]);
+  const items = aggregateGroceryLineItems([{ foodId: 'r2', servings: 2 }], (id) => map.get(id) ?? null);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.name, 'Greek yogurt');
+  assert.equal(items[0]?.recipeLineName, 'Green Chef chimichurri pouch');
 });

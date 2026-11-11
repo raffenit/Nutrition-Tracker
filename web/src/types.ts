@@ -63,6 +63,8 @@ export type IngredientLine = {
   servings: number;
   sourceRef: string | null;
   childFoodId: string | null;
+  shopEquivalentFoodId: string | null;
+  shopEquivalentLabel: string | null;
 };
 
 export type CoreNutrientUnits = {

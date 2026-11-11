@@ -199,9 +199,9 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 **Next**
 
-- Plan packaged foods / single ingredients, not only recipes.
-- Pantry (“already have”) toggles on grocery lines.
-- Optional Instacart IDP export when/if partner access is available.
+- [x] Plan **packaged foods** and recipes (not recipes-only picker).
+- [x] Shopping list checkboxes (pantry / “already have”) persisted per week in `localStorage`.
+- [ ] Optional Instacart IDP export when/if partner access is available.
 
 ---
 
@@ -220,10 +220,11 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 **Next (nice-to-have backlog)**
 
-- [ ] **Cooking mode on Plan** — show saved `instructions` on the meal plan (and/or a read-only “while cooking” view tuned for phone).
-- [ ] **Richer grocery lines** — parse quantity and unit from ingredient text (e.g. `12 oz chicken`) so shop list shows structured qty/unit instead of only “1 serving” per line.
-- [ ] **Photo import** — apply the same `parseRecipeCard` flow to **image** uploads (recipe card photos), not only PDF.
-- [ ] **Link ingredients after import** — UI to attach imported lines to library foods when desired (macro rollup from components vs label nutrition).
+- [x] **Cooking mode on Plan** — **Cook** opens saved `instructions` while you work.
+- [x] **Store equivalents for kit ingredients** — per line: `shopEquivalentFoodId` / `shopEquivalentLabel` (Green Chef sauces → what you buy at the store); grocery list uses equivalent + shows recipe line name.
+- [x] **Richer grocery lines** — `parseIngredientLine.ts` reads leading qty/unit from text lines (e.g. `12 oz chicken`).
+- [x] **Photo import** — recipe editor accepts JPEG/PNG/WEBP meal-kit cards through `/api/uploads`.
+- [x] **Link ingredients after import** — “Link library food for nutrition rollup” keeps kit line text, sets `childFoodId`.
 
 **Tests**
 
@@ -237,7 +238,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 ## Phase 8 — Polish and client handoff
 
 - **Barcode scan:** native camera barcode → Open Food Facts lookup (stretch; not in original MVP table).
-- **README client section:** link spec → feature matrix (arch doc table).
+- [x] **README client section** — feature matrix summary → [ARCHITECTURE.md](./ARCHITECTURE.md#goals-and-client-spec-baseline).
 - **Performance:** OCR uploads async feedback (progress UI) if large PDFs feel slow.
 - **Backup / persistence:** moved to **Phase 11** (production incident — empty household after Docker restart).
 
@@ -449,12 +450,12 @@ Phase 4a Goal alerts       ──► client “alert functionality” (in-app)
 Phase 5 PDF workflow       ──► larger UX, iterative
 Phase 4b Push (optional)   ──► after 4a rules stable
 Phase 6 Walk doc/automation► only if client confirms
-Phase 7 OpenCookbook next   ► plan/grocery (in progress)
-Phase 10 Meal-kit recipes   ► PDF/photo import; Plan cooking UX; grocery qty parse
-Phase 11 Data + backup      ► **priority** — verify mounts, backups, recovery (production data loss)
-Phase 12 Multi-label import ► photos + PDFs; pick-one vs import-all
-Phase 13 Tags               ► library search; optional link to drink tag
-Phase 8 Polish              ► parallel / handoff
+Phase 7 OpenCookbook next   ► plan/grocery (in progress — packaged on plan)
+Phase 10 Meal-kit recipes   ► equivalents, Cook on plan; qty parse + photo import TODO
+Phase 8 Polish              ► parallel / handoff (before 12/13)
+Phase 11 Data + backup      ► Done
+Phase 12 Multi-label import ► paused until 7/8/10 land
+Phase 13 Tags               ► after 7/8/10
 Phase 9 Offline PWA + sync  ► after core online flows stable (1–4, logging API)
 ```
 

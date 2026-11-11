@@ -128,23 +128,42 @@ function mustFood(db: AppDatabase, id: string): Food {
 function replaceIngredients(db: AppDatabase, parentId: string, lines: IngredientLine[]): void {
   db.prepare('DELETE FROM food_ingredients WHERE parent_id = ?').run(parentId);
   const insert = db.prepare(
-    `INSERT INTO food_ingredients (id, parent_id, name, servings, source_ref, child_food_id)
-     VALUES (@id, @parentId, @name, @servings, @sourceRef, @childFoodId)`,
+    `INSERT INTO food_ingredients (id, parent_id, name, servings, source_ref, child_food_id, shop_equivalent_food_id, shop_equivalent_label)
+     VALUES (@id, @parentId, @name, @servings, @sourceRef, @childFoodId, @shopEquivalentFoodId, @shopEquivalentLabel)`,
   );
   for (const line of lines) {
-    insert.run({ id: randomUUID(), parentId, ...line });
+    insert.run({
+      id: randomUUID(),
+      parentId,
+      name: line.name,
+      servings: line.servings,
+      sourceRef: line.sourceRef,
+      childFoodId: line.childFoodId,
+      shopEquivalentFoodId: line.shopEquivalentFoodId,
+      shopEquivalentLabel: line.shopEquivalentLabel,
+    });
   }
 }
 
 function ingredientsFor(db: AppDatabase, parentId: string): IngredientLine[] {
   const rows = db.prepare(
-    `SELECT name, servings, source_ref, child_food_id FROM food_ingredients WHERE parent_id = ?`,
-  ).all(parentId) as Array<{ name: string; servings: number; source_ref: string | null; child_food_id: string | null }>;
+    `SELECT name, servings, source_ref, child_food_id, shop_equivalent_food_id, shop_equivalent_label
+     FROM food_ingredients WHERE parent_id = ?`,
+  ).all(parentId) as Array<{
+    name: string;
+    servings: number;
+    source_ref: string | null;
+    child_food_id: string | null;
+    shop_equivalent_food_id: string | null;
+    shop_equivalent_label: string | null;
+  }>;
   return rows.map((row) => ({
     name: row.name,
     servings: row.servings,
     sourceRef: row.source_ref,
     childFoodId: row.child_food_id,
+    shopEquivalentFoodId: row.shop_equivalent_food_id,
+    shopEquivalentLabel: row.shop_equivalent_label,
   }));
 }
 

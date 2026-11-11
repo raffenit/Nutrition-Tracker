@@ -1,4 +1,5 @@
-import type { Food, MealSlot } from '../types.js';
+import { parseLeadingQuantityUnit } from './parseIngredientLine.js';
+import type { Food, IngredientLine, MealSlot } from '../types.js';
 
 /** Instacart-compatible line item (name + optional qty/unit). */
 export type GroceryLineItem = {
@@ -7,6 +8,8 @@ export type GroceryLineItem = {
   quantity: number;
   unit: string;
   foodId: string | null;
+  /** Recipe / kit line name when it differs from what to buy (meal-kit sauces, etc.). */
+  recipeLineName: string | null;
 };
 
 export type PlannedMeal = {
@@ -28,18 +31,60 @@ export function aggregateGroceryLineItems(
     if (food.kind === 'custom' && food.ingredients.length > 0) {
       const batchFactor = plan.servings / Math.max(food.makesServings, 1);
       for (const line of food.ingredients) {
-        const qty = line.servings * batchFactor;
-        if (qty <= 0) continue;
-        const child = line.childFoodId ? foodById(line.childFoodId) : null;
-        const name = child?.name ?? line.name;
-        const key = line.childFoodId ?? `name:${name.toLowerCase()}`;
-        mergeLine(buckets, key, name, qty, 'serving', line.childFoodId);
+        if (line.servings <= 0) continue;
+        const shop = resolveShoppingLine(line, foodById);
+        const scaled = groceryQtyAndUnit(line, batchFactor);
+        mergeLine(buckets, shop.key, shop.name, scaled.quantity, scaled.unit, shop.foodId, shop.recipeLineName);
       }
       continue;
     }
-    mergeLine(buckets, food.id, food.name, plan.servings, 'serving', food.id);
+    mergeLine(buckets, food.id, food.name, plan.servings, 'serving', food.id, null);
   }
   return [...buckets.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+export function groceryQtyAndUnit(line: IngredientLine, batchFactor: number): { quantity: number; unit: string } {
+  const parsed = parseLeadingQuantityUnit(line.name);
+  if (parsed && !line.childFoodId) {
+    return {
+      quantity: parsed.quantity * line.servings * batchFactor,
+      unit: parsed.unit,
+    };
+  }
+  return {
+    quantity: line.servings * batchFactor,
+    unit: 'serving',
+  };
+}
+
+export function resolveShoppingLine(
+  line: IngredientLine,
+  foodById: (id: string) => Food | null,
+): { key: string; name: string; foodId: string | null; recipeLineName: string | null } {
+  if (line.shopEquivalentFoodId) {
+    const equiv = foodById(line.shopEquivalentFoodId);
+    const name = equiv?.name ?? line.shopEquivalentLabel ?? line.name;
+    const recipeLineName = name !== line.name ? line.name : null;
+    return {
+      key: `shop:${line.shopEquivalentFoodId}`,
+      name,
+      foodId: line.shopEquivalentFoodId,
+      recipeLineName,
+    };
+  }
+  if (line.shopEquivalentLabel) {
+    const label = line.shopEquivalentLabel.trim();
+    return {
+      key: `label:${label.toLowerCase()}`,
+      name: label,
+      foodId: null,
+      recipeLineName: label !== line.name ? line.name : null,
+    };
+  }
+  const child = line.childFoodId ? foodById(line.childFoodId) : null;
+  const name = child?.name ?? line.name;
+  const key = line.childFoodId ?? `name:${name.toLowerCase()}`;
+  return { key, name, foodId: line.childFoodId, recipeLineName: null };
 }
 
 export function formatGroceryMarkdown(weekStart: string, weekEnd: string, items: GroceryLineItem[], meals: PlannedMeal[]): string {
@@ -56,7 +101,8 @@ export function formatGroceryMarkdown(weekStart: string, weekEnd: string, items:
   } else {
     for (const item of items) {
       const qty = formatQty(item.quantity);
-      lines.push(`- [ ] **${item.name}** — ${qty} ${item.unit}`.trim());
+      const kitNote = item.recipeLineName ? ` _(recipe: ${item.recipeLineName})_` : '';
+      lines.push(`- [ ] **${item.name}** — ${qty} ${item.unit}${kitNote}`.trim());
     }
     lines.push(``);
   }
@@ -87,13 +133,15 @@ function mergeLine(
   quantity: number,
   unit: string,
   foodId: string | null,
+  recipeLineName: string | null,
 ): void {
   const prev = buckets.get(key);
   if (!prev) {
-    buckets.set(key, { key, name, quantity, unit, foodId });
+    buckets.set(key, { key, name, quantity, unit, foodId, recipeLineName });
     return;
   }
   prev.quantity += quantity;
+  if (!prev.recipeLineName && recipeLineName) prev.recipeLineName = recipeLineName;
 }
 
 function formatQty(value: number): string {

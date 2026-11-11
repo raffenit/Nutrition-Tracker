@@ -1149,12 +1149,42 @@ label.import-field-review,
 }
 .recipe-ingredients { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .recipe-ingredient {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.recipe-ingredient-main {
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 8px;
   align-items: center;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
+}
+.recipe-ingredient-shop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-inline-start: 0.25rem;
+  border-inline-start: 2px solid var(--line);
+}
+.recipe-shop-label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  margin: 0;
+}
+.recipe-shop-label input {
+  min-height: 2.25rem;
+  font: inherit;
+}
+.cooking-dialog .cooking-instructions {
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.5;
+  max-height: min(60vh, 28rem);
+  overflow: auto;
+  margin: 0 0 1rem;
 }
 .recipe-ingredient:last-child { border-bottom: 0; }
 .recipe-ingredient-name {

@@ -258,15 +258,33 @@ function attachOwnedUpload(ctx: Ctx, uploadId: string, foodId: string): void {
   attachUpload(ctx.db, uploadId, foodId);
 }
 
-function ingredientLine(ctx: Ctx, value: unknown): { name: string; servings: number; nutrients: ReturnType<typeof readNutrients>; sourceRef: string | null; childFoodId: string | null } {
+function ingredientLine(ctx: Ctx, value: unknown): {
+  name: string;
+  servings: number;
+  nutrients: ReturnType<typeof readNutrients>;
+  sourceRef: string | null;
+  childFoodId: string | null;
+  shopEquivalentFoodId: string | null;
+  shopEquivalentLabel: string | null;
+} {
   if (!isRecord(value)) throw new HttpError(400, 'Each ingredient needs a name');
   const servings = requiredNumber(value.servings, 'Ingredient amount');
   if (servings <= 0) throw new HttpError(400, 'Ingredient amount must be greater than zero');
+  const shopEquivalentFoodId = optionalText(value.shopEquivalentFoodId);
+  const shopEquivalentLabel = optionalText(value.shopEquivalentLabel);
   const childFoodId = typeof value.foodId === 'string' ? value.foodId : null;
   if (childFoodId) {
     const food = getFood(ctx.db, childFoodId);
     if (!food) throw new HttpError(400, 'Unknown ingredient');
-    return { name: food.name, servings, nutrients: food.nutrients, sourceRef: food.sourceRef, childFoodId };
+    return {
+      name: food.name,
+      servings,
+      nutrients: food.nutrients,
+      sourceRef: food.sourceRef,
+      childFoodId,
+      shopEquivalentFoodId,
+      shopEquivalentLabel,
+    };
   }
   return {
     name: requiredText(value.name, 'Ingredient'),
@@ -274,6 +292,8 @@ function ingredientLine(ctx: Ctx, value: unknown): { name: string; servings: num
     nutrients: readNutrients(value.nutrients),
     sourceRef: typeof value.sourceRef === 'string' ? value.sourceRef : null,
     childFoodId: null,
+    shopEquivalentFoodId,
+    shopEquivalentLabel,
   };
 }
 
@@ -293,7 +313,18 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
   }
   const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
   const nutrients = roundNutrients(perServing(sumIngredientNutrients(lines), input.makesServings));
-  return { ...input, nutrients, ingredients: lines.map(({ name, servings, sourceRef, childFoodId }) => ({ name, servings, sourceRef, childFoodId })) };
+  return {
+    ...input,
+    nutrients,
+    ingredients: lines.map(({ name, servings, sourceRef, childFoodId, shopEquivalentFoodId, shopEquivalentLabel }) => ({
+      name,
+      servings,
+      sourceRef,
+      childFoodId,
+      shopEquivalentFoodId,
+      shopEquivalentLabel,
+    })),
+  };
 }
 
 async function remoteHits(ctx: Ctx, query: string): Promise<SearchHit[]> {
