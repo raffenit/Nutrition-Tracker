@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import sharp from 'sharp';
 import { detectSplitSingleLabel } from '../../../integrations/splitSingleLabel.js';
+import { runVarietyPackGridPipeline } from '../../../integrations/varietyPackGridPipeline.js';
 import { detectSharedLabelValueGrid } from '../../../integrations/sharedLabelValueGrid.js';
 
 async function twoHalvesPng(width: number, height: number, gutterFraction = 0.04): Promise<Buffer> {
@@ -19,7 +20,14 @@ async function twoHalvesPng(width: number, height: number, gutterFraction = 0.04
 
 test('detectSplitSingleLabel finds two equal halves when single-subject hint', async () => {
   const bytes = await twoHalvesPng(1100, 400);
-  const plan = await detectSplitSingleLabel(bytes, { singleSubjectInFocus: true, sharpPeakCount: 5 });
+  const hint = { singleSubjectInFocus: true, sharpPeakCount: 5 };
+  const pipeline = await runVarietyPackGridPipeline(bytes, {
+    requireWideAspect: false,
+    layoutHint: hint,
+  });
+  assert.equal(pipeline.steps[3].data?.layout, 'split_single');
+  assert.equal(pipeline.plan, null);
+  const plan = await detectSplitSingleLabel(bytes, hint);
   assert.ok(plan);
   assert.equal(plan!.strips.length, 2);
   const ratio = plan!.strips[0]!.width / plan!.strips[1]!.width;

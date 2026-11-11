@@ -6,7 +6,7 @@ export const SINGLE_SUBJECT_FOCUS_MAX_WIDTH_FRACTION = 0.52;
 /** Column must reach this fraction of peak sharpness to count as in-focus. */
 export const FOCUS_COLUMN_THRESHOLD_RATIO = 0.55;
 
-/** Many separated sharp peaks across the width suggests a multi-column table in focus (variety pack). */
+/** Many separated sharp peaks across the width suggests a variety pack (multi-column table) in focus. */
 export const MULTI_COLUMN_FOCUS_MIN_PEAKS = 18;
 
 /** Expand in-focus horizontal bounds slightly so label edges stay inside the crop. */
@@ -14,7 +14,7 @@ export const FOCUS_REGION_MARGIN_FRACTION = 0.04;
 
 /**
  * Apply horizontal focus crop when the sharp band is narrower than this (variety packs
- * often stay near 0.85–0.95 and should keep full width).
+ * in focus often stay near 0.85–0.95 wide and should keep full width).
  */
 export const FOCUS_CROP_MAX_SHARP_WIDTH_FRACTION = 0.92;
 

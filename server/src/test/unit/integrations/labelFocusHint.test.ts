@@ -5,6 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { inferDepthOfFieldHint, shouldApplyFocusCrop } from '../../../integrations/labelFocusHint.js';
+import {
+  LOCAL_SHARED_LABEL_MULTI_VALUE_JPG,
+  LOCAL_SPLIT_SINGLE_JPG,
+} from '../../fixtures/localTestImageNames.js';
 import sharp from 'sharp';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
@@ -12,9 +16,9 @@ const localImagesDir = path.join(repoRoot, 'local', 'test-images');
 
 test(
   'ice cream photo reads as single subject in focus',
-  { skip: !existsSync(path.join(localImagesDir, 'ice-cream.jpg')) },
+  { skip: !existsSync(path.join(localImagesDir, LOCAL_SPLIT_SINGLE_JPG)) },
   async () => {
-    const bytes = await readFile(path.join(localImagesDir, 'ice-cream.jpg'));
+    const bytes = await readFile(path.join(localImagesDir, LOCAL_SPLIT_SINGLE_JPG));
     const focus = await inferDepthOfFieldHint(bytes);
     assert.equal(focus.singleSubjectInFocus, true);
     assert.ok(focus.sharpFocusWidthFraction < 0.52);
@@ -26,10 +30,10 @@ test(
 );
 
 test(
-  'costco variety pack reads as wide in-focus table',
-  { skip: !existsSync(path.join(localImagesDir, 'costco-candy.jpg')) },
+  'variety pack (shared rail) reads as wide in-focus table',
+  { skip: !existsSync(path.join(localImagesDir, LOCAL_SHARED_LABEL_MULTI_VALUE_JPG)) },
   async () => {
-    const bytes = await readFile(path.join(localImagesDir, 'costco-candy.jpg'));
+    const bytes = await readFile(path.join(localImagesDir, LOCAL_SHARED_LABEL_MULTI_VALUE_JPG));
     const focus = await inferDepthOfFieldHint(bytes);
     const width = (await sharp(bytes).rotate().metadata()).width ?? 0;
     assert.equal(focus.singleSubjectInFocus, false);

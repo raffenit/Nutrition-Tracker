@@ -1,7 +1,7 @@
 import { IMAGE_ANALYSIS_WIDTH, IMAGE_MIN_SIDE_FRACTION } from './imageAnalysisGeometry.js';
 
 /**
- * Resolution-invariant geometry for variety-pack column-strip detection.
+ * Resolution-invariant geometry for wide multi-product column-strip detection (variety packs + fallback strips).
  *
  * Detection always projects ink on a band resampled to {@link analysisWidth} (canonical
  * horizontal space). Thresholds below are ratios of that space or of full-image dimensions —

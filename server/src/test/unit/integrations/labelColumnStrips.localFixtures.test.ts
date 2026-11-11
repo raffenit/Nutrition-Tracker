@@ -10,21 +10,26 @@ import { inferLabelLayoutHint } from '../../../integrations/imageLayoutHint.js';
 import { detectColumnStrips } from '../../../integrations/labelColumnStrips.js';
 import { detectSharedLabelValueGrid } from '../../../integrations/sharedLabelValueGrid.js';
 import { extractImageLabel } from '../../../integrations/extractText.js';
+import {
+  LOCAL_SHARED_LABEL_MULTI_VALUE_JPG,
+  LOCAL_SINGLE_PANEL_JPG,
+  LOCAL_SPLIT_SINGLE_JPG,
+} from '../../fixtures/localTestImageNames.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const localImagesDir = path.join(repoRoot, 'local', 'test-images');
 
 const FIXTURES = {
-  varietyPack: 'costco-candy.jpg',
-  singlePortrait: 'protein-shake.jpg',
-  twoProducts: 'ice-cream.jpg',
+  sharedLabelMultiValue: LOCAL_SHARED_LABEL_MULTI_VALUE_JPG,
+  singlePortrait: LOCAL_SINGLE_PANEL_JPG,
+  splitSingle: LOCAL_SPLIT_SINGLE_JPG,
 } as const;
 
 test(
-  'local variety-pack photo separates into multiple column strips',
-  { skip: !existsSync(path.join(localImagesDir, FIXTURES.varietyPack)) },
+  'local shared-label multi-value photo separates into multiple column strips',
+  { skip: !existsSync(path.join(localImagesDir, FIXTURES.sharedLabelMultiValue)) },
   async () => {
-    const bytes = await readFile(path.join(localImagesDir, FIXTURES.varietyPack));
+    const bytes = await readFile(path.join(localImagesDir, FIXTURES.sharedLabelMultiValue));
     const hint = await inferLabelLayoutHint(bytes);
     assert.ok(hint.widePanel);
     const plan = await detectColumnStrips(bytes, { maxColumns: 14 });
@@ -48,9 +53,9 @@ test(
 
 test(
   'local two-product wide photo does not yield a parseable multi-column import',
-  { skip: !existsSync(path.join(localImagesDir, FIXTURES.twoProducts)) },
+  { skip: !existsSync(path.join(localImagesDir, FIXTURES.splitSingle)) },
   async () => {
-    const bytes = await readFile(path.join(localImagesDir, FIXTURES.twoProducts));
+    const bytes = await readFile(path.join(localImagesDir, FIXTURES.splitSingle));
     const tess = await import('node:os').then((os) => os.tmpdir());
     const { text } = await extractImageLabel(bytes, tess, {
       easyocrModelDir: path.join(repoRoot, 'data', 'easyocr-models'),

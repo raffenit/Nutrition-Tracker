@@ -28,9 +28,12 @@ import {
 import type { Nutrients } from '../types.js';
 import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
 import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
-import { bytesForFocusAwareOcr } from './labelFocusHint.js';
-import { inferLabelLayoutHint } from './imageLayoutHint.js';
-import { detectColumnStrips, extractColumnStripBuffers } from './labelColumnStrips.js';
+import { inferLabelLayoutHint, resolveLabelProcessingImage } from './imageLayoutHint.js';
+import {
+  detectColumnStrips,
+  extractColumnStripBuffers,
+  type ColumnStripPlan,
+} from './labelColumnStrips.js';
 import { extractSharedLabelGridBuffers } from './sharedLabelValueGrid.js';
 import {
   formatVarietyPackStepValidation,
@@ -78,16 +81,14 @@ export async function extractImageLabel(
   options?: { easyocrModelDir?: string },
 ): Promise<ImageLabelExtraction> {
   reportImportJobStep('Preprocess', 'Preparing image for OCR…', 'Auto-rotate, upscale, and layout hints.');
-  const hint = await inferLabelLayoutHint(bytes);
-  const focusCrop = await bytesForFocusAwareOcr(bytes, hint);
-  let ocrBytes = focusCrop.bytes;
-  let activeHint = hint;
-  if (focusCrop.applied) {
-    activeHint = await inferLabelLayoutHint(ocrBytes);
+  const resolved = await resolveLabelProcessingImage(bytes);
+  const ocrBytes = resolved.bytes;
+  const activeHint = resolved.hint;
+  if (resolved.focusCropApplied) {
     appendImportJobDebug(
-      `focus: OCR on in-focus crop ${activeHint.width}×${activeHint.height}px (${Math.round(hint.sharpFocusWidthFraction * 100)}% sharp, ${hint.sharpPeakCount} peaks)`,
+      `focus: label processing on in-focus crop ${activeHint.width}×${activeHint.height}px (${Math.round((resolved.hintBeforeFocus?.sharpFocusWidthFraction ?? 1) * 100)}% sharp, ${resolved.hintBeforeFocus?.sharpPeakCount ?? 0} peaks)`,
     );
-    if (hint.widePanel && !activeHint.widePanel) {
+    if (resolved.hintBeforeFocus?.widePanel && !activeHint.widePanel) {
       appendImportJobDebug('focus: in-focus crop is not wide — column strips unlikely');
     }
   }
@@ -232,8 +233,8 @@ async function ocrAndStitchColumnStrips(
   modelDir: string | undefined,
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
 ): Promise<string | null> {
-  const shared = await ocrAndStitchSharedLabelGrid(bytes, cachePath, modelDir, hint);
-  if (shared) return shared;
+  const variety = await ocrAndStitchVarietyPack(bytes, cachePath, modelDir, hint);
+  if (variety) return variety;
 
   const plan = await detectColumnStrips(bytes, { maxColumns: 14 });
   if (!plan || plan.strips.length < 2) {
@@ -246,20 +247,75 @@ async function ocrAndStitchColumnStrips(
   reportImportJobStep(
     'OCR',
     'Locating product columns…',
-    `Found ${plan.strips.length} vertical strips — strip-only OCR (no full-page re-read).`,
+    `Found ${plan.strips.length} vertical strips — ink-projection fallback.`,
   );
-  appendImportJobDebug(`column-strip: ${plan.strips.length} strips detected`);
+  return ocrStitchedFromColumnStripPlan(bytes, plan, cachePath, modelDir, hint, 'column-strip');
+}
 
+async function ocrAndStitchVarietyPack(
+  bytes: Buffer,
+  cachePath: string,
+  modelDir: string | undefined,
+  hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
+): Promise<string | null> {
+  const pipeline = await runVarietyPackGridPipeline(bytes, {
+    maxColumns: 14,
+    layoutHint: {
+      singleSubjectInFocus: hint.singleSubjectInFocus,
+      sharpPeakCount: hint.sharpPeakCount,
+    },
+  });
+  for (const step of [1, 2, 3, 4] as const) {
+    appendImportJobDebug(`variety grid ${formatVarietyPackStepValidation(pipeline.steps[step].validation)}`);
+  }
+  if (pipeline.steps[3].data?.layout === 'split_single') {
+    appendImportJobDebug('variety pack: split single label — not a multi-product table');
+    return null;
+  }
+  if (pipeline.plan) {
+    return ocrAndStitchSharedLabelPlan(bytes, pipeline.plan, cachePath, modelDir, hint);
+  }
+  if (pipeline.perColumnStripPlan) {
+    reportImportJobStep(
+      'OCR',
+      'Reading per-column labels…',
+      `${pipeline.perColumnStripPlan.strips.length} product columns (labels in each column).`,
+    );
+    appendImportJobDebug(
+      `per-column variety pack: ${pipeline.perColumnStripPlan.strips.length} ruled product columns`,
+    );
+    return ocrStitchedFromColumnStripPlan(
+      bytes,
+      pipeline.perColumnStripPlan,
+      cachePath,
+      modelDir,
+      hint,
+      'per-column variety pack',
+    );
+  }
+  appendImportJobDebug('variety pack: no shared-rail or per-column OCR plan');
+  return null;
+}
+
+async function ocrStitchedFromColumnStripPlan(
+  bytes: Buffer,
+  plan: ColumnStripPlan,
+  cachePath: string,
+  modelDir: string | undefined,
+  hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
+  logPrefix: string,
+): Promise<string | null> {
   const meta = await sharp(bytes).rotate().metadata();
   const fullWidth = meta.width ?? 0;
+  appendImportJobDebug(`${logPrefix}: ${plan.strips.length} strips detected`);
   const widthSummary = plan.strips
     .map((strip) => (fullWidth > 0 ? `${Math.round((strip.width / fullWidth) * 100)}%` : `${strip.width}px`))
     .join(', ');
-  appendImportJobDebug(`column-strip geometry: widths ${widthSummary} of ${fullWidth}px`);
+  appendImportJobDebug(`${logPrefix} geometry: widths ${widthSummary} of ${fullWidth}px`);
   const minStripWidth = Math.max(32, Math.round(fullWidth * COLUMN_STRIP_MIN_OCR_WIDTH_FRACTION));
   const eligible = plan.strips.filter((strip) => strip.width >= minStripWidth);
   if (eligible.length < 2) {
-    appendImportJobDebug(`column-strip: ${eligible.length} strip(s) above min width ${minStripWidth}px`);
+    appendImportJobDebug(`${logPrefix}: ${eligible.length} strip(s) above min width ${minStripWidth}px`);
     return null;
   }
 
@@ -271,10 +327,10 @@ async function ocrAndStitchColumnStrips(
     reportImportJobStep(
       'OCR',
       `Reading column ${index + 1} of ${buffers.length}…`,
-      `Strip ${strip.width}×${strip.height}px (crop ${dim.width}×${dim.height}).`,
+      `Strip ${strip.width}×${strip.height}px (crop ${dim.width ?? 0}×${dim.height ?? 0}).`,
     );
     appendImportJobDebug(
-      `column-strip ${index + 1}/${buffers.length}: crop ${dim.width ?? 0}×${dim.height ?? 0}px`,
+      `${logPrefix} ${index + 1}/${buffers.length}: crop ${dim.width ?? 0}×${dim.height ?? 0}px`,
     );
 
     const stripCandidates = await collectOcrCandidateTexts(
@@ -287,51 +343,35 @@ async function ocrAndStitchColumnStrips(
     );
     const best = pickBestStripCandidate(stripCandidates);
     const score = scoreLabelExtraction(best);
-    appendImportJobDebug(
-      `column-strip ${index + 1}: score ${score}, ${best.trim().length} chars`,
-    );
+    appendImportJobDebug(`${logPrefix} ${index + 1}: score ${score}, ${best.trim().length} chars`);
     stripTexts.push(best);
   }
 
   const stitched = stitchColumnStripOcrTexts(stripTexts);
   if (!stitched) {
     appendImportJobDebug(
-      `column-strip: stitch returned null (${stripTexts.length} strips, chars ${stripTexts.map((t) => t.trim().length).join(',')})`,
+      `${logPrefix}: stitch returned null (${stripTexts.length} strips, chars ${stripTexts.map((t) => t.trim().length).join(',')})`,
     );
     return null;
   }
   const parsed = parseMultiProductLabelTable(stitched);
   if (!parsed || parsed.length < 2) {
-    appendImportJobDebug(
-      `column-strip: stitch did not parse as multi-product (${parsed?.length ?? 0} columns)`,
-    );
+    appendImportJobDebug(`${logPrefix}: stitch did not parse as multi-product (${parsed?.length ?? 0} columns)`);
     return null;
   }
-  appendImportJobDebug(`column-strip: stitch OK — ${parsed.length} products`);
+  appendImportJobDebug(`${logPrefix}: stitch OK — ${parsed.length} products`);
   return stitched;
 }
 
-async function ocrAndStitchSharedLabelGrid(
+async function ocrAndStitchSharedLabelPlan(
   bytes: Buffer,
+  plan: NonNullable<Awaited<ReturnType<typeof runVarietyPackGridPipeline>>['plan']>,
   cachePath: string,
   modelDir: string | undefined,
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
 ): Promise<string | null> {
-  const pipeline = await runVarietyPackGridPipeline(bytes, { maxColumns: 14 });
-  for (const step of [1, 2, 3, 4] as const) {
-    appendImportJobDebug(`variety grid ${formatVarietyPackStepValidation(pipeline.steps[step].validation)}`);
-  }
-  const plan = pipeline.plan;
-  if (!plan) {
-    appendImportJobDebug('shared-label grid: detect returned null');
-    return null;
-  }
 
-  reportImportJobStep(
-    'OCR',
-    'Reading shared label table…',
-    `Label column + ${plan.valueColumns.length} value columns.`,
-  );
+  reportImportJobStep('OCR', 'Reading shared label table…', `Label column + ${plan.valueColumns.length} value columns.`);
   appendImportJobDebug(
     `shared-label grid: label ${plan.labelColumn.width}px, ${plan.valueColumns.length} value columns (ruled-grid detect)`,
   );
