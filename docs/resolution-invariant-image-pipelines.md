@@ -51,9 +51,17 @@ When you tune gutters, crops, block sizes, spacing, or minimum readable dimensio
 
 Implementation: `server/src/integrations/labelColumnStrips.ts`.
 
-## Variety-pack grid pipeline (`varietyPackGridPipelineParams.ts`, `ruledTableGridParams.ts`)
+## Ruled gutters vs glare (`bandLuminanceRoles.ts`, `ruledTableGridParams.ts`)
 
-Gated steps 1–4 (columns → header → label layout → row bands). See [variety-pack-grid-pipeline.md](./variety-pack-grid-pipeline.md).
+Gutter detection classifies band pixels into **background** and **ink** by histogram mass (works for dark-on-light and light-on-dark labels). Sparse extreme peaks are **glare**. Gutter thresholds use polarity-aware contrast, not raw max brightness.
+
+## Uniform column geometry (`uniformColumnGeometryParams.ts`)
+
+Variety-pack **value** columns and split-single **halves** are equal width. Refine merges with `refineUniformProductColumns`; split layout uses `detectEqualWidthColumnPair`.
+
+## Variety pack grid pipeline (`varietyPackGridPipelineParams.ts`, `ruledTableGridParams.ts`)
+
+Gated steps 1–4 (columns → header → label layout → row bands). See [variety-pack-grid-pipeline.md](./variety-pack-grid-pipeline.md) and [label-table-terminology.md](./label-table-terminology.md).
 
 | Parameter | Role |
 | --- | --- |
