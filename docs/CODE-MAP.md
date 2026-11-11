@@ -33,7 +33,11 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Layout routing (wide table / candidate pick) | `server/src/domain/labelLayout.ts`, `server/src/integrations/imageLayoutHint.ts` | `inferLabelLayoutFromText`, `pickImportTextCandidateIndex`, `inferLabelLayoutHint` |
 | Import job progress (server phases) | `server/src/import/importJobProgress.ts`, `web/src/lib/runImportWithProgress.ts` | `reportImportJobStep`, `GET /api/import-jobs/:id`, `createImportProgressRunner` |
 | Variety-pack column strips (12b part B) | `server/src/integrations/labelColumnStrips.ts` | `detectColumnStrips`, `extractColumnStripBuffers`, `shouldRunColumnStripOcr` |
+| Shared label + value grid | `server/src/integrations/sharedLabelValueGrid.ts`, `server/src/domain/sharedLabelGridParams.ts` | `extractSharedLabelGridBuffers`, `sharedRailLayoutFromInkProfile` |
+| Variety-pack grid steps 1–4 (gated) | `server/src/integrations/varietyPackGridPipeline.ts`, `server/src/integrations/ruledTableGridDetect.ts`, [variety-pack-grid-pipeline.md](./variety-pack-grid-pipeline.md) | `runVarietyPackGridPipeline`, `detectSharedLabelValueGrid`, `runVarietyPackGridStep1` … `Step4` |
 | Column strip stitch | `server/src/domain/stitchColumnStripTexts.ts` | `stitchColumnStripOcrTexts`; wired in `extractImageLabel` |
+| Shared label grid stitch | `server/src/domain/stitchSharedLabelGridTexts.ts` | `stitchSharedLabelGridTexts`, `diagnoseSharedLabelGridStitch`; tried before full-width strips in `extractImageLabel` |
+| Split single label | `server/src/integrations/splitSingleLabel.ts`, `server/src/domain/stitchSplitLabelHalves.ts` | `detectSplitSingleLabel`, `stitchSplitLabelHalves` when `singleSubjectInFocus` |
 | Image analysis geometry (shared) | `server/src/domain/imageAnalysisGeometry.ts` | `IMAGE_ANALYSIS_WIDTH`, side/crop fractions |
 | Column-strip geometry | `server/src/domain/columnStripDetectParams.ts` | `DEFAULT_COLUMN_STRIP_DETECT_PARAMS` |
 | Focus crop geometry | `server/src/domain/focusCropParams.ts` | `DEFAULT_FOCUS_CROP_PARAMS` |

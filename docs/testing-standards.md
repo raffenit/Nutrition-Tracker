@@ -33,6 +33,18 @@ Full transcript: **`local/test-last-run.log`**. The summary block lists **Server
 
 HTTPS smoke runs in **`./deploy.sh`** after Docker health, not during `npm test`.
 
+## Manual and integration debugging (OCR, local photos)
+
+Workspace rule: [`.devin/rules/debugging-standards.md`](../../../.devin/rules/debugging-standards.md) (also `.cursor/rules/debugging-standards.mdc`).
+
+When running one-off Node scripts, `extractImageLabel` on `local/test-images/`, or long OCR jobs:
+
+1. Capture **exit code** and **stderr** separately from summary `console.log` lines.
+2. Report **semantic outcomes** (strip count, `labelPanels.length`, parse column count) together with any Tesseract/Leptonica stderr.
+3. Prefer writing a log file over `npm test | tail` for integration runs — tail hides earlier warnings.
+
+`npm test` summary in `local/test-last-run.log` records gate pass/fail; it does not include stderr from manual OCR scripts.
+
 ## UI changes
 
 Interactive and async UI work should meet workspace interaction feedback rules (hover/focus/disabled, loading and outcome on buttons). No automated browser suite yet — manual check on phone-sized layout when touching controls.

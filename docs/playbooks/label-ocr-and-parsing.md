@@ -22,7 +22,7 @@ POST /api/uploads  (foodRoutes.ts → receiveUpload)
        → EasyOCR subset + Tesseract subset (parallel)
        → inferLabelLayoutFromText + pickImportTextCandidateIndex (labelLayout.ts)
        → optional wideTableRetry pass when landscape + no multi-column parse
-       → `GET /api/import-jobs/:id` polled while upload/URL import runs (`importJobProgress.ts`)
+       → `GET /api/import-jobs/:id` polled while upload/URL import runs (`importJobProgress.ts`); response includes `debugLog` (Tesseract traces, column-strip steps)
        → mergeSlotReadingsAcrossCandidates (labelSlotExtract.ts)
   → buildNutritionImport (nutritionImport.ts) + applySlotMergedNutrients (foodRoutes.ts)
   → JSON to FoodPage.tsx → user review

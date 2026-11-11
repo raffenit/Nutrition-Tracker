@@ -38,14 +38,39 @@ When you tune gutters, crops, block sizes, spacing, or minimum readable dimensio
 | --- | --- | --- |
 | `analysisWidth` | Resample band before vertical ink projection | Input megapixels / DPI |
 | `bandHeightFraction` | NF table band height | Image height (post-rotate) |
+| `bandTopInsetFraction` | Wide panels: **OCR crops** anchored from top; detection stays centered | Image height |
 | `minGutterSpacingFraction` | Min distance between gutter minima | Analysis width |
-| `smoothRadiusFraction` | Ink profile smoothing | Analysis width |
+| `gutterThresholdRatio` | Shallow gutters (low local ink vs peak) count when high | Peak ink on band |
+| `gutterLocalMinimumRadiusFraction` | Wider local-min window for gutter points | Analysis width |
+| `smoothRadiusFraction` | Ink profile smoothing (lighter = preserve narrow gutters) | Analysis width |
+| `profileContrastSlope` / `Intercept` | Band linear contrast before projection | 0–255 |
 | `minStripWidthFraction` / `minSegmentWidthFraction` | Drop noise segments | Analysis width |
 | `minOutputStripWidthFraction` | Full-res strip crops | Full image width |
 | `minImageWidthFraction` / `minImageHeightFraction` | “Too small to process” | `analysisWidth` |
 | `WIDE_PANEL_MIN_ASPECT` (`labelLayout.ts`) | Wide variety-pack gate | Width ÷ height only |
 
 Implementation: `server/src/integrations/labelColumnStrips.ts`.
+
+## Variety-pack grid pipeline (`varietyPackGridPipelineParams.ts`, `ruledTableGridParams.ts`)
+
+Gated steps 1–4 (columns → header → label layout → row bands). See [variety-pack-grid-pipeline.md](./variety-pack-grid-pipeline.md).
+
+| Parameter | Role |
+| --- | --- |
+| `minHorizontalRulesPerProductColumn` | Step 1: ruled stack validation |
+| `headerMinHeightFraction` / `headerMaxHeightFraction` | Step 2: product-name band |
+| `sharedRailWidthRatioMin` | Step 3: left rail vs product columns |
+| `minRowBands` / `rowConsensusMaxJitterFraction` | Step 4: row mesh |
+
+## Shared label + value grid (`sharedLabelGridParams.ts`, `sharedLabelValueGrid.ts`)
+
+| Parameter | Role |
+| --- | --- |
+| `labelBoundaryInkDropRatio` | Split shared row labels from numeric columns |
+| `labelInkAsymmetryRatio` | Left ink plateau vs value grid |
+| `minValueColumns` / `maxValueColumnWidthCv` | Reject repeated-panel false positives |
+
+Value gutters are detected only right of the label boundary. Ruled tables: bright vertical gutters + horizontal rules per column (`ruledTableGridDetect.ts`). Stitch: `stitchSharedLabelGridTexts.ts`.
 
 ## Focus crop (`focusCropParams.ts`, `focusCrop.ts`)
 
@@ -69,6 +94,17 @@ Test hook: `laplacianFocusRectForTest` (same resample path as production).
 | `blockSizeFraction` | Local window diameter ÷ `min(width, height)` (tuned vs `OCR_PREPROCESS_REFERENCE_MIN_SIDE` 2200) |
 | `c` | Mean offset on 0–255 scale (not DPI-related) |
 | `minOddBlockSize` | Smallest allowed odd window |
+
+## Depth-of-field focus crop (`labelFocusParams.ts`, `labelFocusHint.ts`)
+
+| Parameter | Role |
+| --- | --- |
+| `FOCUS_CROP_MAX_SHARP_WIDTH_FRACTION` | Skip crop when the sharp band already spans most of the frame |
+| `FOCUS_CROP_MIN_RETAINED_WIDTH_FRACTION` | Minimum retained width after crop (label silhouette) |
+| `MULTI_COLUMN_FOCUS_MIN_PEAKS` | Many sharp peaks → variety table in focus → do not crop |
+| `gutterProminenceFraction` / `gutterProminenceRelaxFraction` (column strips) | Prefer deep gutters; relax until at least two product strips exist |
+
+`shouldApplyFocusCrop` combines the above — unrelated to a specific photo filename.
 
 ## Layout hints (`imageLayoutHint.ts`)
 
