@@ -3,6 +3,9 @@ import { DEFAULT_TARGETS } from '../domain/nutrients.js';
 import { assertTimeZone } from '../domain/time.js';
 import { isRecord, optionalText, requiredText } from '../domain/guards.js';
 import { createSession, deleteSession } from '../db/sessions.js';
+import { countFoods } from '../db/foods.js';
+import { readLastBackupMeta } from '../db/backup.js';
+import { readHouseholdMarker, syncHouseholdMarker } from '../db/householdState.js';
 import {
   countAdmins,
   countUsers,
@@ -28,7 +31,17 @@ import { readTargets } from '../domain/nutrients.js';
 export function authRoutes(): Route[] {
   return [
     route('GET', '/api/health', async (ctx) => {
-      sendJson(ctx.res, 200, { ok: true, setupRequired: countUsers(ctx.db) === 0 });
+      const userCount = countUsers(ctx.db);
+      const setupRequired = userCount === 0;
+      const marker = readHouseholdMarker(ctx.config.dataDir);
+      sendJson(ctx.res, 200, {
+        ok: true,
+        setupRequired,
+        stats: { userCount, foodCount: countFoods(ctx.db) },
+        householdEstablishedOnDisk: marker !== null,
+        dataUnexpectedlyEmpty: marker !== null && setupRequired,
+        lastBackup: readLastBackupMeta(ctx.config.dataDir),
+      });
     }),
     route('GET', '/api/session', async (ctx) => {
       const household = getHousehold(ctx.db);
@@ -77,6 +90,7 @@ async function setup(ctx: Parameters<Route['handler']>[0]): Promise<void> {
     saveTargets(ctx.db, created.id, DEFAULT_TARGETS);
     return created;
   })();
+  syncHouseholdMarker(ctx.config.dataDir, ctx.db);
   sendSession(ctx, user.id);
 }
 
@@ -103,6 +117,7 @@ async function createMember(ctx: Parameters<Route['handler']>[0]): Promise<void>
   const role = body.role === 'admin' ? 'admin' : 'member';
   const user = insertUser(ctx.db, requiredText(body.name, 'Name'), hashPassword(assertPassword(requiredText(body.password, 'Password'))), role);
   saveTargets(ctx.db, user.id, DEFAULT_TARGETS);
+  syncHouseholdMarker(ctx.config.dataDir, ctx.db);
   sendJson(ctx.res, 201, { user: { id: user.id, name: user.name, role: user.role } });
 }
 

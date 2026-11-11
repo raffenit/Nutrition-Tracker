@@ -23,7 +23,7 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 | [ROADMAP.md](./ROADMAP.md) | Phases 0–9 (quick log, alerts, PDF, OpenCookbook, offline sync, polish) |
 | [CODE-MAP.md](./CODE-MAP.md) | Tables linking features to `server/` and `web/` files and key exports |
 | [playbooks/](./playbooks/README.md) | Short agent walkthroughs for OCR, import UI, privacy |
-| [../README.md](../README.md) | Setup overview, STANDALONE vs EXTERNAL Caddy |
+| [../README.md](../README.md) | Setup overview, STANDALONE vs EXTERNAL Caddy, **household data & backups** |
 | [SETUP-WINDOWS-WSL.md](./SETUP-WINDOWS-WSL.md) | **Windows:** WSL2, Docker Desktop, Tailscale, deploy |
 
 ## Testing
@@ -52,6 +52,10 @@ Before any PR that touches logs or family APIs, use the privacy checklist in [RO
 | 7 | OpenCookbook (plan + grocery) | Partial — Plan tab, meal plan API, Markdown export |
 | 8 | Polish / handoff | Ongoing |
 | 9 | Offline PWA + sync | Done — outbox, pins, offline library/today (import still online-only) |
+| 10 | Meal-kit recipe cards | In progress — PDF import, instructions |
+| 11 | Data persistence + backup | Done — deploy guard, scheduled backups, [playbook](./playbooks/data-backup-recovery.md) |
+| 12 | Multi-label photo/PDF import | Planned — `test-images/` fixtures; pick one vs import all |
+| 13 | Tags (foods + ingredients) | Planned — overlapping tags, library filter; optional `drink` tag with hydration toggle |
 
 Update this table when a phase ships (date in ROADMAP + row here).
 

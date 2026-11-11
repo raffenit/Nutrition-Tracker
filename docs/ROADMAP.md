@@ -238,8 +238,117 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 - **Barcode scan:** native camera barcode → Open Food Facts lookup (stretch; not in original MVP table).
 - **README client section:** link spec → feature matrix (arch doc table).
-- **Backup runbook:** copy `data/` volume; SQLite WAL checkpoint note.
 - **Performance:** OCR uploads async feedback (progress UI) if large PDFs feel slow.
+- **Backup / persistence:** moved to **Phase 11** (production incident — empty household after Docker restart).
+
+---
+
+## Phase 11 — Data persistence, backup, and recovery (priority)
+
+**Status:** Done (2026-11-11) — marker, health stats, deploy guard, startup refusal logs, WAL checkpoint (shutdown + periodic + startup), in-app scheduled backups, `scripts/backup-data.sh`, [data-backup-recovery playbook](./playbooks/data-backup-recovery.md).
+
+**Problem:** Households must not lose users, foods, logs, or uploads across **container restart**, **host reboot**, or **`git pull` + `./deploy.sh`** rebuild. A friend’s install appeared wiped after Docker recovered.
+
+**Current design (verify on every deployment)**
+
+- `docker-compose.yml` bind-mounts host `./data` → container `/data`; `DATA_DIR=/data`; SQLite at `nutrition.sqlite` (WAL mode).
+- Deploy runs `compose up -d --build` only — **not** `down -v` (named volumes in `docker-compose.standalone.yml` are for **Caddy** only, not the app DB).
+- Empty DB → `GET /api/health` returns `setupRequired: true` (`countUsers === 0`).
+
+**Investigation checklist (ops + code)**
+
+- [ ] On affected host: does `data/nutrition.sqlite` still exist and have non-zero size? WAL/SHM siblings present?
+- [ ] Was the stack started from a **different working directory** (second empty `./data`) or a fresh clone without copying `data/`?
+- [ ] Confirm compose actually mounts `./data:/data` (`docker inspect nutrition-tracker` → `Mounts`).
+- [ ] Rule out `docker compose down` from wrong path, manual image runs without `-v`, or `DATA_DIR` override pointing inside ephemeral container FS.
+- [ ] SQLite integrity after hard kill: `PRAGMA integrity_check`; WAL recovery docs if `-wal` was orphaned.
+
+**Goal — robust persistence**
+
+1. **Document** Frankenstein + standalone deploy: “data lives only in host `data/`”; never delete; backup before migrate experiments.
+2. **Pre/post deploy guard:** script step or health metadata (e.g. `userCount`, `foodCount`, `dataDir`, db file mtime) — **fail deploy** if counts drop to zero unexpectedly (opt-out flag for intentional fresh install).
+3. **Automated backup:** **done in-app** — `DATA_AUTO_BACKUP_HOURS` (default 24) → `data/backups/` via `server/src/db/backup.ts`; host `scripts/backup-data.sh` for manual copies; copy backups off-disk still recommended.
+4. **Recovery playbook:** restore from backup; verify login + library; when to merge vs replace DB.
+5. **Optional:** admin “export household” / import for user-held backup (stretch).
+
+**Acceptance**
+
+- Documented procedure: restart container → same users and library as before.
+- Documented procedure: `git pull` + `./deploy.sh --skip-git` → same data.
+- Backup restore tested once on dev/staging mount.
+- README + `docs/playbooks/server-deploy-frankenstein.md` link recovery steps.
+
+**Tests**
+
+- Integration: `createTestServer` uses temp dir — add deploy-script **smoke** or documented manual checklist (not necessarily CI).
+- Optional: unit test helper that asserts `openDatabase` does not recreate file when path exists and has rows.
+
+**Files (expected):** `deploy.sh` / `scripts/deploy-lib.sh`, `docs/playbooks/data-backup-recovery.md` (new), `authRoutes.ts` or new `opsRoutes.ts` for richer health, README deploy section.
+
+---
+
+## Phase 12 — Multi-label photos and PDFs
+
+**Status:** Not started — dev fixtures in `test-images/` (multiple Nutrition Facts panels per photo; use for OCR/segmentation tests).
+
+**Problem:** One camera shot or PDF page may contain **several** separate nutrition labels. Today the pipeline assumes a single label (or PDF menu name list), not multiple label regions.
+
+**Goal:** Detect multiple label regions, then let the user choose import strategy **before** parsing.
+
+**Design**
+
+1. **Detection (server):** layout/OCR pass that returns **N label candidates** (bounding regions or text blocks each passing `looksLikeLabel` heuristics) — universal patterns, not brand-specific.
+2. **Pre-import UI (web):** after upload, if `N > 1`:
+   - **Pick one** — same flow as today (field review → save one food).
+   - **Import all** — run parse + review queue per label; create **N library foods** (names from each panel).
+   - Remember choice as default in Settings (per household).
+3. **PDFs:** same fork for multi-label **scanned PDF pages** (rasterize page → multi-region) **and** extend existing **menu PDF** multi-select (Phase 5) so “import all selected as foods” is consistent for menu rows and multi-label pages.
+4. **Recipe cards (Phase 10):** keep recipe-card path separate; multi-label setting applies to **standard nutrition label** import and restaurant/menu PDF workflows.
+
+**Acceptance**
+
+- Multi-label fixture images in `test-images/` produce ≥2 candidates in dev.
+- User can import one or all without re-uploading.
+- Single-label uploads unchanged (no extra step when `N === 1`).
+
+**Tests**
+
+- Unit: synthetic multi-block OCR text fixtures (pattern-based, not proprietary labels).
+- Optional: integration upload with committed downscaled fixtures.
+
+**Files (expected):** `integrations/focusCrop.ts` or new `labelRegions.ts`, `nutritionImport.ts`, `foodRoutes.ts`, `FoodPage.tsx`, `parseLabel.ts`, `ocrScannedPdf.ts`, `CODE-MAP.md`.
+
+---
+
+## Phase 13 — Tags (foods and ingredients)
+
+**Status:** Not started.
+
+**Problem:** Library search is name-oriented; no overlapping organization (folders don’t allow multiple categories). “Counts as a drink” is a separate boolean.
+
+**Goal:** **Many-to-many tags** on **foods** and on **ingredient lines** (custom recipes), searchable and filterable in Library and compose pickers.
+
+**Design**
+
+- Schema: `tags` (id, name, slug) + `food_tags` (+ optionally `food_ingredient_tags` or tag ingredient lines via parent recipe).
+- UI: tag chips on food editor; typeahead create; Library filter by tag (multi-select AND).
+- Search: `GET /api/foods?q=&tags=drink,snack` (exact API TBD).
+- **Drinks integration:** keep `is_drink` + `drink_ml` for **hydration math** (logging, plan, dashboard). Optionally:
+  - Auto-apply tag `drink` when “Counts as a drink” is enabled, and/or
+  - Migrate optional: suggest drink tag when toggling hydration.
+  - User-defined tags: `breakfast`, `snack`, `meal-prep`, etc. — independent of log **slot** where useful.
+
+**Acceptance**
+
+- Food can have multiple tags; filter shows union of selected tags.
+- Ingredient tagging (at minimum: tags on parent recipe’s text ingredients or link tags on linked child foods — pick one model in implementation).
+- Drink logging still uses `is_drink` / volume; tag `drink` is discoverability, not sole source of truth.
+
+**Tests**
+
+- API: create food with tags, list filter, update tags, privacy unchanged on family APIs.
+
+**Files (expected):** `database.ts` migrations, `db/foods.ts`, `foodRoutes.ts`, `FoodPage.tsx`, library search components, `types.ts` (server + web).
 
 ---
 
@@ -342,6 +451,9 @@ Phase 4b Push (optional)   ──► after 4a rules stable
 Phase 6 Walk doc/automation► only if client confirms
 Phase 7 OpenCookbook next   ► plan/grocery (in progress)
 Phase 10 Meal-kit recipes   ► PDF/photo import; Plan cooking UX; grocery qty parse
+Phase 11 Data + backup      ► **priority** — verify mounts, backups, recovery (production data loss)
+Phase 12 Multi-label import ► photos + PDFs; pick-one vs import-all
+Phase 13 Tags               ► library search; optional link to drink tag
 Phase 8 Polish              ► parallel / handoff
 Phase 9 Offline PWA + sync  ► after core online flows stable (1–4, logging API)
 ```

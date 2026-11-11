@@ -250,7 +250,57 @@ deploy_https_smoke() {
   return 0
 }
 
+deploy_data_guard() {
+  local script_dir="$1"
+  if [[ "${SKIP_DATA_GUARD:-}" == "1" ]]; then
+    echo "  Data guard: skipped (SKIP_DATA_GUARD=1)"
+    return 0
+  fi
+  local marker="$script_dir/data/.household-established.json"
+  if [[ ! -f "$marker" ]]; then
+    echo "  Data guard: no household marker yet — OK"
+    return 0
+  fi
+  local port="${NUTRITION_PORT:-3010}"
+  local url="http://127.0.0.1:${port}/api/health"
+  local body
+  body="$(curl -sf "$url" 2>/dev/null)" || {
+    echo "ERROR: Data guard could not reach $url"
+    exit 1
+  }
+  if ! node -e '
+const body = process.argv[1];
+const health = JSON.parse(body);
+const bad = health.dataUnexpectedlyEmpty === true
+  || (health.householdEstablishedOnDisk === true && health.setupRequired === true);
+process.exit(bad ? 1 : 0);
+' "$body"; then
+    echo ""
+    echo "========================================================================"
+    echo "DEPLOY STOPPED — HOUSEHOLD DATA LOOKS MISSING"
+    echo "========================================================================"
+    echo ""
+    echo "The file data/.household-established.json says this install had a household,"
+    echo "but /api/health reports zero users (setupRequired)."
+    echo ""
+    echo "DATA DIRECTORY: $script_dir/data"
+    echo "ALSO READ:      $script_dir/data/last-startup-failure.txt (if the container exited)"
+    echo ""
+    echo "FIX (pick one):"
+    echo "  A) Restore data/ from scripts/backup-data.sh or a zip of nutrition.sqlite*"
+    echo "  B) Fresh start: remove data/nutrition.sqlite* and data/.household-established.json"
+    echo "  C) Override:    SKIP_DATA_GUARD=1 in .env (only if intentional)"
+    echo ""
+    echo "Docs: docs/playbooks/data-backup-recovery.md"
+    echo "Logs: docker compose logs nutrition --tail 80"
+    echo ""
+    exit 1
+  fi
+  echo "  Data guard: OK"
+}
+
 deploy_health_check() {
+  local script_dir="$1"
   local port="${NUTRITION_PORT:-3010}"
   local url="http://127.0.0.1:${port}/api/health"
   echo "  URL: $url"
@@ -266,6 +316,7 @@ deploy_health_check() {
     echo "  API health: OK"
     curl -sf "$url" | head -c 200
     echo ""
+    deploy_data_guard "$script_dir"
   else
     echo "  API health: not ready — check logs (docker compose logs -f)"
     exit 1

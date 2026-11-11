@@ -75,7 +75,7 @@ deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" ps
 
 echo ""
 echo "[5/6] Health check..."
-deploy_health_check
+deploy_health_check "$SCRIPT_DIR"
 
 deploy_https_smoke "$SCRIPT_DIR"
 

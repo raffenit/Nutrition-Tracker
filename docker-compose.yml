@@ -7,6 +7,7 @@ services:
     build: .
     container_name: nutrition-tracker
     restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       TZ: ${TZ:-America/Chicago}
       USDA_API_KEY: ${USDA_API_KEY:-}
@@ -17,6 +18,12 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:nutrition@localhost}
       EASYOCR_ENABLED: ${EASYOCR_ENABLED:-1}
+      DATA_WAL_CHECKPOINT_MINUTES: ${DATA_WAL_CHECKPOINT_MINUTES:-5}
+      DATA_AUTO_BACKUP_HOURS: ${DATA_AUTO_BACKUP_HOURS:-24}
+      DATA_BACKUP_KEEP_COUNT: ${DATA_BACKUP_KEEP_COUNT:-14}
+      DATA_BACKUP_DIR: ${DATA_BACKUP_DIR:-}
+      ALLOW_EMPTY_HOUSEHOLD: ${ALLOW_EMPTY_HOUSEHOLD:-}
+      ALLOW_CORRUPT_DB: ${ALLOW_CORRUPT_DB:-}
       PORT: 3010
       DATA_DIR: /data
       PUBLIC_DIR: /app/public

@@ -212,6 +212,11 @@ function parseStoredNutrientUnits(json: string | undefined): CoreNutrientUnits {
   }
 }
 
+export function countFoods(db: AppDatabase): number {
+  const row = db.prepare('SELECT COUNT(*) AS count FROM foods').get() as { count: number };
+  return row.count;
+}
+
 function likeTerm(query: string): string {
   return `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }

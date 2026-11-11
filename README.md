@@ -306,6 +306,53 @@ Default pipeline (when not skipping): **`npm test` on the host** (requires Node 
 
 ---
 
+## Household data, backups, and recovery
+
+All household data (accounts, food library, logs, uploads) lives in **`data/`** on the machine that runs Docker. It is **not in git**. The container only sees that folder through a bind mount (`./data` → `/data` in the container).
+
+### How persistence works
+
+| Piece | Role |
+| --- | --- |
+| **`data/nutrition.sqlite`** | SQLite database (WAL mode; often small on disk while `-wal` holds recent writes). |
+| **`data/.household-established.json`** | Written after setup (and refreshed on start when users exist). Signals “this install had a household.” |
+| **Startup checks** | WAL merge, integrity check, refuse to start if marker + zero users (unless `ALLOW_EMPTY_HOUSEHOLD=1`). |
+| **Graceful stop** | `SIGTERM` checkpoints WAL into the main file. **Docker crash / kill -9** does not — see periodic WAL + backups below. |
+| **`./deploy.sh` data guard** | After deploy, fails if marker exists but `/api/health` reports no users (`SKIP_DATA_GUARD=1` to override). |
+
+### Scheduled backups (default: on)
+
+While the app is running, it automatically backs up the database:
+
+- **First backup** ~5 minutes after start, then every **`DATA_AUTO_BACKUP_HOURS`** (default **24**, set in `.env`).
+- Files go to **`data/backups/nutrition-<timestamp>.sqlite`** (keeps last **`DATA_BACKUP_KEEP_COUNT`**, default 14).
+- Metadata: **`data/.last-backup.json`**; also exposed as **`lastBackup`** on **`GET /api/health`**.
+- Events append to **`data/nutrition-events.log`**.
+
+Disable in `.env`: `DATA_AUTO_BACKUP_HOURS=0`. Optional: `DATA_BACKUP_DIR` for a different backup folder (must be visible inside the container, e.g. under `/data`).
+
+**Manual backup on the host** (same folder layout, needs `sqlite3` CLI):
+
+```bash
+./scripts/backup-data.sh
+```
+
+Copy `data/backups/` (or your `DATA_BACKUP_DIR`) to another disk or cloud periodically — backups on the same drive as `data/` do not protect against disk failure.
+
+### If the app refuses to start or deploy fails
+
+1. Read **`data/last-startup-failure.txt`** on the host (step-by-step OPTIONS A/B/C).
+2. **`docker compose logs nutrition --tail 80`**
+3. Full playbook: [docs/playbooks/data-backup-recovery.md](./docs/playbooks/data-backup-recovery.md)
+
+### Restoring from a backup
+
+1. `docker compose down`
+2. Replace `data/nutrition.sqlite` with a file from `data/backups/` (remove stale `-wal`/`-shm` if the backup is a single checkpointed file).
+3. `./deploy.sh --skip-git` and confirm `/api/health` shows `setupRequired: false`.
+
+---
+
 ## Development (laptop)
 
 ```bash
@@ -340,4 +387,4 @@ GitHub: `https://github.com/raffenit/Nutrition-Tracker`
 | `deploy.sh` | Deploy entrypoint (`CADDY_STYLE` in `.env`) |
 | `deploy-from-windows.bat` | Windows → WSL wrapper for `deploy.sh` |
 | `standalone-deploy.sh` / `external-deploy.sh` | Used by `deploy.sh`; rarely run by hand |
-| `data/` | Database and uploads (runtime; not in git) |
+| `data/` | Database and uploads (runtime; not in git). Backups: [docs/playbooks/data-backup-recovery.md](./docs/playbooks/data-backup-recovery.md), `scripts/backup-data.sh` |
