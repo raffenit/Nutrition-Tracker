@@ -11,6 +11,14 @@ import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
+import {
+  failImportJob,
+  finishImportJob,
+  getImportJobForUser,
+  parseImportJobId,
+  reportImportJobStep,
+  runWithImportJob,
+} from '../import/importJobProgress.js';
 import { extractImageLabel } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
@@ -47,7 +55,15 @@ export function foodRoutes(): Route[] {
     route('GET', '/api/ingredients/search', searchIngredients),
     route('POST', '/api/uploads', receiveUpload),
     route('POST', '/api/import-url', importFromUrl),
+    route('GET', '/api/import-jobs/:id', readImportJob),
   ];
+}
+
+async function readImportJob(ctx: Ctx): Promise<void> {
+  const user = requireUser(ctx.auth);
+  const snapshot = getImportJobForUser(ctx.params.id, user.id);
+  if (!snapshot) throw new HttpError(404, 'Import job not found');
+  sendJson(ctx.res, 200, snapshot);
 }
 
 async function saveNewFood(ctx: Ctx): Promise<void> {
@@ -176,51 +192,76 @@ async function searchIngredients(ctx: Ctx): Promise<void> {
 
 async function receiveUpload(ctx: Ctx): Promise<void> {
   const user = requireUser(ctx.auth);
+  const jobId = parseImportJobId(ctx.req.headers, null);
   const file = await readUpload(ctx);
   const kind = uploadKind(file.mime, file.filename);
   if (!kind) throw new HttpError(400, 'Upload a JPEG, PNG, WEBP, or PDF');
-  const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
-  await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
-  const extracted = await readExtractedText(kind, file.bytes, ctx.config);
-  const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts);
-  if (extracted.slotMergedNutrients) {
-    applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
+  const flow = kind === 'pdf' ? 'pdf' : 'image';
+  try {
+    await runWithImportJob(jobId, user.id, flow, async () => {
+      reportImportJobStep('Receive', 'File received…', path.basename(file.filename).slice(0, 180) || 'upload');
+      const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
+      await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
+      const extracted = await readExtractedText(kind, file.bytes, ctx.config);
+      reportImportJobStep('Draft', 'Building your draft…', 'Applying parsers and import panels.');
+      const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts);
+      if (extracted.slotMergedNutrients) {
+        applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
+      }
+      const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
+      const saved = insertUpload(ctx.db, {
+        kind,
+        originalName: path.basename(file.filename).slice(0, 180) || 'upload',
+        storedName,
+        extractedText: extracted.text,
+        createdBy: user.id,
+      });
+      finishImportJob(jobId);
+      sendImportJson(ctx.res, {
+        uploadId: saved.id,
+        kind,
+        warning,
+        textPreview: previewExtractedText(extracted.text),
+        built,
+        sourceKind: kind,
+        usedOcr: extracted.usedOcr ?? false,
+      });
+    });
+  } catch (error) {
+    const message = error instanceof HttpError ? error.message : 'Import failed';
+    failImportJob(jobId, message);
+    throw error;
   }
-  const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
-  const saved = insertUpload(ctx.db, {
-    kind,
-    originalName: path.basename(file.filename).slice(0, 180) || 'upload',
-    storedName,
-    extractedText: extracted.text,
-    createdBy: user.id,
-  });
-  sendImportJson(ctx.res, {
-    uploadId: saved.id,
-    kind,
-    warning,
-    textPreview: previewExtractedText(extracted.text),
-    built,
-    sourceKind: kind,
-    usedOcr: extracted.usedOcr ?? false,
-  });
 }
 
 async function importFromUrl(ctx: Ctx): Promise<void> {
-  requireUser(ctx.auth);
+  const user = requireUser(ctx.auth);
   const body = await readJson(ctx.req);
   if (!isRecord(body)) throw new HttpError(400, 'Expected a URL');
   const url = requiredText(body.url, 'URL');
-  const fetched = await importNutritionFromUrl(url);
-  const built = buildNutritionImportWithPanels(fetched.text, fetched.kind, fetched.html);
-  sendImportJson(ctx.res, {
-    uploadId: null,
-    kind: fetched.kind,
-    finalUrl: fetched.finalUrl,
-    warning: built.warning,
-    textPreview: previewExtractedText(fetched.text),
-    built,
-    sourceKind: fetched.kind,
-  });
+  const jobId = parseImportJobId(ctx.req.headers, body);
+  try {
+    await runWithImportJob(jobId, user.id, 'url', async () => {
+      reportImportJobStep('Request', 'Sending import request…', url.slice(0, 120));
+      const fetched = await importNutritionFromUrl(url);
+      reportImportJobStep('Draft', 'Building your draft…', 'Preparing import results for review.');
+      const built = buildNutritionImportWithPanels(fetched.text, fetched.kind, fetched.html);
+      finishImportJob(jobId);
+      sendImportJson(ctx.res, {
+        uploadId: null,
+        kind: fetched.kind,
+        finalUrl: fetched.finalUrl,
+        warning: built.warning,
+        textPreview: previewExtractedText(fetched.text),
+        built,
+        sourceKind: fetched.kind,
+      });
+    });
+  } catch (error) {
+    const message = error instanceof HttpError ? error.message : 'Import failed';
+    failImportJob(jobId, message);
+    throw error;
+  }
 }
 
 type ImportJsonBody = {

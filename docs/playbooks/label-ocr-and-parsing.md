@@ -17,8 +17,12 @@
 ```text
 POST /api/uploads  (foodRoutes.ts → receiveUpload)
   → extractUploadText → extractImageLabel (extractText.ts)
+       → inferLabelLayoutHint (imageLayoutHint.ts) → OCR profile
        → buildOcrImageVariants (ocrPreprocess.ts)
        → EasyOCR subset + Tesseract subset (parallel)
+       → inferLabelLayoutFromText + pickImportTextCandidateIndex (labelLayout.ts)
+       → optional wideTableRetry pass when landscape + no multi-column parse
+       → `GET /api/import-jobs/:id` polled while upload/URL import runs (`importJobProgress.ts`)
        → mergeSlotReadingsAcrossCandidates (labelSlotExtract.ts)
   → buildNutritionImport (nutritionImport.ts) + applySlotMergedNutrients (foodRoutes.ts)
   → JSON to FoodPage.tsx → user review
@@ -43,6 +47,7 @@ PDF path uses `extractPdfText` then the same import builder (no slot merge from 
 | `server/src/test/unit/domain/parseLabel.test.ts` | Synthetic one-line OCR strings (layout, not brands) |
 | `server/src/test/unit/domain/labelSlotExtract.test.ts` | Multi-candidate merge |
 | `server/src/test/unit/integrations/easyOcr.test.ts` | Env pass configuration only |
+| `server/src/test/unit/domain/labelLayout.test.ts` | Wide-table candidate pick, retry gate |
 
 Run: repo root `npm test`.
 

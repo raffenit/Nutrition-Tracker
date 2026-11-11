@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { splitEmbeddedPdfPages } from '../domain/labelTextBlocks.js';
+import { reportImportJobStep } from '../import/importJobProgress.js';
 import { extractImageText } from './extractText.js';
 
 const execFileAsync = promisify(execFile);
@@ -20,9 +21,11 @@ export async function extractPdfTextWithOcrFallback(
   const embeddedRaw = await extractPdfText(bytes);
   const embeddedPages = splitEmbeddedPdfPages(embeddedRaw);
   const embedded = embeddedRaw.replace(/\s+/g, ' ').trim();
+  reportImportJobStep('PDF', 'Reading PDF on server…', 'Extracting embedded text when available.');
   if (embedded.length >= MIN_TEXT_LAYER_CHARS) {
     return { text: embedded, usedOcr: false, pageTexts: embeddedPages };
   }
+  reportImportJobStep('OCR', 'Scanning PDF pages…', 'Rasterizing and running OCR — large files can take a minute.');
   const pageTexts = await ocrPdfPageTexts(bytes, tessdataDir, easyocrModelDir);
   const ocrText = pageTexts.join('\n\n');
   if (ocrText.trim()) return { text: ocrText, usedOcr: true, pageTexts };

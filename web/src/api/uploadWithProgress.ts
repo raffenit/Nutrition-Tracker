@@ -6,6 +6,7 @@ export function apiFormUpload<T>(
   path: string,
   formData: FormData,
   onProgress: (loaded: number, total: number) => void,
+  importJobId?: string,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -13,6 +14,7 @@ export function apiFormUpload<T>(
     xhr.withCredentials = true;
     const token = sessionStorage.getItem(KIOSK_KEY);
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    if (importJobId) xhr.setRequestHeader('X-Import-Job-Id', importJobId);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded, event.total);
     };

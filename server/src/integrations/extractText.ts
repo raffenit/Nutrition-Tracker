@@ -1,12 +1,26 @@
 import { PDFParse } from 'pdf-parse';
 import Tesseract, { PSM } from 'tesseract.js';
 import {
+  initialOcrLayoutProfile,
+  inferLabelLayoutFromText,
+  pickImportTextCandidateIndex,
+  shouldRetryWideTableOcr,
+  variantCapBoost,
+  type OcrLayoutProfile,
+} from '../domain/labelLayout.js';
+import {
   mergeSlotReadingsAcrossCandidates,
-  primaryCandidateIndex,
 } from '../domain/labelSlotExtract.js';
 import type { Nutrients } from '../types.js';
 import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
-import { buildOcrImageVariants, easyOcrVariantSubset, tesseractVariantSubset } from './ocrPreprocess.js';
+import { reportImportJobStep } from '../import/importJobProgress.js';
+import { inferLabelLayoutHint } from './imageLayoutHint.js';
+import {
+  buildOcrImageVariants,
+  easyOcrVariantSubset,
+  tesseractVariantSubset,
+  type BuildOcrVariantOptions,
+} from './ocrPreprocess.js';
 
 /** Cap OCR text candidates while still feeding the per-slot merge pool. */
 const MAX_OCR_CANDIDATES = 28;
@@ -39,10 +53,32 @@ export async function extractImageLabel(
   cachePath: string,
   options?: { easyocrModelDir?: string },
 ): Promise<ImageLabelExtraction> {
-  const candidates = await collectOcrCandidateTexts(bytes, cachePath, options?.easyocrModelDir);
+  reportImportJobStep('Preprocess', 'Preparing image for OCR…', 'Auto-rotate, upscale, and layout hints.');
+  const hint = await inferLabelLayoutHint(bytes);
+  const profiles: OcrLayoutProfile[] = [initialOcrLayoutProfile(hint)];
+
+  reportImportJobStep('OCR', 'Reading the Nutrition Facts panel…', 'Neural OCR and Tesseract on preprocessed variants.');
+  let candidates = await collectOcrCandidateTexts(bytes, cachePath, options?.easyocrModelDir, hint, profiles[0]!);
+  let layout = inferLabelLayoutFromText(candidates);
+  if (shouldRetryWideTableOcr(hint, layout)) {
+    reportImportJobStep('OCR', 'Trying alternate layout passes…', 'Wide label — extra OCR profile.');
+    profiles.push('wideTableRetry');
+    const retryCandidates = await collectOcrCandidateTexts(
+      bytes,
+      cachePath,
+      options?.easyocrModelDir,
+      hint,
+      'wideTableRetry',
+    );
+    candidates = mergeCandidateLists(candidates, retryCandidates);
+    layout = inferLabelLayoutFromText(candidates);
+  }
+
+  reportImportJobStep('Parse', 'Matching label rows…', 'Selecting the best OCR candidate and merging nutrients.');
   const slotMergedNutrients = mergeSlotReadingsAcrossCandidates(candidates);
-  const primaryIdx = primaryCandidateIndex(candidates);
-  const text = candidates[primaryIdx] ?? candidates[0] ?? '';
+  const textIdx = pickImportTextCandidateIndex(candidates, layout);
+  const text = candidates[textIdx] ?? candidates[0] ?? '';
+  reportImportJobStep('Draft', 'Building your draft…', 'Combining structured import fields.');
   return { text, slotMergedNutrients };
 }
 
@@ -54,6 +90,14 @@ export async function extractImageText(
 ): Promise<string> {
   const result = await extractImageLabel(bytes, cachePath, options);
   return result.text;
+}
+
+function mergeCandidateLists(primary: string[], extra: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  mergeUniqueCandidates(seen, out, primary);
+  mergeUniqueCandidates(seen, out, extra);
+  return out;
 }
 
 function mergeUniqueCandidates(seen: Set<string>, out: string[], texts: string[]): void {
@@ -89,11 +133,18 @@ async function collectTesseractCandidateTexts(bytes: Buffer[], cachePath: string
 async function collectOcrCandidateTexts(
   bytes: Buffer,
   cachePath: string,
-  modelDir?: string,
+  modelDir: string | undefined,
+  hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
+  profile: OcrLayoutProfile,
 ): Promise<string[]> {
-  const variants = await buildOcrImageVariants(bytes);
-  const forEasyOcr = modelDir ? easyOcrVariantSubset(variants) : [];
-  const forTesseract = tesseractVariantSubset(variants);
+  const variantOptions: BuildOcrVariantOptions = {
+    profile,
+    preserveFullWidthFocus: hint.widePanel || profile !== 'default',
+  };
+  const variants = await buildOcrImageVariants(bytes, variantOptions);
+  const cap = variantCapBoost(profile);
+  const forEasyOcr = modelDir ? easyOcrVariantSubset(variants, cap.easy) : [];
+  const forTesseract = tesseractVariantSubset(variants, cap.tess);
 
   const [easyTexts, tessTexts] = await Promise.all([
     modelDir ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir) : Promise.resolve([]),

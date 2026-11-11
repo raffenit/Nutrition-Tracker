@@ -1,3 +1,4 @@
+import { reportImportJobStep } from '../import/importJobProgress.js';
 import { extractPdfText } from './extractText.js';
 import { htmlToText } from './htmlText.js';
 import { HttpError } from '../http/errors.js';
@@ -16,6 +17,7 @@ export async function importNutritionFromUrl(urlString: string): Promise<UrlImpo
   const startUrl = parseHttpUrl(urlString);
   assertSafeHostname(startUrl.hostname);
 
+  reportImportJobStep('Fetch', 'Fetching link…', startUrl.hostname);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let response: Response;
@@ -50,8 +52,10 @@ export async function importNutritionFromUrl(urlString: string): Promise<UrlImpo
   if (bytes.length > MAX_BYTES) throw new HttpError(400, 'Linked file is too large (max 8 MB)');
 
   const kind = detectKind(finalUrl.href, response.headers.get('content-type'), bytes);
+  reportImportJobStep('Read', 'Reading page content…', kind === 'pdf' ? 'PDF document' : 'HTML page');
   const html = kind === 'html' ? bytes.toString('utf8') : null;
   const text = kind === 'pdf' ? await extractPdfText(bytes) : htmlToText(html ?? '');
+  reportImportJobStep('Parse', 'Looking for nutrition facts…', 'Matching label or menu patterns.');
   if (!text.trim() && !html?.includes('nmItem')) {
     throw new HttpError(400, 'No readable text at that link. Try a direct PDF or a page with Nutrition Facts in the HTML.');
   }

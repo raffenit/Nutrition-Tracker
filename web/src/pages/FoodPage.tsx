@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { FoodImportPanel, type FoodImportStatus } from '../components/FoodImportPanel';
 import { ImportProgress, type ImportProgressState } from '../components/ImportProgress';
-import { createImportProgressController } from '../lib/importUploadRunner';
+import { createImportProgressRunner } from '../lib/runImportWithProgress';
+import { useAsyncAction } from '../lib/useAsyncAction';
 import {
   IMAGE_IMPORT_STEPS,
   PDF_IMPORT_STEPS,
@@ -106,11 +107,10 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [nativeLabelCamera] = useState(() => supportsNativeLabelCamera());
-  const importRunner = useMemo(() => createImportProgressController(setImportProgress), []);
+  const importRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
+  const { busy: saveBusy, run: runSave } = useAsyncAction();
   const multiLabelDefaultRef = useRef<MultiLabelImportDefault | null>(null);
   const pendingAutoImportAll = useRef(false);
-
-  useEffect(() => () => importRunner.endImportProgress(), [importRunner]);
 
   useEffect(() => {
     void api<Session>('/api/session').then((session) => {
@@ -323,17 +323,11 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }
     setImportStatus(null);
     setSaveError(null);
-    importRunner.startProcessMessages(URL_IMPORT_STEPS);
     try {
-      const result = await api<ImportResult>('/api/import-url', {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-      });
+      const result = await importRunner.runUrlImport<ImportResult>(url, URL_IMPORT_STEPS);
       applyImport(result);
     } catch (caught) {
       setImportStatus({ kind: 'err', text: caught instanceof Error ? caught.message : 'Import failed' });
-    } finally {
-      importRunner.endImportProgress();
     }
   }
 
@@ -343,7 +337,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
     setImportStatus(null);
     setSaveError(null);
     try {
-      const result = await importRunner.uploadImportFile<ImportResult>(file, processSteps, {
+      const result = await importRunner.runFileImport<ImportResult>(file, processSteps, {
         pdf: 'Uploading PDF…',
         image: 'Uploading photo…',
       });
@@ -355,8 +349,9 @@ function FoodEditor({ editId }: { editId: string | null }) {
 
   const importBusy = importProgress !== null;
 
-  async function save(event: { preventDefault: () => void }): Promise<void> {
+  function save(event: { preventDefault: () => void }): void {
     event.preventDefault();
+    void runSave(async () => {
     const source = uploadId
       ? (importKind === 'pdf' ? 'pdf' as const : 'image' as const)
       : 'manual' as const;
@@ -384,12 +379,13 @@ function FoodEditor({ editId }: { editId: string | null }) {
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : 'Could not save');
     }
+    });
   }
 
   if (loading) return <p className="page">Loading…</p>;
 
   return (
-    <form className="page food-form" onSubmit={(event) => { void save(event); }}>
+    <form className="page food-form" onSubmit={(event) => save(event)}>
       <header className="form-head">
         <button type="button" className="back-link" onClick={() => navigate('/library?shelf=foods')}>← Foods</button>
         <h1>{editId ? 'Edit food' : 'Add food'}</h1>
@@ -570,7 +566,9 @@ function FoodEditor({ editId }: { editId: string | null }) {
           </section>
 
           {saveError && <p className="notice">{saveError}</p>}
-          <button className="primary form-save" type="submit">Save food</button>
+          <button className="primary form-save" type="submit" disabled={saveBusy} aria-busy={saveBusy}>
+            {saveBusy ? 'Saving…' : 'Save food'}
+          </button>
         </div>
       </div>
     </form>
@@ -606,7 +604,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [labelNutrients, setLabelNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
-  const recipeImportRunner = useMemo(() => createImportProgressController(setImportProgress), []);
+  const recipeImportRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
+  const { busy: recipeSaveBusy, run: runRecipeSave } = useAsyncAction();
   const [lines, setLines] = useState<RecipeEditorLine[]>([]);
   const [shopPickIndex, setShopPickIndex] = useState<number | null>(null);
   const [nutritionPickIndex, setNutritionPickIndex] = useState<number | null>(null);
@@ -617,8 +616,6 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   useEffect(() => {
     void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then((result) => setEcosystems(result.ecosystems));
   }, []);
-
-  useEffect(() => () => recipeImportRunner.endImportProgress(), [recipeImportRunner]);
 
   async function applyEcosystemMappings(ecosystemId: string, current: RecipeEditorLine[]): Promise<RecipeEditorLine[]> {
     const result = await api<{ mappings: Array<KitSheetMapping & { id: string }> }>(`/api/meal-kits/${ecosystemId}/mappings`);
@@ -768,7 +765,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     const processSteps = isPdf ? RECIPE_CARD_PDF_IMPORT_STEPS : RECIPE_CARD_IMAGE_IMPORT_STEPS;
     try {
-      const result = await recipeImportRunner.uploadImportFile<ImportResult>(file, processSteps, {
+      const result = await recipeImportRunner.runFileImport<ImportResult>(file, processSteps, {
         pdf: 'Uploading recipe PDF…',
         image: 'Uploading recipe photo…',
       });
@@ -780,7 +777,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
 
   const recipeImportBusy = importProgress !== null;
 
-  async function save(): Promise<void> {
+  function save(): void {
+    void runRecipeSave(async () => {
     const payload = {
       name,
       brand: brand.trim() || null,
@@ -812,6 +810,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save');
     }
+    });
   }
 
   if (loading) return <p className="page">Loading…</p>;
@@ -1013,7 +1012,15 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       </div>
 
       {error && <p className="notice">{error}</p>}
-      <button className="primary form-save" type="button" onClick={() => void save()} disabled={lines.length === 0}>Save recipe</button>
+      <button
+        className="primary form-save"
+        type="button"
+        onClick={() => save()}
+        disabled={lines.length === 0 || recipeSaveBusy}
+        aria-busy={recipeSaveBusy}
+      >
+        {recipeSaveBusy ? 'Saving…' : 'Save recipe'}
+      </button>
     </div>
   );
 }

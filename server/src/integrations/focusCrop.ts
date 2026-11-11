@@ -2,17 +2,23 @@ import type { Sharp } from 'sharp';
 
 const ANALYSIS_WIDTH = 640;
 
+export type FocusCropOptions = {
+  /** Keep full image width — variety-pack tables need side columns in OCR. */
+  preserveFullWidth?: boolean;
+};
+
 /** Vertical + horizontal crops biased toward the sharpest region (depth-of-field). */
-export async function focusCropVariants(source: Sharp): Promise<Sharp[]> {
+export async function focusCropVariants(source: Sharp, options?: FocusCropOptions): Promise<Sharp[]> {
   const variants: Sharp[] = [];
   const meta = await source.metadata();
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;
   if (width < 80 || height < 80) return variants;
 
-  variants.push(centerBandCrop(source, width, height, 0.62, 0.88));
+  const widthFraction = options?.preserveFullWidth ? 1 : 0.88;
+  variants.push(centerBandCrop(source, width, height, 0.62, widthFraction));
 
-  const guided = await laplacianBandCrop(source, width, height);
+  const guided = await laplacianBandCrop(source, width, height, options?.preserveFullWidth);
   if (guided) variants.push(guided);
 
   return variants;
@@ -36,6 +42,7 @@ async function laplacianBandCrop(
   source: Sharp,
   fullWidth: number,
   fullHeight: number,
+  preserveFullWidth?: boolean,
 ): Promise<Sharp | null> {
   const scale = fullWidth > ANALYSIS_WIDTH ? ANALYSIS_WIDTH / fullWidth : 1;
   const analysisW = Math.max(32, Math.round(fullWidth * scale));
@@ -78,8 +85,8 @@ async function laplacianBandCrop(
   const y2 = Math.min(analysisH, bestStart + bandRows + margin);
   const top = Math.round((y1 / analysisH) * fullHeight);
   const cropH = Math.max(32, Math.round(((y2 - y1) / analysisH) * fullHeight));
-  const cropW = Math.max(32, Math.round(fullWidth * 0.9));
-  const left = Math.round((fullWidth - cropW) / 2);
+  const cropW = preserveFullWidth ? fullWidth : Math.max(32, Math.round(fullWidth * 0.9));
+  const left = preserveFullWidth ? 0 : Math.round((fullWidth - cropW) / 2);
 
   if (cropH >= fullHeight * 0.95 && cropW >= fullWidth * 0.95) return null;
 
