@@ -22,6 +22,7 @@ import { parseMultiProductLabelTable } from '../dist/domain/parseMultiProductLab
 import { scoreLabelExtraction } from '../dist/domain/labelSlots.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+/** Default: gitignored shared-label multi-value fixture (see docs/label-table-terminology.md). */
 const defaultImage = path.join(repoRoot, 'local/test-images/costco-candy.jpg');
 const imagePath = process.argv[2] ? path.resolve(process.argv[2]) : defaultImage;
 const outDir = path.join(repoRoot, 'local/diagnostics/shared-label-grid');
