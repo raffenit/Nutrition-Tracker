@@ -84,6 +84,8 @@ function stripCenterFractions(plan: NonNullable<Awaited<ReturnType<typeof detect
 test('column strip detect params use ratio tunables not raw pixel magic', () => {
   const p = DEFAULT_COLUMN_STRIP_DETECT_PARAMS;
   assert.ok(p.minGutterSpacingFraction > 0 && p.minGutterSpacingFraction < 0.2);
+  assert.ok(p.gutterProminenceFraction > 0.2 && p.gutterProminenceFraction < 0.6);
+  assert.ok(p.minStripWidthFraction >= 0.03);
   assert.ok(p.minImageWidthFraction > 0 && p.minImageWidthFraction < 1);
   assert.equal(p.analysisWidth, 640);
 });
@@ -115,6 +117,20 @@ test('columnBoundariesForTest caps segments at maxColumns', () => {
   paintColumns(pixels, width, height, buildFractionalColumnLayout(width, MANY_COLUMN_LAYOUT));
   const segments = columnBoundariesForTest(pixels, width, height, { minStripWidthFraction: 0.04, maxColumns: 12 });
   assert.equal(segments.length, 12);
+});
+
+test('columnBoundariesForTest ignores shallow ripples inside a column', () => {
+  const width = 1200;
+  const height = 120;
+  const pixels = new Uint8Array(width * height);
+  const columns = buildFractionalColumnLayout(width, FOUR_COLUMN_LAYOUT);
+  paintColumns(pixels, width, height, columns);
+  for (let y = Math.round(height * 0.2); y < Math.round(height * 0.8); y += 1) {
+    for (let x = columns[0]!.x0 + 10; x < columns[0]!.x1 - 10; x += 9) {
+      pixels[y * width + x] = 140;
+    }
+  }
+  assert.equal(columnBoundariesForTest(pixels, width, height).length, 4);
 });
 
 test('columnBoundariesForTest does not split a uniform blank band', () => {
@@ -189,6 +205,20 @@ test('detectColumnStrips returns null for portrait images', async () => {
     .png()
     .toBuffer();
   assert.equal(await detectColumnStrips(bytes), null);
+});
+
+test('detectColumnStrips returns null for wide image with two panels only', async () => {
+  const width = 900;
+  const height = 300;
+  const pixels = new Uint8Array(width * height);
+  pixels.fill(250);
+  paintColumns(pixels, width, height, [
+    { x0: Math.round(width * 0.08), x1: Math.round(width * 0.42) },
+    { x0: Math.round(width * 0.55), x1: Math.round(width * 0.9) },
+  ]);
+  const bytes = await sharp(pixels, { raw: { width, height, channels: 1 } }).png().toBuffer();
+  const plan = await detectColumnStrips(bytes);
+  assert.ok(!plan || plan.strips.length < 3, 'two wide blobs should not look like a dense variety table');
 });
 
 test('detectColumnStrips returns null when gutters are missing', async () => {

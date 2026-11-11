@@ -1,5 +1,7 @@
 import sharp, { type Sharp } from 'sharp';
+import { COLUMN_STRIP_OCR_TARGET_WIDTH } from '../domain/columnStripOcrParams.js';
 import type { OcrLayoutProfile } from '../domain/labelLayout.js';
+import { appendImportJobDebug } from '../import/importJobProgress.js';
 import { adaptiveThresholdVariants } from './adaptiveThreshold.js';
 import { focusCropVariants } from './focusCrop.js';
 
@@ -35,10 +37,36 @@ export type BuildOcrVariantOptions = {
   preserveFullWidthFocus?: boolean;
 };
 
+export type OcrVariantMode = 'full' | 'columnStrip';
+
 /**
  * Single preprocess pipeline for Tesseract and EasyOCR (PNG buffers, orientations, crops).
  * Order is stable: primary orientation variants first, then rotations, then raw fallback.
  */
+/**
+ * Per-column strip OCR — no rotations or focus crops (those break on narrow crops).
+ * Upscales the strip, then a small preprocess set tuned for one vertical panel.
+ */
+export async function buildColumnStripOcrVariants(bytes: Buffer): Promise<Buffer[]> {
+  const source = sharp(bytes).rotate();
+  const meta = await source.metadata();
+  const width = meta.width ?? COLUMN_STRIP_OCR_TARGET_WIDTH;
+  const target = Math.max(COLUMN_STRIP_OCR_TARGET_WIDTH, width);
+  const scaled =
+    width < target - 4
+      ? source.clone().resize({ width: target, kernel: sharp.kernel.lanczos3 })
+      : source.clone();
+
+  const buffers: Buffer[] = [
+    await scaled.clone().greyscale().normalize().png().toBuffer(),
+    await scaled.clone().greyscale().normalize().sharpen({ sigma: 1 }).png().toBuffer(),
+    await scaled.clone().greyscale().linear(1.3, -20).normalize().png().toBuffer(),
+  ];
+  const adaptive = await adaptiveThresholdVariants(scaled);
+  if (adaptive[0]) buffers.push(adaptive[0]);
+  return uniqueBuffers(buffers);
+}
+
 export async function buildOcrImageVariants(bytes: Buffer, options?: BuildOcrVariantOptions): Promise<Buffer[]> {
   try {
     const targetWidth = ocrTargetWidthForProfile(options?.profile);
@@ -75,7 +103,10 @@ export async function buildOcrImageVariants(bytes: Buffer, options?: BuildOcrVar
     }
     buffers.push(bytes);
     return uniqueBuffers(buffers);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendImportJobDebug(`ocr preprocess: variant build failed — ${message}`);
+    console.error('[ocrPreprocess] buildOcrImageVariants failed:', error);
     return [bytes];
   }
 }

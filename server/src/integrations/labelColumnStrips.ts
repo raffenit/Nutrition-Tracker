@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import {
   DEFAULT_COLUMN_STRIP_DETECT_PARAMS,
   resolveColumnStripParams,
@@ -41,20 +41,65 @@ export async function detectColumnStrips(
   const minFullWidth = Math.round(params.analysisWidth * params.minImageWidthFraction);
   const minFullHeight = Math.round(params.analysisWidth * params.minImageHeightFraction);
 
+  const bandAnalysis = await prepareWideBandAnalysis(bytes, params, 'detection');
+  if (!bandAnalysis) return null;
+  if (requireWide && bandAnalysis.fullWidth / bandAnalysis.fullHeight < WIDE_PANEL_MIN_ASPECT) return null;
+
+  const ocrBandAnalysis = await prepareWideBandAnalysis(bytes, params, 'ocr');
+  const ocrBand = ocrBandAnalysis?.band ?? bandAnalysis.band;
+
+  const { band: detectionBand, analysisW } = bandAnalysis;
+
+  const boundaries = columnBoundariesFromGreyBand(bandAnalysis.pixels, bandAnalysis.analysisW, bandAnalysis.analysisH, {
+    ...params,
+    minStripWidthFraction,
+    maxColumns,
+  });
+  if (boundaries.length < minColumns) return null;
+
+  const minOutputWidth = Math.max(1, Math.round(bandAnalysis.fullWidth * params.minOutputStripWidthFraction));
+  const strips: ColumnStripRegion[] = boundaries.map((segment, index) => {
+    const left = detectionBand.left + Math.round((segment.x0 / analysisW) * detectionBand.width);
+    const right = detectionBand.left + Math.round((segment.x1 / analysisW) * detectionBand.width);
+    const width = Math.max(minOutputWidth, right - left);
+    const vertical = verticalExtentForOcrCrops(ocrBand);
+    return { index, left, top: vertical.top, width, height: vertical.height };
+  });
+
+  return { band: ocrBand, strips };
+}
+
+/**
+ * Greyscale band in analysis space.
+ * {@link WideBandPurpose.detection} — centered (ink projection / gutters).
+ * {@link WideBandPurpose.ocr} — top-inset on wide panels (strip OCR crops).
+ */
+export async function prepareWideBandAnalysis(
+  bytes: Buffer,
+  params: ColumnStripDetectParams = DEFAULT_COLUMN_STRIP_DETECT_PARAMS,
+  purpose: WideBandPurpose = 'detection',
+): Promise<WideBandAnalysis | null> {
+  const minFullWidth = Math.round(params.analysisWidth * params.minImageWidthFraction);
+  const minFullHeight = Math.round(params.analysisWidth * params.minImageHeightFraction);
+
   const source = sharp(bytes).rotate();
   const meta = await source.metadata();
   const fullWidth = meta.width ?? 0;
   const fullHeight = meta.height ?? 0;
   if (fullWidth < minFullWidth || fullHeight < minFullHeight) return null;
-  if (requireWide && fullWidth / fullHeight < WIDE_PANEL_MIN_ASPECT) return null;
 
   const bandW = fullWidth;
   const bandH = Math.max(
     Math.round(fullHeight * params.minBandHeightFloorFraction),
     Math.round(fullHeight * params.bandHeightFraction),
   );
-  const bandTop = Math.max(0, Math.round((fullHeight - bandH) / 2));
-  const band = { left: 0, top: bandTop, width: bandW, height: bandH };
+  const wide = fullWidth / fullHeight >= WIDE_PANEL_MIN_ASPECT;
+  const bandTop =
+    purpose === 'ocr' && wide
+      ? Math.max(0, Math.round(fullHeight * params.bandTopInsetFraction))
+      : Math.max(0, Math.round((fullHeight - bandH) / 2));
+  const clampedHeight = Math.min(bandH, Math.max(1, fullHeight - bandTop));
+  const band = { left: 0, top: bandTop, width: bandW, height: clampedHeight };
 
   const { analysisW, analysisH } = bandToAnalysisSize(
     bandW,
@@ -64,30 +109,39 @@ export async function detectColumnStrips(
     params.minAnalysisHeightFraction,
   );
 
-  const { data } = await source
+  let analysisPipeline = source
     .clone()
     .extract({ left: band.left, top: band.top, width: band.width, height: band.height })
     .resize({ width: analysisW, height: analysisH, fit: 'fill' })
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+    .greyscale();
+  analysisPipeline = applyBandContrast(analysisPipeline, params);
+  const { data } = await analysisPipeline.raw().toBuffer({ resolveWithObject: true });
 
-  const boundaries = columnBoundariesFromGreyBand(new Uint8Array(data), analysisW, analysisH, {
+  return {
+    band,
+    fullWidth,
+    fullHeight,
+    analysisW,
+    analysisH,
+    pixels: new Uint8Array(data),
+  };
+}
+
+/** Test + shared-label path: ink projection already in analysis space. */
+export function columnBoundariesFromInkProfile(
+  profile: Float64Array,
+  params: ColumnStripDetectParams & { maxColumns: number; minStripWidthFraction?: number },
+): Segment[] {
+  const smoothRadius = Math.max(1, Math.round(params.smoothRadiusFraction * profile.length));
+  const smoothed = smoothProfile(profile, smoothRadius);
+  return splitBoundariesFromProfile(smoothed, {
     ...params,
-    minStripWidthFraction,
-    maxColumns,
+    minStripWidthFraction: params.minStripWidthFraction ?? DEFAULT_COLUMN_STRIP_DETECT_PARAMS.minStripWidthFraction,
   });
-  if (boundaries.length < minColumns) return null;
+}
 
-  const minOutputWidth = Math.max(1, Math.round(fullWidth * params.minOutputStripWidthFraction));
-  const strips: ColumnStripRegion[] = boundaries.map((segment, index) => {
-    const left = band.left + Math.round((segment.x0 / analysisW) * bandW);
-    const right = band.left + Math.round((segment.x1 / analysisW) * bandW);
-    const width = Math.max(minOutputWidth, right - left);
-    return { index, left, top: band.top, width, height: band.height };
-  });
-
-  return { band, strips };
+export function buildColumnInkProfileFromBand(pixels: Uint8Array, width: number, height: number): Float64Array {
+  return buildColumnInkProfile(pixels, width, height);
 }
 
 /** Crop each strip to a PNG buffer (for per-column OCR in a later slice). */
@@ -108,6 +162,23 @@ export async function extractColumnStripBuffers(bytes: Buffer, plan: ColumnStrip
 }
 
 type Segment = { x0: number; x1: number };
+
+export type WideBandPurpose = 'detection' | 'ocr';
+
+export type WideBandAnalysis = {
+  band: { left: number; top: number; width: number; height: number };
+  fullWidth: number;
+  fullHeight: number;
+  analysisW: number;
+  analysisH: number;
+  pixels: Uint8Array;
+};
+
+function verticalExtentForOcrCrops(
+  ocrBand: WideBandAnalysis['band'],
+): Pick<ColumnStripRegion, 'top' | 'height'> {
+  return { top: ocrBand.top, height: ocrBand.height };
+}
 
 export type ColumnBoundariesTestOptions = {
   minStripWidthFraction?: number;
@@ -130,7 +201,10 @@ export function columnBoundariesForTest(
     params.minAnalysisWidthFraction,
     params.minAnalysisHeightFraction,
   );
-  const normalized = resampleGreyscaleNearest(pixels, width, height, analysisW, analysisH);
+  const normalized = enhanceGreyBand(
+    resampleGreyscaleNearest(pixels, width, height, analysisW, analysisH),
+    params,
+  );
   const boundaries = columnBoundariesFromGreyBand(normalized, analysisW, analysisH, {
     ...params,
     minStripWidthFraction: options?.minStripWidthFraction ?? params.minStripWidthFraction,
@@ -149,9 +223,7 @@ function columnBoundariesFromGreyBand(
   params: ColumnStripDetectParams & { maxColumns: number },
 ): Segment[] {
   const profile = buildColumnInkProfile(pixels, analysisW, analysisH);
-  const smoothRadius = Math.max(1, Math.round(params.smoothRadiusFraction * analysisW));
-  const smoothed = smoothProfile(profile, smoothRadius);
-  return splitBoundariesFromProfile(smoothed, params);
+  return columnBoundariesFromInkProfile(profile, params);
 }
 
 function buildColumnInkProfile(pixels: Uint8Array, width: number, height: number): Float64Array {
@@ -193,15 +265,20 @@ function splitBoundariesFromProfile(profile: Float64Array, params: ColumnStripDe
   );
   const minGutterSpacing = Math.max(1, Math.round(profile.length * params.minGutterSpacingFraction));
 
-  const gutterCenters: number[] = [];
-  for (let x = 1; x < profile.length - 1; x += 1) {
-    const value = profile[x]!;
-    if (value > gutterLevel) continue;
-    if (value > profile[x - 1]! || value > profile[x + 1]!) continue;
-    const last = gutterCenters[gutterCenters.length - 1];
-    if (last !== undefined && x - last < minGutterSpacing) continue;
-    gutterCenters.push(x);
-  }
+  const minRadius = Math.max(
+    1,
+    Math.round(profile.length * (params.gutterLocalMinimumRadiusFraction ?? 1 / profile.length)),
+  );
+
+  const gutterCenters = selectGutterCenters(profile, {
+    gutterLevel,
+    minRadius,
+    minGutterSpacing,
+    minWidth,
+    maxColumns: params.maxColumns,
+    prominence: params.gutterProminenceFraction,
+    prominenceRelax: params.gutterProminenceRelaxFraction,
+  });
 
   const edges = [0, ...gutterCenters, profile.length];
   const segments: Segment[] = [];
@@ -216,6 +293,147 @@ function splitBoundariesFromProfile(profile: Float64Array, params: ColumnStripDe
     return mergeNarrowestSegments(segments, params.maxColumns);
   }
   return segments;
+}
+
+function selectGutterCenters(
+  profile: Float64Array,
+  options: {
+    gutterLevel: number;
+    minRadius: number;
+    minGutterSpacing: number;
+    minWidth: number;
+    maxColumns: number;
+    prominence: number;
+    prominenceRelax: number;
+  },
+): number[] {
+  const minSegments = 2;
+  const attemptLevels = uniqueProminenceAttempts(options.prominence, options.prominenceRelax);
+  let best: number[] = [];
+  for (const prominence of attemptLevels) {
+    const centers = collectGutterCenters(profile, options, prominence);
+    const segmentCount = countSegmentsForGutters(profile.length, centers, options.minWidth);
+    if (segmentCount >= minSegments) {
+      if (segmentCount <= options.maxColumns) return centers;
+      best = centers;
+    }
+  }
+  if (best.length > 0) return best;
+  return collectGutterCenters(profile, options, 0);
+}
+
+function uniqueProminenceAttempts(prominence: number, relax: number): number[] {
+  const levels = [prominence, prominence * 0.65, relax, 0];
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const level of levels) {
+    const rounded = Math.round(level * 1000) / 1000;
+    if (seen.has(rounded)) continue;
+    seen.add(rounded);
+    out.push(rounded);
+  }
+  return out;
+}
+
+function collectGutterCenters(
+  profile: Float64Array,
+  options: {
+    gutterLevel: number;
+    minRadius: number;
+    minGutterSpacing: number;
+  },
+  prominenceFraction: number,
+): number[] {
+  const gutterCenters: number[] = [];
+  for (let x = options.minRadius; x < profile.length - options.minRadius; x += 1) {
+    if (!isGutterMinimum(profile, x, options.gutterLevel, options.minRadius)) continue;
+    if (prominenceFraction > 0 && !gutterHasProminence(profile, x, options.minGutterSpacing, prominenceFraction)) {
+      continue;
+    }
+    const last = gutterCenters[gutterCenters.length - 1];
+    if (last !== undefined && x - last < options.minGutterSpacing) continue;
+    gutterCenters.push(x);
+  }
+  return gutterCenters;
+}
+
+function countSegmentsForGutters(profileLength: number, gutterCenters: number[], minWidth: number): number {
+  const edges = [0, ...gutterCenters, profileLength];
+  let count = 0;
+  for (let i = 0; i < edges.length - 1; i += 1) {
+    if (edges[i + 1]! - edges[i]! >= minWidth) count += 1;
+  }
+  return count;
+}
+
+function applyBandContrast(pipeline: Sharp, params: ColumnStripDetectParams): Sharp {
+  if (params.profileContrastSlope === 1 && params.profileContrastIntercept === 0) {
+    return pipeline;
+  }
+  return pipeline.linear(params.profileContrastSlope, params.profileContrastIntercept).normalize();
+}
+
+function enhanceGreyBand(pixels: Uint8Array, params: ColumnStripDetectParams): Uint8Array {
+  if (params.profileContrastSlope === 1 && params.profileContrastIntercept === 0) {
+    return pixels;
+  }
+  const out = new Uint8Array(pixels.length);
+  for (let index = 0; index < pixels.length; index += 1) {
+    out[index] = Math.max(
+      0,
+      Math.min(255, Math.round(pixels[index]! * params.profileContrastSlope + params.profileContrastIntercept)),
+    );
+  }
+  let min = 255;
+  let max = 0;
+  for (const value of out) {
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  if (max <= min) return out;
+  for (let index = 0; index < out.length; index += 1) {
+    out[index] = Math.round(((out[index]! - min) / (max - min)) * 255);
+  }
+  return out;
+}
+
+function isGutterMinimum(profile: Float64Array, x: number, gutterLevel: number, radius: number): boolean {
+  const value = profile[x]!;
+  if (value > gutterLevel) return false;
+  for (let dx = -radius; dx <= radius; dx += 1) {
+    if (dx === 0) continue;
+    const index = x + dx;
+    if (index < 0 || index >= profile.length) continue;
+    if (profile[index]! < value) return false;
+  }
+  return true;
+}
+
+function gutterHasProminence(
+  profile: Float64Array,
+  x: number,
+  window: number,
+  prominenceFraction: number,
+): boolean {
+  const value = profile[x]!;
+  const leftFrom = Math.max(0, x - window);
+  const leftTo = Math.max(leftFrom, x - 1);
+  const rightFrom = Math.min(profile.length - 1, x + 1);
+  const rightTo = Math.min(profile.length - 1, x + window);
+
+  const leftPeak = peakInRange(profile, leftFrom, leftTo);
+  const rightPeak = peakInRange(profile, rightFrom, rightTo);
+  const neighborPeak = Math.min(leftPeak, rightPeak);
+  if (neighborPeak <= 0) return false;
+  return value <= neighborPeak * (1 - prominenceFraction);
+}
+
+function peakInRange(profile: Float64Array, from: number, to: number): number {
+  let peak = 0;
+  for (let i = from; i <= to; i += 1) {
+    peak = Math.max(peak, profile[i]!);
+  }
+  return peak;
 }
 
 function mergeNarrowestSegments(segments: Segment[], target: number): Segment[] {

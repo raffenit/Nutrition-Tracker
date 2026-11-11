@@ -12,14 +12,32 @@ export type ColumnStripDetectParams = {
   analysisWidth: number;
   /** Vertical band height as a fraction of full image height (post-rotate). */
   bandHeightFraction: number;
+  /**
+   * Wide-table **OCR** band only — detection ink projection stays vertically centered.
+   * Fraction of full height from the top where OCR crops start.
+   */
+  bandTopInsetFraction: number;
   /** Floor on band height as a fraction of full image height. */
   minBandHeightFloorFraction: number;
   /** Gutter minima must sit below this fraction of peak column ink in the profile. */
   gutterThresholdRatio: number;
+  /**
+   * Gutter ink must be at least this fraction below the weaker neighboring column peak
+   * (suppresses ripples inside a dense column).
+   */
+  gutterProminenceFraction: number;
+  /** Floor when relaxing prominence — still need {@link minColumns} product strips. */
+  gutterProminenceRelaxFraction: number;
   /** Minimum spacing between gutter minima, as a fraction of analysis width. */
   minGutterSpacingFraction: number;
+  /** Local-minimum radius for gutter detection, as a fraction of analysis width. */
+  gutterLocalMinimumRadiusFraction: number;
   /** Profile smoothing radius, as a fraction of analysis width. */
   smoothRadiusFraction: number;
+  /** Mild linear contrast on the analysis band before ink projection (1 = none). */
+  profileContrastSlope: number;
+  /** Intercept paired with {@link profileContrastSlope} (0–255 scale). */
+  profileContrastIntercept: number;
   /** Smallest column segment width, as a fraction of profile length (analysis width). */
   minStripWidthFraction: number;
   /** Smallest accepted segment after gutter split, as a fraction of analysis width. */
@@ -43,13 +61,19 @@ const W = IMAGE_ANALYSIS_WIDTH;
 export const DEFAULT_COLUMN_STRIP_DETECT_PARAMS: ColumnStripDetectParams = {
   analysisWidth: W,
   bandHeightFraction: 0.58,
+  bandTopInsetFraction: 16 / W,
   minBandHeightFloorFraction: 32 / 480,
-  gutterThresholdRatio: 0.22,
-  minGutterSpacingFraction: 28 / W,
-  smoothRadiusFraction: 7 / W,
-  minStripWidthFraction: 0.06,
-  minSegmentWidthFraction: 4 / W,
-  minOutputStripWidthFraction: 8 / W,
+  gutterThresholdRatio: 0.52,
+  gutterProminenceFraction: 0.35,
+  gutterProminenceRelaxFraction: 0.14,
+  minGutterSpacingFraction: 12 / W,
+  gutterLocalMinimumRadiusFraction: 2 / W,
+  smoothRadiusFraction: 2 / W,
+  profileContrastSlope: 1.35,
+  profileContrastIntercept: -25,
+  minStripWidthFraction: 0.04,
+  minSegmentWidthFraction: 2 / W,
+  minOutputStripWidthFraction: 10 / W,
   minImageWidthFraction: 120 / W,
   minImageHeightFraction: IMAGE_MIN_SIDE_FRACTION,
   minAnalysisWidthFraction: 48 / W,
