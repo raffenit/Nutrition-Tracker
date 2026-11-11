@@ -2,8 +2,8 @@
   "version": 1,
   "fixtures": [
     {
-      "file": "your-wide-variety.jpg",
-      "description": "Human-readable note (optional).",
+      "file": "your-wide-shared-label-table.jpg",
+      "description": "Variety pack, shared_rail layout (one nutrient rail + N value columns).",
       "layout": "shared_rail",
       "valueColumnCount": 10,
       "varietyPackPipeline": {

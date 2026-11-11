@@ -19,7 +19,7 @@ const manifestPath = path.join(imageDir, 'manifest.json');
 const hasManifest = existsSync(manifestPath);
 
 test(
-  'local test-images manifest matches variety-pack pipeline ground truth',
+  'local test-images manifest matches variety pack pipeline ground truth',
   { skip: !hasManifest },
   async () => {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as TestImageManifest;
@@ -32,9 +32,16 @@ test(
         continue;
       }
       const bytes = await readFile(imagePath);
-      const pipeline = await runVarietyPackGridPipeline(bytes, { maxColumns: 14 });
-      const plan = await detectSharedLabelValueGrid(bytes, { maxColumns: 14 });
       const hint = await inferLabelLayoutHint(bytes);
+      const pipelineOpts = {
+        maxColumns: 14,
+        layoutHint: {
+          singleSubjectInFocus: hint.singleSubjectInFocus,
+          sharpPeakCount: hint.sharpPeakCount,
+        },
+      };
+      const pipeline = await runVarietyPackGridPipeline(bytes, pipelineOpts);
+      const plan = await detectSharedLabelValueGrid(bytes, pipelineOpts);
       const split = await detectSplitSingleLabel(bytes, hint);
       const vp = fx.varietyPackPipeline;
 
@@ -53,6 +60,9 @@ test(
       }
       if (vp?.forbidLayout && pipeline.steps[3].data?.layout === vp.forbidLayout) {
         failures.push(`${fx.file}: step 3 layout must not be ${vp.forbidLayout}`);
+      }
+      if (fx.layout === 'split_single' && pipeline.steps[3].data?.layout !== 'split_single') {
+        failures.push(`${fx.file}: expected step 3 layout split_single`);
       }
       if (vp?.expectSharedRailPlan === false && plan) {
         failures.push(`${fx.file}: unexpected shared-rail plan (${plan.valueColumns.length} cols)`);

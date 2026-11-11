@@ -1,7 +1,9 @@
 /** Schema for local/test-images/manifest.json (gitignored). Example: local.example/test-images-manifest.example.json */
+/** Layout vocabulary: docs/label-table-terminology.md */
 
 export type TestImageLayout = 'shared_rail' | 'split_single' | 'single' | 'per_column_labels';
 
+/** Expectations for the variety pack pipeline (`runVarietyPackGridPipeline`) — any step-3 layout. */
 export type VarietyPackPipelineExpectation = {
   expectRun?: boolean;
   expectLastOkStep?: 1 | 2 | 3 | 4;
