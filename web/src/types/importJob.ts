@@ -9,4 +9,5 @@ export type ImportJobSnapshot = {
   elapsedMs: number;
   done: boolean;
   error: string | null;
+  debugLog?: string[];
 };

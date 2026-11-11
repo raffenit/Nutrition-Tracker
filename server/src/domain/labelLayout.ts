@@ -11,6 +11,13 @@ export type LabelLayoutHint = {
   width: number;
   height: number;
   aspectRatio: number;
+  /** Share of frame width that is sharply in focus (depth-of-field). */
+  sharpFocusWidthFraction: number;
+  /** Depth-of-field suggests one intentional label (incidental blur at sides). */
+  singleSubjectInFocus: boolean;
+  /** Sharp peaks on the horizontal focus profile (high → multi-column table in focus). */
+  sharpPeakCount: number;
+  focusRegion: { left: number; top: number; width: number; height: number } | null;
 };
 
 export type LabelLayoutKind = 'single' | 'repeated_nutrition_facts' | 'multi_column_table';

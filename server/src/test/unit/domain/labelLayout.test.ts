@@ -13,8 +13,28 @@ import { MULTI_PRODUCT_FIXTURE_SPACED_COLUMNS } from '../../fixtures/multiProduc
 import { primaryCandidateIndex } from '../../../domain/labelSlotExtract.js';
 
 test('initialOcrLayoutProfile selects wideTable for landscape variety-pack photos', () => {
-  assert.equal(initialOcrLayoutProfile({ widePanel: true, width: 2000, height: 1000, aspectRatio: 2 }), 'wideTable');
-  assert.equal(initialOcrLayoutProfile({ widePanel: false, width: 1000, height: 1200, aspectRatio: 0.83 }), 'default');
+  const wideHint = {
+    widePanel: true,
+    width: 2000,
+    height: 1000,
+    aspectRatio: 2,
+    sharpFocusWidthFraction: 0.9,
+    singleSubjectInFocus: false,
+    sharpPeakCount: 0,
+    focusRegion: null,
+  };
+  const narrowHint = {
+    widePanel: false,
+    width: 1000,
+    height: 1200,
+    aspectRatio: 0.83,
+    sharpFocusWidthFraction: 1,
+    singleSubjectInFocus: false,
+    sharpPeakCount: 0,
+    focusRegion: null,
+  };
+  assert.equal(initialOcrLayoutProfile(wideHint), 'wideTable');
+  assert.equal(initialOcrLayoutProfile(narrowHint), 'default');
 });
 
 test('inferLabelLayoutFromText detects multi-column table among candidates', () => {
@@ -40,7 +60,16 @@ total fat 3g 4g 3g
 });
 
 test('shouldRetryWideTableOcr only when wide image lacks multi-column parse', () => {
-  const hint = { widePanel: true, width: 1800, height: 900, aspectRatio: 2 };
+  const hint = {
+    widePanel: true,
+    width: 1800,
+    height: 900,
+    aspectRatio: 2,
+    sharpFocusWidthFraction: 0.85,
+    singleSubjectInFocus: false,
+    sharpPeakCount: 22,
+    focusRegion: null,
+  };
   const weak = inferLabelLayoutFromText(['Nutrition Facts\nOne product\nCalories 100']);
   assert.equal(shouldRetryWideTableOcr(hint, weak), true);
 
@@ -49,8 +78,33 @@ test('shouldRetryWideTableOcr only when wide image lacks multi-column parse', ()
 });
 
 test('shouldRunColumnStripOcr gate for wide variety-pack recovery', () => {
-  const wide: LabelLayoutHint = { widePanel: true, width: 900, height: 300, aspectRatio: 3 };
-  const narrow: LabelLayoutHint = { widePanel: false, width: 400, height: 800, aspectRatio: 0.5 };
+  const wide: LabelLayoutHint = {
+    widePanel: true,
+    width: 900,
+    height: 300,
+    aspectRatio: 3,
+    sharpFocusWidthFraction: 0.88,
+    singleSubjectInFocus: false,
+    sharpPeakCount: 22,
+    focusRegion: null,
+  };
+  const narrow: LabelLayoutHint = {
+    widePanel: false,
+    width: 400,
+    height: 800,
+    aspectRatio: 0.5,
+    sharpFocusWidthFraction: 1,
+    singleSubjectInFocus: false,
+    sharpPeakCount: 0,
+    focusRegion: null,
+  };
+  const focusedWide: LabelLayoutHint = {
+    ...wide,
+    sharpFocusWidthFraction: 0.3,
+    singleSubjectInFocus: true,
+    sharpPeakCount: 4,
+    focusRegion: { left: 100, top: 0, width: 900, height: 300 },
+  };
   const weak: LabelLayoutFromText = {
     kind: 'single',
     bestCandidateIndex: 0,
@@ -68,6 +122,7 @@ test('shouldRunColumnStripOcr gate for wide variety-pack recovery', () => {
   assert.equal(shouldRunColumnStripOcr(wide, repeated), false);
   assert.equal(shouldRunColumnStripOcr(wide, noNf), false);
   assert.equal(shouldRunColumnStripOcr(narrow, weak), false);
+  assert.equal(shouldRunColumnStripOcr(focusedWide, weak), true);
 });
 
 test('repeated nutrition facts layout picks candidate with most headings', () => {

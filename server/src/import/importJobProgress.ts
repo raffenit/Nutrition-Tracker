@@ -5,6 +5,8 @@ export type ImportJobFlow = 'image' | 'pdf' | 'url';
 
 export type ImportJobStepStatus = 'done' | 'active' | 'pending';
 
+const DEBUG_LOG_MAX = 80;
+
 export type ImportJobSnapshot = {
   id: string;
   flow: ImportJobFlow;
@@ -14,6 +16,8 @@ export type ImportJobSnapshot = {
   elapsedMs: number;
   done: boolean;
   error: string | null;
+  /** Server-side OCR / pipeline trace (poll via GET /api/import-jobs/:id). */
+  debugLog: string[];
 };
 
 type ImportJobRecord = {
@@ -27,6 +31,7 @@ type ImportJobRecord = {
   updatedAt: number;
   done: boolean;
   error: string | null;
+  debugLog: string[];
 };
 
 const JOB_TTL_MS = 15 * 60 * 1000;
@@ -73,7 +78,26 @@ export function beginImportJob(jobId: string, userId: string, flow: ImportJobFlo
     updatedAt: now,
     done: false,
     error: null,
+    debugLog: [],
   });
+}
+
+/** Append a diagnostic line for active import jobs (OCR engines, column strips, preprocess). */
+export function appendImportJobDebug(line: string): void {
+  const ctx = jobContext.getStore();
+  if (!ctx) {
+    if (process.env.IMPORT_JOB_DEBUG === '1') {
+      console.error(`[import-debug] ${line}`);
+    }
+    return;
+  }
+  const record = jobs.get(ctx.jobId);
+  if (!record) return;
+  record.debugLog.push(line);
+  if (record.debugLog.length > DEBUG_LOG_MAX) {
+    record.debugLog.splice(0, record.debugLog.length - DEBUG_LOG_MAX);
+  }
+  record.updatedAt = Date.now();
 }
 
 export function runWithImportJob<T>(jobId: string | null, userId: string, flow: ImportJobFlow, fn: () => Promise<T>): Promise<T> {
@@ -133,6 +157,7 @@ function snapshotFromRecord(id: string, record: ImportJobRecord): ImportJobSnaps
     elapsedMs,
     done: record.done,
     error: record.error,
+    debugLog: [...record.debugLog],
     steps: record.stepShorts.map((short, index) => {
       let status: ImportJobStepStatus = 'pending';
       if (index < record.activeIndex) status = 'done';

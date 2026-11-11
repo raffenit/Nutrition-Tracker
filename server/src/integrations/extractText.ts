@@ -1,5 +1,6 @@
 import { PDFParse } from 'pdf-parse';
-import Tesseract, { PSM } from 'tesseract.js';
+import { PSM } from 'tesseract.js';
+import sharp from 'sharp';
 import {
   initialOcrLayoutProfile,
   inferLabelLayoutFromText,
@@ -9,23 +10,41 @@ import {
   variantCapBoost,
   type OcrLayoutProfile,
 } from '../domain/labelLayout.js';
+import {
+  COLUMN_STRIP_MIN_OCR_WIDTH_FRACTION,
+} from '../domain/columnStripOcrParams.js';
 import { parseMultiProductLabelTable } from '../domain/parseMultiProductLabelTable.js';
 import { scoreLabelExtraction } from '../domain/labelSlots.js';
 import { stitchColumnStripOcrTexts } from '../domain/stitchColumnStripTexts.js';
+import {
+  diagnoseSharedLabelGridStitch,
+  formatSharedLabelStitchFailure,
+  stitchSharedLabelGridTexts,
+} from '../domain/stitchSharedLabelGridTexts.js';
+import { stitchSplitLabelHalves } from '../domain/stitchSplitLabelHalves.js';
 import {
   mergeSlotReadingsAcrossCandidates,
 } from '../domain/labelSlotExtract.js';
 import type { Nutrients } from '../types.js';
 import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
-import { reportImportJobStep } from '../import/importJobProgress.js';
+import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
+import { bytesForFocusAwareOcr } from './labelFocusHint.js';
 import { inferLabelLayoutHint } from './imageLayoutHint.js';
 import { detectColumnStrips, extractColumnStripBuffers } from './labelColumnStrips.js';
+import { extractSharedLabelGridBuffers } from './sharedLabelValueGrid.js';
 import {
+  formatVarietyPackStepValidation,
+  runVarietyPackGridPipeline,
+} from './varietyPackGridPipeline.js';
+import { detectSplitSingleLabel, extractSplitSingleLabelBuffers } from './splitSingleLabel.js';
+import {
+  buildColumnStripOcrVariants,
   buildOcrImageVariants,
   easyOcrVariantSubset,
   tesseractVariantSubset,
   type BuildOcrVariantOptions,
 } from './ocrPreprocess.js';
+import { recognizeTesseractBatch } from './tesseractOcr.js';
 
 /** Cap OCR text candidates while still feeding the per-slot merge pool. */
 const MAX_OCR_CANDIDATES = 28;
@@ -60,32 +79,60 @@ export async function extractImageLabel(
 ): Promise<ImageLabelExtraction> {
   reportImportJobStep('Preprocess', 'Preparing image for OCR…', 'Auto-rotate, upscale, and layout hints.');
   const hint = await inferLabelLayoutHint(bytes);
-  const profiles: OcrLayoutProfile[] = [initialOcrLayoutProfile(hint)];
+  const focusCrop = await bytesForFocusAwareOcr(bytes, hint);
+  let ocrBytes = focusCrop.bytes;
+  let activeHint = hint;
+  if (focusCrop.applied) {
+    activeHint = await inferLabelLayoutHint(ocrBytes);
+    appendImportJobDebug(
+      `focus: OCR on in-focus crop ${activeHint.width}×${activeHint.height}px (${Math.round(hint.sharpFocusWidthFraction * 100)}% sharp, ${hint.sharpPeakCount} peaks)`,
+    );
+    if (hint.widePanel && !activeHint.widePanel) {
+      appendImportJobDebug('focus: in-focus crop is not wide — column strips unlikely');
+    }
+  }
+
+  const profiles: OcrLayoutProfile[] = [initialOcrLayoutProfile(activeHint)];
 
   reportImportJobStep('OCR', 'Reading the Nutrition Facts panel…', 'Neural OCR and Tesseract on preprocessed variants.');
-  let candidates = await collectOcrCandidateTexts(bytes, cachePath, options?.easyocrModelDir, hint, profiles[0]!);
+  let candidates = await collectOcrCandidateTexts(
+    ocrBytes,
+    cachePath,
+    options?.easyocrModelDir,
+    activeHint,
+    profiles[0]!,
+    'full',
+  );
   let layout = inferLabelLayoutFromText(candidates);
-  if (shouldRetryWideTableOcr(hint, layout)) {
+  if (shouldRetryWideTableOcr(activeHint, layout)) {
     reportImportJobStep('OCR', 'Trying alternate layout passes…', 'Wide label — extra OCR profile.');
     profiles.push('wideTableRetry');
     const retryCandidates = await collectOcrCandidateTexts(
-      bytes,
+      ocrBytes,
       cachePath,
       options?.easyocrModelDir,
-      hint,
+      activeHint,
       'wideTableRetry',
+      'full',
     );
     candidates = mergeCandidateLists(candidates, retryCandidates);
     layout = inferLabelLayoutFromText(candidates);
   }
 
-  if (shouldRunColumnStripOcr(hint, layout)) {
+  if (activeHint.singleSubjectInFocus && layout.kind === 'single') {
+    const splitLabel = await ocrSplitSingleLabel(ocrBytes, cachePath, options?.easyocrModelDir, activeHint);
+    if (splitLabel) {
+      candidates = mergeCandidateLists([splitLabel], candidates);
+      layout = inferLabelLayoutFromText(candidates);
+    }
+  }
+
+  if (shouldRunColumnStripOcr(activeHint, layout)) {
     const stitched = await ocrAndStitchColumnStrips(
-      bytes,
+      ocrBytes,
       cachePath,
       options?.easyocrModelDir,
-      hint,
-      profiles.at(-1) ?? 'wideTable',
+      activeHint,
     );
     if (stitched) {
       candidates = mergeCandidateLists([stitched], candidates);
@@ -129,23 +176,15 @@ function mergeUniqueCandidates(seen: Set<string>, out: string[], texts: string[]
   }
 }
 
-async function collectTesseractCandidateTexts(bytes: Buffer[], cachePath: string): Promise<string[]> {
+async function collectTesseractCandidateTexts(
+  images: Buffer[],
+  cachePath: string,
+  logLabel: string,
+): Promise<string[]> {
   const seen = new Set<string>();
   const out: string[] = [];
-  const psmModes = tesseractPsmModes();
-  const worker = await Tesseract.createWorker('eng', 1, { cachePath });
-  try {
-    for (const image of bytes) {
-      for (const psm of psmModes) {
-        if (out.length >= MAX_OCR_CANDIDATES) return out;
-        await worker.setParameters({ tessedit_pageseg_mode: psm });
-        const result = await worker.recognize(image);
-        mergeUniqueCandidates(seen, out, [result.data.text ?? '']);
-      }
-    }
-  } finally {
-    await worker.terminate();
-  }
+  const { texts } = await recognizeTesseractBatch(images, cachePath, tesseractPsmModes(), logLabel);
+  mergeUniqueCandidates(seen, out, texts);
   return out;
 }
 
@@ -155,19 +194,28 @@ async function collectOcrCandidateTexts(
   modelDir: string | undefined,
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
   profile: OcrLayoutProfile,
+  mode: 'full' | 'columnStrip',
 ): Promise<string[]> {
   const variantOptions: BuildOcrVariantOptions = {
     profile,
     preserveFullWidthFocus: hint.widePanel || profile !== 'default',
   };
-  const variants = await buildOcrImageVariants(bytes, variantOptions);
-  const cap = variantCapBoost(profile);
+  const variants =
+    mode === 'columnStrip'
+      ? await buildColumnStripOcrVariants(bytes)
+      : await buildOcrImageVariants(bytes, variantOptions);
+
+  appendImportJobDebug(`ocr ${mode}: ${variants.length} variant(s) for profile ${profile}`);
+
+  const cap = mode === 'columnStrip' ? { tess: 0, easy: 1 } : variantCapBoost(profile);
   const forEasyOcr = modelDir ? easyOcrVariantSubset(variants, cap.easy) : [];
-  const forTesseract = tesseractVariantSubset(variants, cap.tess);
+  const forTesseract = tesseractVariantSubset(variants, mode === 'columnStrip' ? 3 : cap.tess);
 
   const [easyTexts, tessTexts] = await Promise.all([
     modelDir ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir) : Promise.resolve([]),
-    collectTesseractCandidateTexts(forTesseract, cachePath),
+    forTesseract.length > 0
+      ? collectTesseractCandidateTexts(forTesseract, cachePath, `${mode}-${profile}`)
+      : Promise.resolve([]),
   ]);
 
   const seen = new Set<string>();
@@ -183,38 +231,187 @@ async function ocrAndStitchColumnStrips(
   cachePath: string,
   modelDir: string | undefined,
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
-  profile: OcrLayoutProfile,
 ): Promise<string | null> {
-  const plan = await detectColumnStrips(bytes);
-  if (!plan || plan.strips.length < 2) return null;
+  const shared = await ocrAndStitchSharedLabelGrid(bytes, cachePath, modelDir, hint);
+  if (shared) return shared;
+
+  const plan = await detectColumnStrips(bytes, { maxColumns: 14 });
+  if (!plan || plan.strips.length < 2) {
+    appendImportJobDebug(
+      plan ? `column-strip: only ${plan.strips.length} strip(s) — skip per-column OCR` : 'column-strip: detect returned null',
+    );
+    return null;
+  }
 
   reportImportJobStep(
     'OCR',
     'Locating product columns…',
-    `Found ${plan.strips.length} vertical strips — OCR per column.`,
+    `Found ${plan.strips.length} vertical strips — strip-only OCR (no full-page re-read).`,
   );
+  appendImportJobDebug(`column-strip: ${plan.strips.length} strips detected`);
 
-  const buffers = await extractColumnStripBuffers(bytes, plan);
+  const meta = await sharp(bytes).rotate().metadata();
+  const fullWidth = meta.width ?? 0;
+  const widthSummary = plan.strips
+    .map((strip) => (fullWidth > 0 ? `${Math.round((strip.width / fullWidth) * 100)}%` : `${strip.width}px`))
+    .join(', ');
+  appendImportJobDebug(`column-strip geometry: widths ${widthSummary} of ${fullWidth}px`);
+  const minStripWidth = Math.max(32, Math.round(fullWidth * COLUMN_STRIP_MIN_OCR_WIDTH_FRACTION));
+  const eligible = plan.strips.filter((strip) => strip.width >= minStripWidth);
+  if (eligible.length < 2) {
+    appendImportJobDebug(`column-strip: ${eligible.length} strip(s) above min width ${minStripWidth}px`);
+    return null;
+  }
+
+  const buffers = await extractColumnStripBuffers(bytes, { ...plan, strips: eligible });
   const stripTexts: string[] = [];
   for (let index = 0; index < buffers.length; index += 1) {
+    const strip = eligible[index]!;
+    const dim = await sharp(buffers[index]!).metadata();
     reportImportJobStep(
       'OCR',
       `Reading column ${index + 1} of ${buffers.length}…`,
-      'Per-column OCR on strip crop.',
+      `Strip ${strip.width}×${strip.height}px (crop ${dim.width}×${dim.height}).`,
     );
+    appendImportJobDebug(
+      `column-strip ${index + 1}/${buffers.length}: crop ${dim.width ?? 0}×${dim.height ?? 0}px`,
+    );
+
     const stripCandidates = await collectOcrCandidateTexts(
       buffers[index]!,
       cachePath,
       modelDir,
       hint,
-      profile,
+      'wideTable',
+      'columnStrip',
     );
-    stripTexts.push(pickBestStripCandidate(stripCandidates));
+    const best = pickBestStripCandidate(stripCandidates);
+    const score = scoreLabelExtraction(best);
+    appendImportJobDebug(
+      `column-strip ${index + 1}: score ${score}, ${best.trim().length} chars`,
+    );
+    stripTexts.push(best);
   }
 
   const stitched = stitchColumnStripOcrTexts(stripTexts);
-  if (!stitched || !parseMultiProductLabelTable(stitched)) return null;
+  if (!stitched) {
+    appendImportJobDebug(
+      `column-strip: stitch returned null (${stripTexts.length} strips, chars ${stripTexts.map((t) => t.trim().length).join(',')})`,
+    );
+    return null;
+  }
+  const parsed = parseMultiProductLabelTable(stitched);
+  if (!parsed || parsed.length < 2) {
+    appendImportJobDebug(
+      `column-strip: stitch did not parse as multi-product (${parsed?.length ?? 0} columns)`,
+    );
+    return null;
+  }
+  appendImportJobDebug(`column-strip: stitch OK — ${parsed.length} products`);
   return stitched;
+}
+
+async function ocrAndStitchSharedLabelGrid(
+  bytes: Buffer,
+  cachePath: string,
+  modelDir: string | undefined,
+  hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
+): Promise<string | null> {
+  const pipeline = await runVarietyPackGridPipeline(bytes, { maxColumns: 14 });
+  for (const step of [1, 2, 3, 4] as const) {
+    appendImportJobDebug(`variety grid ${formatVarietyPackStepValidation(pipeline.steps[step].validation)}`);
+  }
+  const plan = pipeline.plan;
+  if (!plan) {
+    appendImportJobDebug('shared-label grid: detect returned null');
+    return null;
+  }
+
+  reportImportJobStep(
+    'OCR',
+    'Reading shared label table…',
+    `Label column + ${plan.valueColumns.length} value columns.`,
+  );
+  appendImportJobDebug(
+    `shared-label grid: label ${plan.labelColumn.width}px, ${plan.valueColumns.length} value columns (ruled-grid detect)`,
+  );
+
+  const meta = await sharp(bytes).rotate().metadata();
+  const fullWidth = meta.width ?? 0;
+  const widthSummary = plan.valueColumns
+    .map((col) => (fullWidth > 0 ? `${Math.round((col.width / fullWidth) * 100)}%` : `${col.width}px`))
+    .join(', ');
+  appendImportJobDebug(`shared-label grid value widths: ${widthSummary}`);
+
+  const crops = await extractSharedLabelGridBuffers(bytes, plan);
+  const labelText = pickBestStripCandidate(
+    await collectOcrCandidateTexts(crops.labelColumn, cachePath, modelDir, hint, 'wideTable', 'columnStrip'),
+  );
+  appendImportJobDebug(`shared-label grid: label OCR ${labelText.trim().length} chars`);
+
+  const headerText = pickBestStripCandidate(
+    await collectOcrCandidateTexts(crops.headerBand, cachePath, modelDir, hint, 'wideTable', 'columnStrip'),
+  );
+  appendImportJobDebug(`shared-label grid: header OCR ${headerText.trim().length} chars`);
+
+  const valueTexts: string[] = [];
+  for (let index = 0; index < crops.valueColumns.length; index += 1) {
+    const buf = crops.valueColumns[index]!;
+    appendImportJobDebug(`shared-label grid value ${index + 1}/${crops.valueColumns.length}`);
+    const best = pickBestStripCandidate(
+      await collectOcrCandidateTexts(buf, cachePath, modelDir, hint, 'wideTable', 'columnStrip'),
+    );
+    valueTexts.push(best);
+  }
+
+  const stitchDiag = diagnoseSharedLabelGridStitch(labelText, valueTexts, headerText);
+  const stitched = stitchSharedLabelGridTexts(labelText, valueTexts, headerText);
+  if (!stitched) {
+    appendImportJobDebug(`shared-label grid: stitch failed — ${formatSharedLabelStitchFailure(stitchDiag)}`);
+    return null;
+  }
+  const parsed = parseMultiProductLabelTable(stitched);
+  if (!parsed || parsed.length < 2) {
+    appendImportJobDebug(
+      `shared-label grid: stitch did not parse as multi-product (${parsed?.length ?? 0} columns)`,
+    );
+    return null;
+  }
+  appendImportJobDebug(`shared-label grid: stitch OK — ${parsed.length} products`);
+  return stitched;
+}
+
+async function ocrSplitSingleLabel(
+  bytes: Buffer,
+  cachePath: string,
+  modelDir: string | undefined,
+  hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
+): Promise<string | null> {
+  const plan = await detectSplitSingleLabel(bytes, hint);
+  if (!plan) {
+    appendImportJobDebug('split-single-label: detect returned null');
+    return null;
+  }
+  appendImportJobDebug(
+    `split-single-label: two halves ${plan.strips[0]!.width}px + ${plan.strips[1]!.width}px`,
+  );
+  const [leftBuf, rightBuf] = await extractSplitSingleLabelBuffers(bytes, plan);
+  const leftText = pickBestStripCandidate(
+    await collectOcrCandidateTexts(leftBuf, cachePath, modelDir, hint, 'default', 'columnStrip'),
+  );
+  const rightText = pickBestStripCandidate(
+    await collectOcrCandidateTexts(rightBuf, cachePath, modelDir, hint, 'default', 'columnStrip'),
+  );
+  appendImportJobDebug(
+    `split-single-label: OCR left ${leftText.trim().length} chars, right ${rightText.trim().length} chars`,
+  );
+  const merged = stitchSplitLabelHalves(leftText, rightText);
+  if (!merged) {
+    appendImportJobDebug('split-single-label: stitch returned null');
+    return null;
+  }
+  appendImportJobDebug('split-single-label: stitch OK');
+  return merged;
 }
 
 function pickBestStripCandidate(candidates: string[]): string {
