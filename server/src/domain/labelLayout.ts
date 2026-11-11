@@ -3,7 +3,7 @@ import { parseMultiProductLabelTable } from './parseMultiProductLabelTable.js';
 import { primaryCandidateIndex } from './labelSlotExtract.js';
 import { scoreLabelExtraction } from './labelSlots.js';
 
-/** Landscape variety-pack photos: width clearly exceeds height. */
+/** Landscape variety-pack photos (multi-product tables): width clearly exceeds height. */
 export const WIDE_PANEL_MIN_ASPECT = 1.35;
 
 export type LabelLayoutHint = {

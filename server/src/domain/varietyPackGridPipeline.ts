@@ -1,8 +1,9 @@
-/** Human-style variety table reconstruction: geometry before OCR. */
+/** Variety pack (multi-product wide table): geometry before OCR. Step 3 → shared_rail | per_column_labels | split_single. */
 export type VarietyPackGridStep = 1 | 2 | 3 | 4;
 
 export type VarietyPackGridStepCode =
   | 'ok'
+  | 'split_single_label'
   | 'band_unavailable'
   | 'not_wide_enough'
   | 'insufficient_categories'
@@ -47,7 +48,7 @@ export type VarietyPackGridStep2 = {
   headerHeightFraction: number;
 };
 
-export type VarietyPackLabelLayout = 'shared_rail' | 'per_column_labels' | 'unknown';
+export type VarietyPackLabelLayout = 'shared_rail' | 'per_column_labels' | 'split_single' | 'unknown';
 
 export type VarietyPackGridStep3 = {
   layout: VarietyPackLabelLayout;
