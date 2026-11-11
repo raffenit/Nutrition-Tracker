@@ -18,7 +18,9 @@ import {
   listUsers,
   saveHousehold,
   saveKioskHash,
+  saveMultiLabelImportDefault,
   saveTargets,
+  type MultiLabelImportDefault,
 } from '../db/users.js';
 import { HttpError } from '../http/errors.js';
 import { clearSessionCookie, readCookie, sessionCookie, SESSION_COOKIE } from '../http/cookies.js';
@@ -72,6 +74,7 @@ export function authRoutes(): Route[] {
     }),
     route('POST', '/api/targets/apply-preset', applyTargetsPreset),
     route('PUT', '/api/household', saveHouseholdSettings),
+    route('PUT', '/api/household/multi-label-import-default', saveMultiLabelImportDefaultRoute),
     route('POST', '/api/household/kiosk', createKioskLink),
   ];
 }
@@ -175,7 +178,30 @@ function sendSession(ctx: Parameters<Route['handler']>[0], userId: string): void
   sendJson(ctx.res, 200, { user: user ? { id: user.id, name: user.name, role: user.role } : null });
 }
 
-function publicHousehold(household: ReturnType<typeof getHousehold>): { name: string; timezone: string } | null {
+async function saveMultiLabelImportDefaultRoute(ctx: Parameters<Route['handler']>[0]): Promise<void> {
+  requireUser(ctx.auth);
+  const body = await readJson(ctx.req);
+  if (!isRecord(body)) throw new HttpError(400, 'Expected a default');
+  const value = readMultiLabelImportDefault(body.default);
+  saveMultiLabelImportDefault(ctx.db, value);
+  sendJson(ctx.res, 200, { household: publicHousehold(getHousehold(ctx.db)) });
+}
+
+function readMultiLabelImportDefault(value: unknown): MultiLabelImportDefault | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value === 'pick_one' || value === 'import_all') return value;
+  throw new HttpError(400, 'Default must be pick_one, import_all, or cleared');
+}
+
+function publicHousehold(household: ReturnType<typeof getHousehold>): {
+  name: string;
+  timezone: string;
+  multiLabelImportDefault: MultiLabelImportDefault | null;
+} | null {
   if (!household) return null;
-  return { name: household.name, timezone: household.timezone };
+  return {
+    name: household.name,
+    timezone: household.timezone,
+    multiLabelImportDefault: household.multiLabelImportDefault,
+  };
 }

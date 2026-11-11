@@ -128,11 +128,17 @@ export type GoalAlert = {
   dismissible: boolean;
 };
 
+export type MultiLabelImportDefault = 'pick_one' | 'import_all';
+
 export type Session = {
   setupRequired: boolean;
   mode: 'user' | 'kiosk' | 'none';
   user: User | null;
-  household: { name: string; timezone: string } | null;
+  household: {
+    name: string;
+    timezone: string;
+    multiLabelImportDefault: MultiLabelImportDefault | null;
+  } | null;
 };
 
 export const EMPTY_NUTRIENTS: Nutrients = {

@@ -28,10 +28,13 @@ type TargetSql = {
   extras_json: string;
 };
 
+export type MultiLabelImportDefault = 'pick_one' | 'import_all';
+
 export type HouseholdRecord = {
   name: string;
   timezone: string;
   kioskTokenHash: string | null;
+  multiLabelImportDefault: MultiLabelImportDefault | null;
 };
 
 export function countUsers(db: AppDatabase): number {
@@ -81,11 +84,22 @@ export function saveHousehold(db: AppDatabase, name: string, timezone: string): 
 }
 
 export function getHousehold(db: AppDatabase): HouseholdRecord | null {
-  const row = db.prepare('SELECT name, timezone, kiosk_token_hash FROM household WHERE id = 1').get() as
-    | { name: string; timezone: string; kiosk_token_hash: string | null }
+  const row = db.prepare(
+    'SELECT name, timezone, kiosk_token_hash, multi_label_import_default FROM household WHERE id = 1',
+  ).get() as
+    | { name: string; timezone: string; kiosk_token_hash: string | null; multi_label_import_default: MultiLabelImportDefault | null }
     | undefined;
   if (!row) return null;
-  return { name: row.name, timezone: row.timezone, kioskTokenHash: row.kiosk_token_hash };
+  return {
+    name: row.name,
+    timezone: row.timezone,
+    kioskTokenHash: row.kiosk_token_hash,
+    multiLabelImportDefault: row.multi_label_import_default,
+  };
+}
+
+export function saveMultiLabelImportDefault(db: AppDatabase, value: MultiLabelImportDefault | null): void {
+  db.prepare('UPDATE household SET multi_label_import_default = ? WHERE id = 1').run(value);
 }
 
 export function saveKioskHash(db: AppDatabase, hash: string): void {

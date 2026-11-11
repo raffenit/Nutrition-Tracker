@@ -32,7 +32,7 @@ import {
   type CoreNutrientUnits,
 } from '../nutrientUnits';
 import { supportsNativeLabelCamera } from '../lib/cameraCapture';
-import { EMPTY_NUTRIENTS, type Food, type Nutrients } from '../types';
+import { EMPTY_NUTRIENTS, type Food, type MultiLabelImportDefault, type Nutrients, type Session } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
 
@@ -107,8 +107,22 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [nativeLabelCamera] = useState(() => supportsNativeLabelCamera());
   const importRunner = useMemo(() => createImportProgressController(setImportProgress), []);
+  const multiLabelDefaultRef = useRef<MultiLabelImportDefault | null>(null);
+  const pendingAutoImportAll = useRef(false);
 
   useEffect(() => () => importRunner.endImportProgress(), [importRunner]);
+
+  useEffect(() => {
+    void api<Session>('/api/session').then((session) => {
+      multiLabelDefaultRef.current = session.household?.multiLabelImportDefault ?? null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pendingAutoImportAll.current || labelPanels.length <= 1 || importAllBusy) return;
+    pendingAutoImportAll.current = false;
+    void importAllLabelPanels();
+  }, [labelPanels, importAllBusy]);
 
   useEffect(() => {
     if (!editId) return;
@@ -148,10 +162,18 @@ function FoodEditor({ editId }: { editId: string | null }) {
     if (panels.length > 1) {
       setCandidates([]);
       setMenuItems([]);
-      setImportStatus({
-        kind: 'warn',
-        text: result.warning ?? `Found ${panels.length} nutrition labels. Pick one to edit, or import all as separate foods.`,
-      });
+      if (multiLabelDefaultRef.current === 'import_all') {
+        pendingAutoImportAll.current = true;
+        setImportStatus({
+          kind: 'ok',
+          text: result.warning ?? `Found ${panels.length} labels — importing all per household default…`,
+        });
+      } else {
+        setImportStatus({
+          kind: 'warn',
+          text: result.warning ?? `Found ${panels.length} nutrition labels. Pick one to edit, or import all as separate foods.`,
+        });
+      }
       return;
     }
     if (result.kind === 'pdf' && (result.candidates.length > 0 || (result.menuItems?.length ?? 0) === 0)) {

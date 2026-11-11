@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { splitEmbeddedPdfPages } from '../domain/labelTextBlocks.js';
 import { extractImageText } from './extractText.js';
 
 const execFileAsync = promisify(execFile);
@@ -14,18 +15,21 @@ export async function extractPdfTextWithOcrFallback(
   bytes: Buffer,
   tessdataDir: string,
   easyocrModelDir?: string,
-): Promise<{ text: string; usedOcr: boolean }> {
+): Promise<{ text: string; usedOcr: boolean; pageTexts: string[] }> {
   const { extractPdfText } = await import('./extractText.js');
-  const embedded = (await extractPdfText(bytes)).replace(/\s+/g, ' ').trim();
+  const embeddedRaw = await extractPdfText(bytes);
+  const embeddedPages = splitEmbeddedPdfPages(embeddedRaw);
+  const embedded = embeddedRaw.replace(/\s+/g, ' ').trim();
   if (embedded.length >= MIN_TEXT_LAYER_CHARS) {
-    return { text: embedded, usedOcr: false };
+    return { text: embedded, usedOcr: false, pageTexts: embeddedPages };
   }
-  const ocrText = await ocrPdfPages(bytes, tessdataDir, easyocrModelDir);
-  if (ocrText.trim()) return { text: ocrText, usedOcr: true };
-  return { text: embedded, usedOcr: false };
+  const pageTexts = await ocrPdfPageTexts(bytes, tessdataDir, easyocrModelDir);
+  const ocrText = pageTexts.join('\n\n');
+  if (ocrText.trim()) return { text: ocrText, usedOcr: true, pageTexts };
+  return { text: embedded, usedOcr: false, pageTexts: embeddedPages };
 }
 
-async function ocrPdfPages(bytes: Buffer, tessdataDir: string, easyocrModelDir?: string): Promise<string> {
+async function ocrPdfPageTexts(bytes: Buffer, tessdataDir: string, easyocrModelDir?: string): Promise<string[]> {
   const dir = await mkdtemp(path.join(tmpdir(), 'nt-pdf-ocr-'));
   const inputPath = path.join(dir, 'input.pdf');
   const prefix = path.join(dir, 'page');
@@ -42,9 +46,9 @@ async function ocrPdfPages(bytes: Buffer, tessdataDir: string, easyocrModelDir?:
       const pageText = await extractImageText(image, tessdataDir, easyocrModelDir ? { easyocrModelDir } : undefined);
       if (pageText.trim()) chunks.push(pageText.trim());
     }
-    return chunks.join('\n\n');
+    return chunks;
   } catch {
-    return '';
+    return [];
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

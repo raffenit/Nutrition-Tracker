@@ -270,4 +270,8 @@ function migrate(db: AppDatabase): void {
   if (!foodColumns.some((column) => column.name === 'meal_kit_ecosystem_id')) {
     db.exec(`ALTER TABLE foods ADD COLUMN meal_kit_ecosystem_id TEXT REFERENCES meal_kit_ecosystems(id) ON DELETE SET NULL`);
   }
+  const householdColumns = db.prepare('PRAGMA table_info(household)').all() as Array<{ name: string }>;
+  if (!householdColumns.some((column) => column.name === 'multi_label_import_default')) {
+    db.exec(`ALTER TABLE household ADD COLUMN multi_label_import_default TEXT CHECK (multi_label_import_default IN ('pick_one', 'import_all'))`);
+  }
 }

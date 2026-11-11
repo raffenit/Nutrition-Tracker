@@ -28,3 +28,26 @@ export function blocksLookLikeSeparateLabels(blocks: string[]): boolean {
   }
   return labelLike >= 2;
 }
+
+/** Collect label-sized text blocks from one or more PDF pages / OCR blobs. */
+export function collectLabelPanelBlocks(parts: string[]): string[] {
+  const blocks: string[] = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    for (const block of splitNutritionLabelTexts(trimmed)) {
+      if (block.length < 24) continue;
+      const parsed = parseNutritionLabel(block);
+      if (parsed.looksLikeLabel || /nutrition\s+facts/i.test(block)) blocks.push(block);
+    }
+  }
+  return blocks;
+}
+
+/** Split text-layer PDF extract into pages when the parser inserted form feeds. */
+export function splitEmbeddedPdfPages(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, '\n');
+  const byFormFeed = normalized.split(/\f+/).map((chunk) => chunk.trim()).filter((chunk) => chunk.length > 0);
+  if (byFormFeed.length > 1) return byFormFeed;
+  return [normalized.trim()].filter((chunk) => chunk.length > 0);
+}

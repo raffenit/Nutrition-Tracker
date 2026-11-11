@@ -10,13 +10,13 @@ import {
   type Units,
 } from '../units';
 import { disablePushNotifications, enablePushNotifications, fetchPushStatus, type PushStatus } from '../push';
-import type { DietPresetPublic, Session, Targets, User, WeightStatus } from '../types';
+import type { DietPresetPublic, MultiLabelImportDefault, Session, Targets, User, WeightStatus } from '../types';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 type SettingsPageProps = {
   user: User;
-  household: { name: string; timezone: string } | null;
+  household: Session['household'];
   onSessionChange: (session: Session) => void;
 };
 
@@ -99,6 +99,17 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
           <DietPresetPicker
             onApplied={async (next) => {
               setTargets(next);
+            }}
+          />
+          <MultiLabelImportSettings
+            value={household?.multiLabelImportDefault ?? null}
+            onSave={async (value) => {
+              await api('/api/household/multi-label-import-default', {
+                method: 'PUT',
+                body: JSON.stringify({ default: value }),
+              });
+              const nextSession = await api<Session>('/api/session');
+              onSessionChange(nextSession);
             }}
           />
           <section className="card settings-meal-kits">
@@ -440,6 +451,63 @@ function WeightSettings({ weight, onChange }: { weight: WeightStatus; onChange: 
           <button className="danger" type="button" onClick={() => void api<{ weight: WeightStatus }>('/api/weight', { method: 'DELETE' }).then((result) => onChange(result.weight))}>Delete saved weights</button>
         </div>
       )}
+    </section>
+  );
+}
+
+function MultiLabelImportSettings({
+  value,
+  onSave,
+}: {
+  value: MultiLabelImportDefault | null;
+  onSave: (value: MultiLabelImportDefault | null) => Promise<void>;
+}) {
+  const [choice, setChoice] = useState<MultiLabelImportDefault | 'ask'>(value ?? 'ask');
+  const [status, setStatus] = useState<string | null>(null);
+  return (
+    <section className="card settings-multi-label">
+      <h2>Multi-label imports</h2>
+      <p className="muted">When a photo or PDF contains several Nutrition Facts panels, choose the default behavior for this household.</p>
+      <fieldset className="settings-multi-label-fieldset">
+        <legend className="sr-only">Multi-label import default</legend>
+        <label className="settings-radio">
+          <input
+            type="radio"
+            name="multi-label-default"
+            checked={choice === 'ask'}
+            onChange={() => setChoice('ask')}
+          />
+          Always ask (pick one or import all)
+        </label>
+        <label className="settings-radio">
+          <input
+            type="radio"
+            name="multi-label-default"
+            checked={choice === 'pick_one'}
+            onChange={() => setChoice('pick_one')}
+          />
+          Prefer pick one at a time
+        </label>
+        <label className="settings-radio">
+          <input
+            type="radio"
+            name="multi-label-default"
+            checked={choice === 'import_all'}
+            onChange={() => setChoice('import_all')}
+          />
+          Automatically import all as separate foods
+        </label>
+      </fieldset>
+      <button
+        type="button"
+        className="settings-secondary-btn"
+        onClick={() =>
+          void onSave(choice === 'ask' ? null : choice).then(() => setStatus('Saved multi-label default.'))
+        }
+      >
+        Save import default
+      </button>
+      {status && <p className="muted">{status}</p>}
     </section>
   );
 }

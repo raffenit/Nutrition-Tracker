@@ -18,7 +18,16 @@ export function SetupPage({ onReady }: SetupPageProps) {
       const result = await api<{ user: User }>('/api/setup', { method: 'POST', body: JSON.stringify({
         name: form.get('name'), password, householdName: form.get('householdName'),
       }) });
-      onReady({ setupRequired: false, mode: 'user', user: result.user, household: { name: String(form.get('householdName') || 'Household'), timezone: 'America/Chicago' } });
+      onReady({
+        setupRequired: false,
+        mode: 'user',
+        user: result.user,
+        household: {
+          name: String(form.get('householdName') || 'Household'),
+          timezone: 'America/Chicago',
+          multiLabelImportDefault: null,
+        },
+      });
       navigate('/');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Setup failed');

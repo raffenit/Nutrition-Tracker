@@ -1,6 +1,7 @@
 import { assessLabelFieldReview, type LabelFieldReviewMap } from './labelFieldReview.js';
-import { blocksLookLikeSeparateLabels, splitNutritionLabelTexts } from './labelTextBlocks.js';
+import { blocksLookLikeSeparateLabels, collectLabelPanelBlocks, splitNutritionLabelTexts } from './labelTextBlocks.js';
 import { menuCandidates, parseNutritionLabel } from './parseLabel.js';
+import { multiProductColumnsToFieldReview, parseMultiProductLabelTable } from './parseMultiProductLabelTable.js';
 import { parseRecipeCard } from './parseRecipeCard.js';
 import { parseMenuFromSource, type MenuItemDraft } from './parseMenuTable.js';
 import type { Nutrients } from '../types.js';
@@ -55,6 +56,7 @@ export function buildNutritionImportWithPanels(
   text: string,
   kind: 'pdf' | 'html' | 'image',
   html: string | null = null,
+  pageTexts: string[] | null = null,
 ): NutritionImportDraft {
   const primary = buildNutritionImport(text, kind, html);
   if (primary.menuItems.length > 0 || primary.recipeCard) {
@@ -63,10 +65,60 @@ export function buildNutritionImportWithPanels(
   if (primary.candidates.length > 0 && !primary.draft.nutrients.calories && !parseNutritionLabel(text).looksLikeLabel) {
     return { ...primary, labelPanels: [] };
   }
-  const blocks = splitNutritionLabelTexts(text);
-  if (!blocksLookLikeSeparateLabels(blocks)) {
-    return { ...primary, labelPanels: [] };
+  const parts = pageTexts && pageTexts.length > 0 ? pageTexts : [text];
+  const blocks = collectLabelPanelBlocks(parts);
+  if (blocksLookLikeSeparateLabels(blocks)) {
+    return panelsFromBlocks(blocks, text, kind, html, primary.warning);
   }
+  const fallbackBlocks = splitNutritionLabelTexts(text);
+  if (blocksLookLikeSeparateLabels(fallbackBlocks)) {
+    return panelsFromBlocks(fallbackBlocks, text, kind, html, primary.warning);
+  }
+  const multiProduct = parseMultiProductLabelTable(text);
+  if (multiProduct && multiProduct.length >= 2) {
+    return panelsFromMultiProductColumns(multiProduct, text, kind, primary.warning);
+  }
+  return { ...primary, labelPanels: [] };
+}
+
+function panelsFromMultiProductColumns(
+  columns: ReturnType<typeof parseMultiProductLabelTable>,
+  sourceText: string,
+  kind: 'pdf' | 'html' | 'image',
+  primaryWarning: string | null,
+): NutritionImportDraft {
+  if (!columns) return buildNutritionImport(sourceText, kind);
+  const labelPanels: LabelPanelImport[] = columns.map((column, index) => ({
+    index,
+    preview: `${column.name} · ${column.nutrients.calories} kcal`,
+    draft: {
+      name: column.name,
+      brand: null,
+      kind: 'packaged',
+      servingLabel: column.servingLabel ?? '1 serving',
+      servingsPerContainer: null,
+      nutrients: column.nutrients,
+      isDrink: false,
+      drinkMl: null,
+      source: kind === 'pdf' ? 'pdf' : 'manual',
+    },
+    fieldReview: multiProductColumnsToFieldReview(sourceText, column),
+    warning: null,
+  }));
+  return {
+    ...buildNutritionImport(sourceText, kind),
+    labelPanels,
+    warning: primaryWarning ?? `Found ${labelPanels.length} products on one label panel. Pick one or import all.`,
+  };
+}
+
+function panelsFromBlocks(
+  blocks: string[],
+  fallbackText: string,
+  kind: 'pdf' | 'html' | 'image',
+  html: string | null,
+  primaryWarning: string | null,
+): NutritionImportDraft {
   const labelPanels: LabelPanelImport[] = blocks.map((block, index) => {
     const built = buildNutritionImport(block, kind, html);
     return {
@@ -78,9 +130,9 @@ export function buildNutritionImportWithPanels(
     };
   });
   return {
-    ...buildNutritionImport(blocks[0] ?? text, kind, html),
+    ...buildNutritionImport(blocks[0] ?? fallbackText, kind, html),
     labelPanels,
-    warning: primary.warning ?? `Found ${labelPanels.length} nutrition labels. Pick one or import all.`,
+    warning: primaryWarning ?? `Found ${labelPanels.length} nutrition labels. Pick one or import all.`,
   };
 }
 

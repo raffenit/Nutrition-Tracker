@@ -1234,6 +1234,19 @@ label.import-field-review,
   gap: 0.25rem;
   font-size: 0.88rem;
 }
+.settings-multi-label-fieldset {
+  border: 0;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.settings-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+}
 .meal-kit-mapping-actions {
   display: flex;
   flex-wrap: wrap;

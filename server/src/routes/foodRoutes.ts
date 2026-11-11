@@ -182,7 +182,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
   await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
   const extracted = await readExtractedText(kind, file.bytes, ctx.config);
-  const built = buildNutritionImportWithPanels(extracted.text, kind);
+  const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts);
   if (extracted.slotMergedNutrients) {
     applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
   }
@@ -389,11 +389,17 @@ async function readExtractedText(
   kind: 'image' | 'pdf',
   bytes: Buffer,
   config: { tessdataDir: string; easyocrModelDir: string; easyocrEnabled: boolean },
-): Promise<{ text: string; warning: string | null; slotMergedNutrients: Nutrients | null; usedOcr?: boolean }> {
+): Promise<{
+  text: string;
+  warning: string | null;
+  slotMergedNutrients: Nutrients | null;
+  usedOcr?: boolean;
+  pageTexts: string[] | null;
+}> {
   try {
     if (kind === 'pdf') {
       const { extractPdfTextWithOcrFallback } = await import('../integrations/ocrScannedPdf.js');
-      const { text, usedOcr } = await extractPdfTextWithOcrFallback(
+      const { text, usedOcr, pageTexts } = await extractPdfTextWithOcrFallback(
         bytes,
         config.tessdataDir,
         config.easyocrEnabled ? config.easyocrModelDir : undefined,
@@ -401,7 +407,7 @@ async function readExtractedText(
       let warning: string | null = null;
       if (!text.trim()) warning = 'No text was found. Enter the nutrition facts yourself.';
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
-      return { text, warning, slotMergedNutrients: null, usedOcr };
+      return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts };
     }
     const { text, slotMergedNutrients } = await extractImageLabel(bytes, config.tessdataDir, {
       easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
@@ -410,12 +416,14 @@ async function readExtractedText(
       text,
       warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.',
       slotMergedNutrients,
+      pageTexts: null,
     };
   } catch {
     return {
       text: '',
       warning: 'The file is saved, and the text could not be read. Enter the nutrition facts yourself.',
       slotMergedNutrients: null,
+      pageTexts: null,
     };
   }
 }

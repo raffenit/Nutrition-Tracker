@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blocksLookLikeSeparateLabels, splitNutritionLabelTexts } from '../../../domain/labelTextBlocks.js';
+import {
+  blocksLookLikeSeparateLabels,
+  collectLabelPanelBlocks,
+  splitEmbeddedPdfPages,
+  splitNutritionLabelTexts,
+} from '../../../domain/labelTextBlocks.js';
+import { buildNutritionImportWithPanels } from '../../../domain/nutritionImport.js';
 
 const PANEL_A = `Nutrition Facts
 Serving Size 1 cup (240ml)
@@ -23,4 +29,16 @@ test('splitNutritionLabelTexts splits on repeated Nutrition Facts headings', () 
 test('blocksLookLikeSeparateLabels needs two label-like blocks', () => {
   assert.equal(blocksLookLikeSeparateLabels(splitNutritionLabelTexts(`${PANEL_A}\n${PANEL_B}`)), true);
   assert.equal(blocksLookLikeSeparateLabels(['only one block']), false);
+});
+
+test('collectLabelPanelBlocks merges one label per PDF page', () => {
+  const blocks = collectLabelPanelBlocks([PANEL_A, PANEL_B]);
+  assert.equal(blocks.length, 2);
+  const built = buildNutritionImportWithPanels(`${PANEL_A}\n\n${PANEL_B}`, 'pdf', null, [PANEL_A, PANEL_B]);
+  assert.equal(built.labelPanels.length, 2);
+});
+
+test('splitEmbeddedPdfPages splits on form feeds', () => {
+  const pages = splitEmbeddedPdfPages(`${PANEL_A}\f${PANEL_B}`);
+  assert.equal(pages.length, 2);
 });

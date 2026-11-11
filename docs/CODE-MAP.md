@@ -35,6 +35,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `easyOcrPassEnvironments` |
 | Label vs menu detection | `server/src/domain/nutritionImport.ts` | `buildNutritionImport` |
 | Full label parse (text → nutrients) | `server/src/domain/parseLabel.ts` | `parseNutritionLabel`, `readSodiumMgNoisy` |
+| Variety-pack column table | `server/src/domain/parseMultiProductLabelTable.ts` | `parseMultiProductLabelTable` |
 | Per-slot merge across OCR strings | `server/src/domain/labelSlotExtract.ts` | `mergeSlotReadingsAcrossCandidates`, `extractSlotReadingsFromText` |
 | Units, macro-gap sodium | `server/src/domain/labelUnits.ts` | `readSodiumFromMacroGap`, `readNutrientAmountInSlice`, `assignByVariantLabelWindow` |
 | Fuzzy row names (Sedium, Tolal fat) | `server/src/domain/labelVariants.ts` | `findVariantLabelAnchors`, `matchVariantLabelToken` |
