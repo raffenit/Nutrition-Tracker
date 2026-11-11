@@ -6,6 +6,8 @@
 | --- | --- | --- |
 | Upload % / stuck processing | `web/src/pages/FoodPage.tsx` | `uploadFile`, `startProcessMessages`, `buildProcessProgress` |
 | Progress bar / steps UI | `web/src/components/ImportProgress.tsx` | `ImportProgress`, `ImportProgressState` |
+| Upload + process runner | `web/src/lib/importUploadRunner.ts` | `createImportProgressController`, `uploadImportFile` |
+| Step copy (label + recipe) | `web/src/lib/importProcessingSteps.ts` | `PDF_IMPORT_STEPS`, `RECIPE_CARD_*_IMPORT_STEPS` |
 | Step messages (OCR phases) | `web/src/lib/importProcessingSteps.ts` | `IMAGE_IMPORT_STEPS`, `PDF_IMPORT_STEPS` |
 | Drop zone, camera, URL | `web/src/components/FoodImportPanel.tsx` | `FoodImportPanel`, `acceptImportFile` |
 | Multipart upload + progress events | `web/src/api/uploadWithProgress.ts` | `apiFormUpload` |

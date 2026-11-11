@@ -39,6 +39,7 @@ export function readFoodInput(body: unknown, createdBy: string): NewFood {
     source: body.source === undefined ? 'manual' : oneOf(body.source, SOURCES, 'Source'),
     sourceRef: optionalText(body.sourceRef),
     instructions: readInstructions(body.instructions),
+    mealKitEcosystemId: optionalText(body.mealKitEcosystemId),
     ingredients: readIngredients(body.ingredients),
   };
 }

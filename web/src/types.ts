@@ -92,6 +92,7 @@ export type Food = {
   source: string;
   sourceRef: string | null;
   instructions: string | null;
+  mealKitEcosystemId: string | null;
   ingredients: IngredientLine[];
 };
 

@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { FoodPage } from './pages/FoodPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { MealKitsPage } from './pages/MealKitsPage';
 import { PlanPage } from './pages/PlanPage';
 import { LoginPage } from './pages/LoginPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -17,7 +18,10 @@ import type { Session } from './types';
 export function App() {
   const href = usePath();
   const path = href.split('?')[0] ?? '/';
-  const editId = new URLSearchParams(href.includes('?') ? href.split('?')[1] : '').get('id');
+  const query = href.includes('?') ? href.split('?')[1] : '';
+  const search = new URLSearchParams(query);
+  const editId = search.get('id');
+  const mealKitEcoId = search.get('ecosystem');
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => {
     void api<Session>('/api/session')
@@ -51,6 +55,7 @@ export function App() {
       {path === '/settings' && session.user && (
         <SettingsPage user={session.user} household={session.household} onSessionChange={setSession} />
       )}
+      {path === '/meal-kits' && session.user && <MealKitsPage ecosystemId={mealKitEcoId} />}
       {path === '/weight' && <WeightPage />}
       {(path === '/foods/new' || path === '/foods/edit') && <FoodPage editId={path === '/foods/edit' ? editId : null} />}
       {(path === '/recipes/new' || path === '/recipes/edit') && <FoodPage custom editId={path === '/recipes/edit' ? editId : null} />}

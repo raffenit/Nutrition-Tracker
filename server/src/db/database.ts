@@ -245,4 +245,29 @@ function migrate(db: AppDatabase): void {
   if (!ingredientColumns.some((column) => column.name === 'shop_equivalent_label')) {
     db.exec(`ALTER TABLE food_ingredients ADD COLUMN shop_equivalent_label TEXT`);
   }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS meal_kit_ecosystems (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      created_at TEXT NOT NULL
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS meal_kit_ingredient_maps (
+      id TEXT PRIMARY KEY,
+      ecosystem_id TEXT NOT NULL REFERENCES meal_kit_ecosystems(id) ON DELETE CASCADE,
+      kit_line_name TEXT NOT NULL,
+      name_key TEXT NOT NULL,
+      shop_equivalent_food_id TEXT REFERENCES foods(id) ON DELETE SET NULL,
+      shop_equivalent_label TEXT,
+      nutrition_food_id TEXT REFERENCES foods(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (ecosystem_id, name_key)
+    );
+  `);
+  foodColumns = db.prepare('PRAGMA table_info(foods)').all() as Array<{ name: string }>;
+  if (!foodColumns.some((column) => column.name === 'meal_kit_ecosystem_id')) {
+    db.exec(`ALTER TABLE foods ADD COLUMN meal_kit_ecosystem_id TEXT REFERENCES meal_kit_ecosystems(id) ON DELETE SET NULL`);
+  }
 }

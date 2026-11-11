@@ -35,6 +35,7 @@ test('buildTrendSeries fills missing days with zero and ends on the anchor date'
       source: 'manual',
       sourceRef: null,
       instructions: null,
+      mealKitEcosystemId: null,
       ingredients: [],
     });
     insertMeal(db, {

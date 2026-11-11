@@ -156,7 +156,7 @@ See [server/src/test/README.md](../server/src/test/README.md). `./deploy.sh` run
 | **4a** Goal alerts | `domain/alerts.ts`, `db/alerts.ts`, `database.ts`, `boardRoutes.ts`, `alertRoutes.ts` |
 | **5** PDF workflow | `foodRoutes.ts`, `FoodPage.tsx`, `parseLabel.ts`, `nutritionImport.ts` |
 | **7** Plan extras | `mealPlanRoutes.ts`, `PlanPage.tsx`, `groceryList.ts`, `parseIngredientLine.ts` |
-| **10** Meal-kit | `parseRecipeCard.ts`, `FoodPage.tsx` (`RecipeEditor`), `groceryList.resolveShoppingLine` |
+| **10** Meal-kit | `parseRecipeCard.ts`, `mealKitEcosystems.ts`, `mealKitRoutes.ts`, `MealKitsPage.tsx`, `FoodPage.tsx` (`RecipeEditor`), `groceryList` + `kitLineKey` |
 | **11** Data / backup | `db/backup.ts`, `db/persistence.ts`, `log/startupFailure.ts`, `deploy.sh`, `scripts/backup-data.sh`, playbook |
 | **12** Multi-label import | `nutritionImport.ts`, `focusCrop.ts`, `foodRoutes.ts`, `FoodPage.tsx`, `ocrScannedPdf.ts` |
 | **13** Tags | `database.ts`, `db/foods.ts`, `foodRoutes.ts`, library search UI |

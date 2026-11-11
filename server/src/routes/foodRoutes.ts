@@ -5,6 +5,7 @@ import Busboy from 'busboy';
 import { attachUpload, findUpload, insertUpload } from '../db/uploads.js';
 import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood, type FoodShelf } from '../db/foods.js';
 import { perServing, sumIngredientNutrients } from '../domain/compose.js';
+import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
@@ -87,6 +88,7 @@ async function createStubFoods(ctx: Ctx): Promise<void> {
       source,
       sourceRef: null,
       instructions: null,
+      mealKitEcosystemId: null,
       ingredients: [],
     });
     foods.push(food);
@@ -123,9 +125,15 @@ async function composeFood(ctx: Ctx): Promise<void> {
   if (!isRecord(body) || !Array.isArray(body.ingredients) || body.ingredients.length === 0) {
     throw new HttpError(400, 'Add at least one ingredient');
   }
-  const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
+  const parsedLines = body.ingredients.map((line) => ingredientLine(ctx, line));
+  const ecosystemId = optionalText(body.mealKitEcosystemId);
+  const ingredientRows = mergeRecipeIngredientsWithEcosystem(
+    ctx.db,
+    ecosystemId,
+    parsedLines.map(({ nutrients: _nutrients, ...line }) => line),
+  );
   const makesServings = requiredNumber(body.makesServings, 'Servings');
-  const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(lines), makesServings));
+  const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(parsedLines), makesServings));
   const fromLabel = isRecord(body.nutrients) ? roundNutrients(readNutrients(body.nutrients)) : fromIngredients;
   const nutrients = hasMacroTotals(fromIngredients) ? fromIngredients : fromLabel;
   const instructions = optionalInstructions(body.instructions);
@@ -147,7 +155,8 @@ async function composeFood(ctx: Ctx): Promise<void> {
     source: 'composed',
     sourceRef: null,
     instructions,
-    ingredients: lines.map(({ nutrients: _nutrients, ...line }) => line),
+    mealKitEcosystemId: ecosystemId,
+    ingredients: ingredientRows,
   });
   sendJson(ctx.res, 201, { food });
 }
@@ -313,17 +322,19 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
   }
   const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
   const nutrients = roundNutrients(perServing(sumIngredientNutrients(lines), input.makesServings));
+  const baseIngredients = lines.map(({ name, servings, sourceRef, childFoodId, shopEquivalentFoodId, shopEquivalentLabel }) => ({
+    name,
+    servings,
+    sourceRef,
+    childFoodId,
+    shopEquivalentFoodId,
+    shopEquivalentLabel,
+  }));
+  const ingredients = mergeRecipeIngredientsWithEcosystem(ctx.db, input.mealKitEcosystemId, baseIngredients);
   return {
     ...input,
     nutrients,
-    ingredients: lines.map(({ name, servings, sourceRef, childFoodId, shopEquivalentFoodId, shopEquivalentLabel }) => ({
-      name,
-      servings,
-      sourceRef,
-      childFoodId,
-      shopEquivalentFoodId,
-      shopEquivalentLabel,
-    })),
+    ingredients,
   };
 }
 

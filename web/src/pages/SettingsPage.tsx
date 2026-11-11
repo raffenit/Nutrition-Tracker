@@ -101,6 +101,15 @@ export function SettingsPage({ user, household, onSessionChange }: SettingsPageP
               setTargets(next);
             }}
           />
+          <section className="card settings-meal-kits">
+            <h2>Meal-kit reference sheets</h2>
+            <p className="muted">
+              Map kit ingredient names to what you buy at the store once per brand (Green Chef, HelloFresh, …). Recipes in that ecosystem reuse the sheet automatically.
+            </p>
+            <button type="button" className="settings-secondary-btn" onClick={() => navigate('/meal-kits')}>
+              Open meal-kit sheets
+            </button>
+          </section>
           <WeightSettings weight={weight} onChange={setWeight} />
           <PushSettings push={push} onChange={setPush} />
           <OfflineSettings />

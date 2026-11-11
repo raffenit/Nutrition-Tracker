@@ -86,6 +86,8 @@ export type Food = {
   sourceRef: string | null;
   /** Cooking directions for custom recipes (meal-kit imports, composed recipes). */
   instructions: string | null;
+  /** Meal-kit brand ecosystem (Green Chef, etc.) for shared kit → store mappings. */
+  mealKitEcosystemId: string | null;
   ingredients: IngredientLine[];
 };
 

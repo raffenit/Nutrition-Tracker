@@ -186,28 +186,104 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ## Phase 7 — OpenCookbook v1 (meal plan + grocery)
 
-**Status:** In progress (Plan tab, household week, Markdown export).
+**Status:** Done (2026-11-11) — plan, shop list, Cook, log from plan; no third-party grocery dependency.
 
 **Goal:** Plan → shop → log loop without third-party grocery APIs.
 
 **Shipped / in tree**
 
 - Household **meal plan** (Mon–Sun) with recipes from Library.
-- **Aggregated grocery list** (Instacart-shaped `lineItems`: name, quantity, unit).
+- **Aggregated grocery list** (`lineItems`: name, quantity, unit — export-friendly shape).
 - **Shopping list UI** with checkboxes + **Copy Markdown**.
 - **Log from plan** → Today for that day.
+- Plan **packaged foods** and recipes (not recipes-only picker).
+- Shopping list checkboxes (pantry / “already have”) persisted per week in `localStorage`.
 
-**Next**
+**Optional follow-up:** [Instacart grocery export](#optional--instacart-grocery-export) (partner access).
 
-- [x] Plan **packaged foods** and recipes (not recipes-only picker).
-- [x] Shopping list checkboxes (pantry / “already have”) persisted per week in `localStorage`.
-- [ ] Optional Instacart IDP export when/if partner access is available.
+---
+
+## Optional — Instacart grocery export
+
+**Status:** Not started — blocked on Instacart IDP / partner credentials.
+
+**Goal:** From Plan → grocery, send the aggregated list to Instacart (cart or list handoff) without retyping items.
+
+**Why separate from Phase 7:** Core OpenCookbook is intentionally **self-contained** (Markdown copy, checkboxes, household week). Instacart is a **nice-to-have integration**, not required to plan or shop offline.
+
+**Prerequisites**
+
+- Instacart developer / partner access and approved use of their IDP or cart API for your deployment.
+- Stable `GET /api/meal-plan/grocery` payload (already returns `lineItems` + Markdown).
+
+**Design sketch**
+
+- Map `GroceryLineItem` (`groceryList.ts`) to Instacart’s expected line format (name, quantity, unit).
+- Plan UI: **Export to Instacart** beside Copy Markdown; handle OAuth or API key via server env (no secrets in the client).
+- Graceful fallback when credentials missing (hide control or explain in Settings).
+
+**Acceptance**
+
+- Planned week exports without manual item entry; quantities/units from meal-kit parsing and store equivalents are preserved.
+- Export is optional: app remains fully usable with Markdown copy only.
+
+**Files (expected):** `mealPlanRoutes.ts`, `groceryList.ts`, `PlanPage.tsx`, new `integrations/instacart.ts`, `.env.example`, this doc.
+
+---
+
+## Optional — Meal-kit ecosystem fuzzy match
+
+**Status:** Not started.
+
+**Goal:** On recipe card import, auto-select a meal-kit **ecosystem** when the detected **brand** is *close to* a household ecosystem name — not only exact `localeCompare` equality (e.g. `GreenChef`, `green chef`, `Green Chef LLC` → ecosystem **Green Chef**).
+
+**Why separate from Phase 10:** Exact brand match ships today; fuzzy matching needs normalization rules and tests so we do not attach the wrong sheet.
+
+**Design sketch**
+
+- Normalize brand + ecosystem names (collapse spaces, strip punctuation/legal suffixes, optional token sort).
+- Score candidates (Levenshtein or token-set ratio); pick above threshold with single best match; otherwise leave ecosystem unset and prompt user.
+- Unit tests with synthetic brand strings only (no proprietary marketing copy).
+
+**Acceptance**
+
+- Common OCR typos and spacing variants still apply the right reference sheet.
+- Ambiguous ties (two ecosystems equally close) do not auto-pick — user chooses.
+
+**Files (expected):** `domain/matchMealKitEcosystem.ts`, `RecipeEditor` import path, tests.
+
+---
+
+## Optional — Open Food Facts barcode lookup
+
+**Status:** Not started — text search to OFF already ships on `/api/ingredients/search`; barcode path is additive.
+
+**Goal:** Add a packaged food from its **UPC/EAN** via Open Food Facts, optionally with a camera scanner on phones.
+
+**Why separate from Phase 8:** Core library + label/OCR import covers the MVP. Barcode is faster for boxed goods when OFF has the product, but needs API + (optionally) camera UX.
+
+**Suggested build order**
+
+1. **Quick:** `GET /api/openfoodfacts/product/:code` (or query param) using OFF v2 `product/{barcode}.json`; reuse `openFoodFacts.ts` nutrient mapping; Add food form — type/paste barcode → prefill (≈½ day).
+2. **Later:** live **camera scan** (`BarcodeDetector` or `@zxing/browser`), permissions, iOS fallbacks, “not in OFF” empty state (≈2–4 days).
+
+**Prerequisites**
+
+- Outbound HTTPS to `world.openfoodfacts.org` (already used for search).
+- Secure origin for camera (Tailscale HTTPS or localhost).
+
+**Acceptance**
+
+- Valid barcode returns a draft food; user reviews serving size (per-serving vs per-100g) before save.
+- Unknown barcode fails clearly; manual entry and label photo remain available.
+
+**Files (expected):** `integrations/openFoodFacts.ts`, `foodRoutes.ts`, `FoodPage.tsx`, optional scan component, tests with mocked JSON.
 
 ---
 
 ## Phase 10 — Meal-kit recipe cards (import + follow-ups)
 
-**Status:** In progress — scanned PDF OCR, `recipeCard` upload payload, `instructions` on custom recipes, recipe editor PDF import (see `parseRecipeCard.ts`, `ocrScannedPdf.ts`).
+**Status:** Done (2026-11-11, core) — import, plan, grocery, equivalents, ecosystem reference sheets (ship commit when merged). Optional: [fuzzy ecosystem match](#optional--meal-kit-ecosystem-fuzzy-match).
 
 **Goal:** One library **recipe** holds **shopping ingredient lines**, **cooking instructions**, and **per-serving nutrition** (meal-kit cards such as Green Chef), integrated with Plan → grocery and logging.
 
@@ -222,6 +298,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 - [x] **Cooking mode on Plan** — **Cook** opens saved `instructions` while you work.
 - [x] **Store equivalents for kit ingredients** — per line: `shopEquivalentFoodId` / `shopEquivalentLabel` (Green Chef sauces → what you buy at the store); grocery list uses equivalent + shows recipe line name.
+- [x] **Meal-kit ecosystems** — household reference sheet per brand (`meal_kit_ecosystems` + `meal_kit_ingredient_maps`); recipes pick an ecosystem; mappings apply on import/save/grocery with canonical kit names (brand must match ecosystem name on import; fuzzy match → [optional section](#optional--meal-kit-ecosystem-fuzzy-match)).
 - [x] **Richer grocery lines** — `parseIngredientLine.ts` reads leading qty/unit from text lines (e.g. `12 oz chicken`).
 - [x] **Photo import** — recipe editor accepts JPEG/PNG/WEBP meal-kit cards through `/api/uploads`.
 - [x] **Link ingredients after import** — “Link library food for nutrition rollup” keeps kit line text, sets `childFoodId`.
@@ -237,10 +314,13 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ## Phase 8 — Polish and client handoff
 
-- **Barcode scan:** native camera barcode → Open Food Facts lookup (stretch; not in original MVP table).
+**Status:** Done (2026-11-11, core) — client matrix doc + import progress UX.
+
 - [x] **README client section** — feature matrix summary → [ARCHITECTURE.md](./ARCHITECTURE.md#goals-and-client-spec-baseline).
-- **Performance:** OCR uploads async feedback (progress UI) if large PDFs feel slow.
-- **Backup / persistence:** moved to **Phase 11** (production incident — empty household after Docker restart).
+- [x] **OCR / upload progress** — stepped progress + upload bar on label import (`FoodImportPanel`) and meal-kit recipe card import; PDF path notes OCR wait (`importProcessingSteps.ts`, `importUploadRunner.ts`).
+- **Backup / persistence:** moved to **Phase 11** (production incident — empty household after Docker restore).
+
+**Optional follow-ups:** [Open Food Facts barcode](#optional--open-food-facts-barcode-lookup); [meal-kit ecosystem fuzzy match](#optional--meal-kit-ecosystem-fuzzy-match).
 
 ---
 
@@ -450,12 +530,15 @@ Phase 4a Goal alerts       ──► client “alert functionality” (in-app)
 Phase 5 PDF workflow       ──► larger UX, iterative
 Phase 4b Push (optional)   ──► after 4a rules stable
 Phase 6 Walk doc/automation► only if client confirms
-Phase 7 OpenCookbook next   ► plan/grocery (in progress — packaged on plan)
-Phase 10 Meal-kit recipes   ► equivalents, Cook on plan; qty parse + photo import TODO
-Phase 8 Polish              ► parallel / handoff (before 12/13)
+Phase 7 OpenCookbook        ► Done (core); Instacart → optional section
+Phase 10 Meal-kit recipes   ► Done (core + ecosystem sheets when shipped)
+Phase 8 Polish              ► Done (core)
+Optional Instacart export   ► when partner IDP access exists
+Optional OFF barcode        ► type-code first, camera scan later
+Optional ecosystem fuzzy   ► brand ≈ ecosystem name on recipe import
 Phase 11 Data + backup      ► Done
-Phase 12 Multi-label import ► paused until 7/8/10 land
-Phase 13 Tags               ► after 7/8/10
+Phase 12 Multi-label import ► next feature track
+Phase 13 Tags               ► after 12
 Phase 9 Offline PWA + sync  ► after core online flows stable (1–4, logging API)
 ```
 

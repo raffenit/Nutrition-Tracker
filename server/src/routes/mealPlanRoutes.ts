@@ -2,7 +2,9 @@ import { getFood } from '../db/foods.js';
 import { insertMeal } from '../db/logs.js';
 import { getMealPlanEntry, listMealPlanEntries, replaceMealPlanEntries } from '../db/mealPlan.js';
 import { drinkVolume } from '../domain/drinks.js';
+import { getKitMappingByKey } from '../db/mealKitEcosystems.js';
 import { aggregateGroceryLineItems, formatGroceryMarkdown, type PlannedMeal } from '../domain/groceryList.js';
+import { kitLineKeyFromText } from '../domain/kitLineKey.js';
 import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
 import { roundNutrients, scaleNutrients } from '../domain/nutrients.js';
 import { readLocalDate, todayLocal, weekEndSunday, weekStartMonday, zonedToUtc } from '../domain/time.js';
@@ -67,6 +69,11 @@ function groceryList(ctx: Ctx): Promise<void> {
   const lineItems = aggregateGroceryLineItems(
     entries.map((entry) => ({ foodId: entry.foodId, servings: entry.servings })),
     (id) => getFood(ctx.db, id),
+    (ecosystemId, lineName) => {
+      const key = kitLineKeyFromText(lineName);
+      if (!key) return null;
+      return getKitMappingByKey(ctx.db, ecosystemId, key);
+    },
   );
   const meals: PlannedMeal[] = entries.map((entry) => ({
     localDate: entry.localDate,

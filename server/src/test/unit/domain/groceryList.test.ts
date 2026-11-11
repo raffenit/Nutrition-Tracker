@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aggregateGroceryLineItems } from '../../../domain/groceryList.js';
+import { kitLineKeyFromText } from '../../../domain/kitLineKey.js';
 import type { Food } from '../../../types.js';
 
 const yogurt: Food = {
@@ -19,6 +20,7 @@ const yogurt: Food = {
   source: 'manual',
   sourceRef: null,
   instructions: null,
+  mealKitEcosystemId: null,
   ingredients: [],
 };
 
@@ -38,6 +40,7 @@ const chili: Food = {
   source: 'composed',
   sourceRef: null,
   instructions: null,
+  mealKitEcosystemId: null,
   ingredients: [{
     name: 'Greek yogurt',
     servings: 2,
@@ -96,6 +99,47 @@ test('aggregateGroceryLineItems parses oz quantities from ingredient text', () =
   assert.equal(items.length, 1);
   assert.equal(items[0]?.quantity, 24);
   assert.equal(items[0]?.unit, 'oz');
+});
+
+test('aggregateGroceryLineItems resolves ecosystem sheet without per-recipe equivalents', () => {
+  const mealKit: Food = {
+    ...chili,
+    id: 'r3',
+    name: 'Salmon kit',
+    mealKitEcosystemId: 'eco1',
+    ingredients: [{
+      name: 'Garlic & Herb Butter',
+      servings: 1,
+      sourceRef: null,
+      childFoodId: null,
+      shopEquivalentFoodId: null,
+      shopEquivalentLabel: null,
+    }],
+  };
+  const map = new Map<string, Food>([['y1', yogurt], ['r3', mealKit]]);
+  const sheet = new Map([[
+    'eco1:garlic & herb butter',
+    {
+      id: 'm1',
+      ecosystemId: 'eco1',
+      kitLineName: 'Garlic & Herb Butter',
+      nameKey: 'garlic & herb butter',
+      shopEquivalentFoodId: 'y1',
+      shopEquivalentLabel: null,
+      nutritionFoodId: null,
+    },
+  ]]);
+  const items = aggregateGroceryLineItems(
+    [{ foodId: 'r3', servings: 2 }],
+    (id) => map.get(id) ?? null,
+    (ecoId, lineName) => {
+      const key = kitLineKeyFromText(lineName);
+      return sheet.get(`${ecoId}:${key}`) ?? null;
+    },
+  );
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.name, 'Greek yogurt');
+  assert.equal(items[0]?.recipeLineName, 'Garlic & Herb Butter');
 });
 
 test('aggregateGroceryLineItems uses shop equivalent for kit-specific ingredients', () => {

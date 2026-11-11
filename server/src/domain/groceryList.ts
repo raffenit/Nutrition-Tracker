@@ -1,4 +1,5 @@
 import { parseLeadingQuantityUnit } from './parseIngredientLine.js';
+import { effectiveIngredientLine, type KitMappingLookup } from './kitEcosystemIngredients.js';
 import type { Food, IngredientLine, MealSlot } from '../types.js';
 
 /** Instacart-compatible line item (name + optional qty/unit). */
@@ -23,6 +24,7 @@ export type PlannedMeal = {
 export function aggregateGroceryLineItems(
   plans: Array<{ foodId: string; servings: number }>,
   foodById: (id: string) => Food | null,
+  kitMapping?: KitMappingLookup,
 ): GroceryLineItem[] {
   const buckets = new Map<string, GroceryLineItem>();
   for (const plan of plans) {
@@ -30,8 +32,12 @@ export function aggregateGroceryLineItems(
     if (!food || plan.servings <= 0) continue;
     if (food.kind === 'custom' && food.ingredients.length > 0) {
       const batchFactor = plan.servings / Math.max(food.makesServings, 1);
-      for (const line of food.ingredients) {
-        if (line.servings <= 0) continue;
+      for (const rawLine of food.ingredients) {
+        if (rawLine.servings <= 0) continue;
+        const mapping = food.mealKitEcosystemId && kitMapping
+          ? kitMapping(food.mealKitEcosystemId, rawLine.name)
+          : null;
+        const line = effectiveIngredientLine(rawLine, mapping);
         const shop = resolveShoppingLine(line, foodById);
         const scaled = groceryQtyAndUnit(line, batchFactor);
         mergeLine(buckets, shop.key, shop.name, scaled.quantity, scaled.unit, shop.foodId, shop.recipeLineName);

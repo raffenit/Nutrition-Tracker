@@ -1,19 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { apiFormUpload } from '../api/uploadWithProgress';
 import { FoodImportPanel, type FoodImportStatus } from '../components/FoodImportPanel';
-import type { ImportProgressState } from '../components/ImportProgress';
+import { ImportProgress, type ImportProgressState } from '../components/ImportProgress';
+import { createImportProgressController } from '../lib/importUploadRunner';
 import {
-  formatUploadBytes,
   IMAGE_IMPORT_STEPS,
   PDF_IMPORT_STEPS,
+  RECIPE_CARD_IMAGE_IMPORT_STEPS,
+  RECIPE_CARD_PDF_IMPORT_STEPS,
   URL_IMPORT_STEPS,
-  type ImportProcessStep,
 } from '../lib/importProcessingSteps';
 import { missingExtraImportNotes, partialLabelImportHint } from '../components/LabelCaptureHints';
 import type { ImportFieldReviewMap } from '../importFieldReview';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { RemoveButton } from '../components/RemoveButton';
+import { kitLineKeyFromText } from '../kitLineKey';
 import { navigate } from '../nav';
 import {
   CORE_NUTRIENT_FIELDS,
@@ -105,9 +106,9 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [nativeLabelCamera] = useState(() => supportsNativeLabelCamera());
-  const processMessageStopRef = useRef<(() => void) | null>(null);
+  const importRunner = useMemo(() => createImportProgressController(setImportProgress), []);
 
-  useEffect(() => () => processMessageStopRef.current?.(), []);
+  useEffect(() => () => importRunner.endImportProgress(), [importRunner]);
 
   useEffect(() => {
     if (!editId) return;
@@ -292,48 +293,6 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }
   }
 
-  function buildProcessProgress(steps: ImportProcessStep[], activeIndex: number, elapsedSec: number): ImportProgressState {
-    const clamped = Math.min(Math.max(activeIndex, 0), steps.length - 1);
-    const current = steps[clamped];
-    return {
-      phase: 'process',
-      percent: null,
-      message: current?.message ?? 'Processing…',
-      detail: current?.detail,
-      elapsedSec,
-      steps: steps.map((row, index) => ({
-        label: row.short,
-        status: index < clamped ? 'done' : index === clamped ? 'active' : 'pending',
-      })),
-    };
-  }
-
-  function startProcessMessages(steps: ImportProcessStep[]): void {
-    processMessageStopRef.current?.();
-    let step = 0;
-    const startedAt = Date.now();
-    const publish = () => {
-      const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
-      setImportProgress(buildProcessProgress(steps, step, elapsedSec));
-    };
-    publish();
-    const stepTimer = window.setInterval(() => {
-      step = Math.min(step + 1, steps.length - 1);
-      publish();
-    }, 3_200);
-    const elapsedTimer = window.setInterval(publish, 1_000);
-    processMessageStopRef.current = () => {
-      window.clearInterval(stepTimer);
-      window.clearInterval(elapsedTimer);
-      processMessageStopRef.current = null;
-    };
-  }
-
-  function endImportProgress(): void {
-    processMessageStopRef.current?.();
-    setImportProgress(null);
-  }
-
   async function importLink(): Promise<void> {
     const url = importUrl.trim();
     if (!url) {
@@ -342,7 +301,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
     }
     setImportStatus(null);
     setSaveError(null);
-    startProcessMessages(URL_IMPORT_STEPS);
+    importRunner.startProcessMessages(URL_IMPORT_STEPS);
     try {
       const result = await api<ImportResult>('/api/import-url', {
         method: 'POST',
@@ -352,49 +311,23 @@ function FoodEditor({ editId }: { editId: string | null }) {
     } catch (caught) {
       setImportStatus({ kind: 'err', text: caught instanceof Error ? caught.message : 'Import failed' });
     } finally {
-      endImportProgress();
+      importRunner.endImportProgress();
     }
   }
 
   async function uploadFile(file: File): Promise<void> {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     const processSteps = isPdf ? PDF_IMPORT_STEPS : IMAGE_IMPORT_STEPS;
-    const fileDetail = `${file.name} · ${formatUploadBytes(file.size)}`;
     setImportStatus(null);
     setSaveError(null);
-    setImportProgress({
-      phase: 'upload',
-      percent: 0,
-      message: isPdf ? 'Uploading PDF…' : 'Uploading photo…',
-      detail: fileDetail,
-    });
-    let processingStarted = false;
     try {
-      const body = new FormData();
-      body.set('file', file);
-      const result = await apiFormUpload<ImportResult>('/api/uploads', body, (loaded, total) => {
-        if (total <= 0) return;
-        const pct = Math.min(100, Math.round((loaded / total) * 100));
-        if (loaded >= total) {
-          if (!processingStarted) {
-            processingStarted = true;
-            startProcessMessages(processSteps);
-          }
-          return;
-        }
-        setImportProgress({
-          phase: 'upload',
-          percent: pct,
-          message: `Uploading… ${pct}%`,
-          detail: fileDetail,
-        });
+      const result = await importRunner.uploadImportFile<ImportResult>(file, processSteps, {
+        pdf: 'Uploading PDF…',
+        image: 'Uploading photo…',
       });
-      if (!processingStarted) startProcessMessages(processSteps);
       applyImport(result);
     } catch (caught) {
       setImportStatus({ kind: 'err', text: caught instanceof Error ? caught.message : 'Import failed' });
-    } finally {
-      endImportProgress();
     }
   }
 
@@ -622,21 +555,37 @@ function FoodEditor({ editId }: { editId: string | null }) {
   );
 }
 
+type MealKitEcosystem = { id: string; name: string; mappingCount: number };
+
+type KitSheetMapping = {
+  nameKey: string;
+  kitLineName: string;
+  shopEquivalentFoodId: string | null;
+  shopEquivalentLabel: string | null;
+  nutritionFoodId: string | null;
+};
+
+type RecipeEditorLine = {
+  foodId: string | null;
+  name: string;
+  servings: number;
+  servingLabel: string;
+  shopEquivalentFoodId: string | null;
+  shopEquivalentLabel: string;
+};
+
 function RecipeEditor({ editId }: { editId: string | null }) {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
+  const [mealKitEcosystemId, setMealKitEcosystemId] = useState<string | null>(null);
+  const [ecosystems, setEcosystems] = useState<MealKitEcosystem[]>([]);
   const [makesServings, setMakesServings] = useState('1');
   const [instructions, setInstructions] = useState('');
   const [labelNutrients, setLabelNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [lines, setLines] = useState<Array<{
-    foodId: string | null;
-    name: string;
-    servings: number;
-    servingLabel: string;
-    shopEquivalentFoodId: string | null;
-    shopEquivalentLabel: string;
-  }>>([]);
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
+  const recipeImportRunner = useMemo(() => createImportProgressController(setImportProgress), []);
+  const [lines, setLines] = useState<RecipeEditorLine[]>([]);
   const [shopPickIndex, setShopPickIndex] = useState<number | null>(null);
   const [nutritionPickIndex, setNutritionPickIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -644,11 +593,54 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then((result) => setEcosystems(result.ecosystems));
+  }, []);
+
+  useEffect(() => () => recipeImportRunner.endImportProgress(), [recipeImportRunner]);
+
+  async function applyEcosystemMappings(ecosystemId: string, current: RecipeEditorLine[]): Promise<RecipeEditorLine[]> {
+    const result = await api<{ mappings: Array<KitSheetMapping & { id: string }> }>(`/api/meal-kits/${ecosystemId}/mappings`);
+    const byKey = new Map(result.mappings.map((row) => [row.nameKey, row]));
+    const next: RecipeEditorLine[] = [];
+    for (const line of current) {
+      const key = kitLineKeyFromText(line.name);
+      const map = key ? byKey.get(key) : undefined;
+      if (!map) {
+        next.push(line);
+        continue;
+      }
+      let servingLabel = line.servingLabel;
+      const nutritionId = line.foodId ?? map.nutritionFoodId;
+      if (!line.foodId && map.nutritionFoodId) {
+        const hit = await api<{ food: Food }>(`/api/foods/${map.nutritionFoodId}`);
+        servingLabel = hit.food.servingLabel;
+      }
+      let shopLabel = line.shopEquivalentLabel;
+      if (!line.shopEquivalentFoodId && !shopLabel.trim() && map.shopEquivalentFoodId) {
+        const hit = await api<{ food: Food }>(`/api/foods/${map.shopEquivalentFoodId}`);
+        shopLabel = hit.food.name;
+      } else if (!shopLabel.trim() && map.shopEquivalentLabel) {
+        shopLabel = map.shopEquivalentLabel;
+      }
+      next.push({
+        ...line,
+        name: map.kitLineName,
+        foodId: nutritionId,
+        servingLabel,
+        shopEquivalentFoodId: line.shopEquivalentFoodId ?? map.shopEquivalentFoodId,
+        shopEquivalentLabel: line.shopEquivalentLabel || shopLabel,
+      });
+    }
+    return next;
+  }
+
+  useEffect(() => {
     if (!editId) return;
     void api<{ food: Food }>(`/api/foods/${editId}`).then(async (result) => {
       const food = result.food;
       setName(food.name);
       setBrand(food.brand ?? '');
+      setMealKitEcosystemId(food.mealKitEcosystemId);
       setMakesServings(String(food.makesServings));
       setInstructions(food.instructions ?? '');
       setLabelNutrients(food.nutrients);
@@ -699,19 +691,35 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     if (result.recipeCard) {
       const card = result.recipeCard;
       setName(card.name);
-      setBrand(card.brand ?? '');
+      const importedBrand = card.brand ?? '';
+      setBrand(importedBrand);
       setMakesServings(String(card.makesServings));
       setInstructions(card.instructions);
       setLabelNutrients(card.nutrients);
-      setLines(card.ingredients.map((line) => ({
+      const importedLines: RecipeEditorLine[] = card.ingredients.map((line) => ({
         foodId: null,
         name: line.name,
         servings: line.servings,
         servingLabel: '1 item',
         shopEquivalentFoodId: null,
         shopEquivalentLabel: '',
-      })));
-      setImportStatus(result.warning ?? 'Recipe card imported — review and save.');
+      }));
+      void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then(({ ecosystems: ecos }) => {
+        setEcosystems(ecos);
+        const brandMatch = importedBrand
+          ? ecos.find((eco) => eco.name.localeCompare(importedBrand, undefined, { sensitivity: 'accent' }) === 0)
+          : undefined;
+        if (brandMatch) {
+          setMealKitEcosystemId(brandMatch.id);
+          void applyEcosystemMappings(brandMatch.id, importedLines).then((mapped) => {
+            setLines(mapped);
+            setImportStatus(result.warning ?? 'Recipe card imported — kit sheet applied.');
+          });
+        } else {
+          setLines(importedLines);
+          setImportStatus(result.warning ?? 'Recipe card imported — pick a meal-kit ecosystem to apply your reference sheet.');
+        }
+      });
       return;
     }
     setImportStatus(result.warning ?? 'No recipe sections found in that file.');
@@ -735,20 +743,26 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   async function uploadRecipeCard(file: File): Promise<void> {
     setImportStatus(null);
     setError(null);
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const processSteps = isPdf ? RECIPE_CARD_PDF_IMPORT_STEPS : RECIPE_CARD_IMAGE_IMPORT_STEPS;
     try {
-      const body = new FormData();
-      body.set('file', file);
-      const result = await apiFormUpload<ImportResult>('/api/uploads', body, () => {});
+      const result = await recipeImportRunner.uploadImportFile<ImportResult>(file, processSteps, {
+        pdf: 'Uploading recipe PDF…',
+        image: 'Uploading recipe photo…',
+      });
       applyRecipeImport(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Import failed');
     }
   }
 
+  const recipeImportBusy = importProgress !== null;
+
   async function save(): Promise<void> {
     const payload = {
       name,
       brand: brand.trim() || null,
+      mealKitEcosystemId,
       kind: 'custom' as const,
       makesServings: Number(makesServings),
       servingLabel: '1 serving',
@@ -801,10 +815,16 @@ function RecipeEditor({ editId }: { editId: string | null }) {
             if (file) void uploadRecipeCard(file);
           }}
         />
-        <button type="button" className="settings-secondary-btn" onClick={() => fileInputRef.current?.click()}>
-          Choose PDF or photo…
+        <button
+          type="button"
+          className="settings-secondary-btn"
+          disabled={recipeImportBusy}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {recipeImportBusy ? 'Importing…' : 'Choose PDF or photo…'}
         </button>
-        {importStatus && <p className="muted">{importStatus}</p>}
+        {importProgress && <ImportProgress progress={importProgress} />}
+        {importStatus && !importProgress && <p className="muted">{importStatus}</p>}
       </section>
 
       <section className="card form-section">
@@ -813,6 +833,30 @@ function RecipeEditor({ editId }: { editId: string | null }) {
           <label>Makes (servings)<input type="number" min="1" step="1" value={makesServings} onChange={(event) => setMakesServings(event.target.value)} required /></label>
         </div>
         <label>Brand (optional)<input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Green Chef" /></label>
+        <label>
+          Meal-kit ecosystem
+          <select
+            value={mealKitEcosystemId ?? ''}
+            onChange={(event) => {
+              const nextId = event.target.value || null;
+              setMealKitEcosystemId(nextId);
+              if (nextId) {
+                void applyEcosystemMappings(nextId, lines).then(setLines);
+              }
+            }}
+          >
+            <option value="">— none —</option>
+            {ecosystems.map((eco) => (
+              <option key={eco.id} value={eco.id}>{eco.name}</option>
+            ))}
+          </select>
+        </label>
+        <p className="muted">
+          Reference sheet maps kit lines → store items for every recipe in this ecosystem.{' '}
+          <button type="button" className="linkish" onClick={() => navigate(mealKitEcosystemId ? `/meal-kits?ecosystem=${mealKitEcosystemId}` : '/meal-kits')}>
+            Edit sheet
+          </button>
+        </p>
       </section>
 
       <section className="card form-section">

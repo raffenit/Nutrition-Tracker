@@ -46,6 +46,11 @@ export const PDF_IMPORT_STEPS: ImportProcessStep[] = [
     detail: 'Extracting embedded text from your document.',
   },
   {
+    short: 'OCR',
+    message: 'Scanning pages if needed…',
+    detail: 'Menus and scans without a text layer are rasterized and sent through OCR — large files can take up to a minute.',
+  },
+  {
     short: 'Parse',
     message: 'Looking for nutrition facts…',
     detail: 'Detecting label layout or menu tables in the text.',
@@ -54,6 +59,64 @@ export const PDF_IMPORT_STEPS: ImportProcessStep[] = [
     short: 'Draft',
     message: 'Building your draft…',
     detail: 'Filling fields where structure matches a nutrition panel.',
+  },
+];
+
+/** Meal-kit recipe card import (PDF — may rasterize + OCR). */
+export const RECIPE_CARD_PDF_IMPORT_STEPS: ImportProcessStep[] = [
+  {
+    short: 'PDF',
+    message: 'Opening recipe card PDF…',
+    detail: 'Reading embedded text or preparing scanned pages for OCR.',
+  },
+  {
+    short: 'OCR',
+    message: 'Reading ingredients and steps…',
+    detail: 'Scanned recipe cards often need a full-page OCR pass — this can take up to a minute.',
+  },
+  {
+    short: 'Sections',
+    message: 'Finding Ingredients and Instructions…',
+    detail: 'Matching layout patterns for kit-style cards, not a specific brand.',
+  },
+  {
+    short: 'Nutrition',
+    message: 'Parsing nutrition panel…',
+    detail: 'Pulling per-serving macros when a Nutrition Facts block is present.',
+  },
+  {
+    short: 'Draft',
+    message: 'Building your recipe draft…',
+    detail: 'Combining ingredient lines, steps, and nutrition for review.',
+  },
+];
+
+/** Meal-kit recipe card import (photo). */
+export const RECIPE_CARD_IMAGE_IMPORT_STEPS: ImportProcessStep[] = [
+  {
+    short: 'Prepare',
+    message: 'Preparing photo for OCR…',
+    detail: 'Auto-rotate, upscale, and contrast before reading the card.',
+  },
+  {
+    short: 'Read',
+    message: 'Reading recipe card text…',
+    detail: 'Neural OCR and classic Tesseract on several preprocessed copies.',
+  },
+  {
+    short: 'More passes',
+    message: 'Trying alternate crops…',
+    detail: 'Glossy or curved cards may need extra passes — up to a minute.',
+  },
+  {
+    short: 'Sections',
+    message: 'Finding Ingredients and Instructions…',
+    detail: 'Splitting the text into shopping lines and cooking steps.',
+  },
+  {
+    short: 'Draft',
+    message: 'Building your recipe draft…',
+    detail: 'Filling ingredients, steps, and nutrition when detected.',
   },
 ];
 

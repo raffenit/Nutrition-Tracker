@@ -20,6 +20,7 @@ import { authRoutes } from './routes/authRoutes.js';
 import { boardRoutes } from './routes/boardRoutes.js';
 import { foodRoutes } from './routes/foodRoutes.js';
 import { logRoutes } from './routes/logRoutes.js';
+import { mealKitRoutes } from './routes/mealKitRoutes.js';
 import { mealPlanRoutes } from './routes/mealPlanRoutes.js';
 import { pushRoutes } from './routes/pushRoutes.js';
 import { weightRoutes } from './routes/weightRoutes.js';
@@ -75,6 +76,7 @@ export function createNutritionApp(config: AppConfig): NutritionApp {
     ...boardRoutes(),
     ...foodRoutes(),
     ...logRoutes(),
+    ...mealKitRoutes(),
     ...mealPlanRoutes(),
     ...pushRoutes(),
     ...weightRoutes(),
