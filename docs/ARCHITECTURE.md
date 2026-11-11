@@ -150,16 +150,17 @@ API client: `web/src/api/client.ts` (credentials included for cookies).
 
 ## Testing
 
-`npm test` runs **two gates** (see `scripts/run-tests.sh`). Both must pass for deploy unless you use `./deploy.sh --skip-test`; a green server test count does **not** mean the web app is OK.
+`npm test` runs **three gates** (see `scripts/run-tests.sh` and [testing-standards.md](./testing-standards.md)). All must pass for deploy unless you use `./deploy.sh --skip-test`; a green server test count does **not** excuse typecheck failures.
 
 | Gate | What it checks |
 | --- | --- |
-| **Server** | Node native `test` runner over **all** compiled `dist-test/**/*.test.js` files (see [server/src/test/README.md](../server/src/test/README.md)). Includes unit tests under `test/unit/domain/` (parsers, alerts, push rules, family board, trends, diet presets, grocery math, public origin), `test/unit/integrations/` (URL import SSRF + HTML helpers), and HTTP integration in `test/integration/api.test.ts` (health, setup, dashboard, family privacy string check, trends, ad-hoc logs, idempotent logs, goal alerts, weight APIs, compose/recipe shapes). |
-| **Web** | `tsc --noEmit` — React/TS must compile; catches missing fields on shared DTOs like `Food`. No component or browser tests yet. |
+| **Server typecheck** | `tsc --noEmit` on **production** and **test** tsconfigs — TypeScript errors fail the run before or beside tests. |
+| **Server tests** | Node native `test` runner over **all** compiled `dist-test/**/*.test.js` files (see [server/src/test/README.md](../server/src/test/README.md)). Includes unit tests under `test/unit/domain/`, `test/unit/integrations/`, and HTTP integration in `test/integration/`. |
+| **Web typecheck** | `tsc --noEmit` on `web/` — React/TS must compile; catches missing fields on shared DTOs like `Food`. No component or browser tests yet. |
 
 **Host Node:** `server/package.json` requires **Node ≥ 22.13** for `npm test`; README deploy steps describe **22+** on the host.
 
-Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Server tests` / `Web typecheck` / `Overall`). Full transcript: **`local/test-last-run.log`** (overwrite each run). **HTTPS smoke** runs after Docker health in `./deploy.sh` only; output also appended to **`local/https-smoke-last.txt`** when that step runs.
+Run from repo root: `npm test`. The log ends with an explicit **Summary** (`Server typecheck` / `Server tests` / `Web typecheck` / `Overall`). Full transcript: **`local/test-last-run.log`** (overwrite each run). **HTTPS smoke** runs after Docker health in `./deploy.sh` only; output also appended to **`local/https-smoke-last.txt`** when that step runs.
 
 **Known gaps (behavior not yet automated)** — kiosk-token family board HTTP, Web Push subscribe/send when VAPID is configured, upload/OCR/PDF HTTP, and web offline/PWA runtime. Hydration, log delete, login, multi-member family, meal-plan/grocery, import-url SSRF at HTTP layer, library ingredient search, and compose per-serving math are covered in `test/integration/coverage.test.ts` plus `test/unit/domain/compose.test.ts`. Privacy/kiosk HTTP tests are planned last.
 

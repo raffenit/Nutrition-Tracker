@@ -36,6 +36,7 @@ export function MealKitsPage({ ecosystemId }: { ecosystemId: string | null }) {
   const [nutritionPickIndex, setNutritionPickIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savingRowIndex, setSavingRowIndex] = useState<number | null>(null);
 
   useEffect(() => {
     void api<{ ecosystems: Ecosystem[] }>('/api/meal-kits').then((result) => {
@@ -94,10 +95,12 @@ export function MealKitsPage({ ecosystemId }: { ecosystemId: string | null }) {
   }
 
   async function saveRow(index: number): Promise<void> {
-    if (!selectedId) return;
+    if (!selectedId || savingRowIndex !== null) return;
+    setSavingRowIndex(index);
     const row = drafts[index];
     if (!row || !row.kitLineName.trim()) {
       setError('Each row needs a kit ingredient name');
+      setSavingRowIndex(null);
       return;
     }
     setError(null);
@@ -132,6 +135,8 @@ export function MealKitsPage({ ecosystemId }: { ecosystemId: string | null }) {
       setStatus(`Saved “${result.mapping.kitLineName}”`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save row');
+    } finally {
+      setSavingRowIndex(null);
     }
   }
 
@@ -234,7 +239,15 @@ export function MealKitsPage({ ecosystemId }: { ecosystemId: string | null }) {
                     />
                     <MappingRowKey row={row} />
                     <div className="meal-kit-mapping-actions">
-                      <button type="button" className="settings-secondary-btn" onClick={() => void saveRow(index)}>Save row</button>
+                      <button
+                        type="button"
+                        className="settings-secondary-btn"
+                        disabled={savingRowIndex !== null}
+                        aria-busy={savingRowIndex === index}
+                        onClick={() => void saveRow(index)}
+                      >
+                        {savingRowIndex === index ? 'Saving…' : 'Save row'}
+                      </button>
                       <RemoveButton label="Remove mapping" onClick={() => void removeRow(index)} />
                     </div>
                   </li>

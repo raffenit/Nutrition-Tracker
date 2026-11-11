@@ -25,7 +25,7 @@ Processing is a **single blocking request** until JSON returns — UI steps are 
 
 ## Tests
 
-- Web: `npm run check` in `web/` (typecheck only).
+- Full gate: repo root `npm test` (server typecheck + server tests + web typecheck); see [testing-standards.md](../testing-standards.md).
 - Server import logic: see [label-ocr-and-parsing.md](./label-ocr-and-parsing.md).
 
 ## Maintenance

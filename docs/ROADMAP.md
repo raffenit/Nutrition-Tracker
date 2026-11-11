@@ -4,7 +4,7 @@ This plan closes the gaps between the client spec and the current build, in an o
 
 **Navigation:** [Documentation index](./README.md) · [Code map (feature → files)](./CODE-MAP.md) · [Architecture](./ARCHITECTURE.md)
 
-**Definition of done (global):** feature works on phone-sized UI, has server tests where behavior is non-trivial, `npm test` passes, documented in this file’s phase notes, deployable via `./deploy.sh` or `docker compose up -d --build`.
+**Definition of done (global):** feature works on phone-sized UI, has server tests where behavior is non-trivial, **`npm test` passes all gates** (server typecheck, server tests, web typecheck — [testing-standards.md](./testing-standards.md)), documented in this file’s phase notes, deployable via `./deploy.sh` or `docker compose up -d --build`.
 
 ---
 
@@ -346,7 +346,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 **Goal — robust persistence**
 
-1. **Document** Frankenstein + standalone deploy: “data lives only in host `data/`”; never delete; backup before migrate experiments.
+1. **Document** standalone deploy: “data lives only in host `data/`”; never delete; backup before migrate experiments.
 2. **Pre/post deploy guard:** script step or health metadata (e.g. `userCount`, `foodCount`, `dataDir`, db file mtime) — **fail deploy** if counts drop to zero unexpectedly (opt-out flag for intentional fresh install).
 3. **Automated backup:** **done in-app** — `DATA_AUTO_BACKUP_HOURS` (default 24) → `data/backups/` via `server/src/db/backup.ts`; host `scripts/backup-data.sh` for manual copies; copy backups off-disk still recommended.
 4. **Recovery playbook:** restore from backup; verify login + library; when to merge vs replace DB.
@@ -357,7 +357,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 - Documented procedure: restart container → same users and library as before.
 - Documented procedure: `git pull` + `./deploy.sh --skip-git` → same data.
 - Backup restore tested once on dev/staging mount.
-- README + `docs/playbooks/server-deploy-frankenstein.md` link recovery steps.
+- README + `docs/playbooks/server-deploy-production.md` link recovery steps.
 
 **Tests**
 
@@ -390,7 +390,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 **Acceptance**
 
-- Multi-label fixture images in `test-images/` produce ≥2 candidates in dev.
+- Multi-label manual checks: photos in `local/test-images/` produce ≥2 candidates in dev.
 - User can import one or all without re-uploading.
 - Single-label uploads unchanged (no extra step when `N === 1`).
 

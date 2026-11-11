@@ -13,6 +13,7 @@ import { postHydration, queueDeleteHydration, queueDeleteMeal, removePendingMeal
 import { saveTargetsCache } from '../offline/db';
 import { applyPendingToTotals, pendingHydrationEntries, pendingHydrationMl, pendingPreviewsForDate } from '../offline/pending';
 import { SYNC_COMPLETE_EVENT } from '../offline/register';
+import { useAsyncAction } from '../lib/useAsyncAction';
 import { nowLocalInput } from '../nav';
 import type { DayTotals, GoalAlert, HydrationEntry, MealLog, Targets, WeightStatus } from '../types';
 
@@ -151,15 +152,19 @@ export function DashboardPage() {
 
 function WeightReminder({ unit, today, onDone }: { unit: 'lb' | 'kg'; today: string; onDone: () => void }) {
   const [weight, setWeight] = useState('');
+  const { busy, run } = useAsyncAction();
   return (
     <form className="card" onSubmit={(event) => {
       event.preventDefault();
-      void api('/api/weight', { method: 'POST', body: JSON.stringify({ weight: Number(weight), unit, localDate: today }) }).then(onDone);
+      void run(async () => {
+        await api('/api/weight', { method: 'POST', body: JSON.stringify({ weight: Number(weight), unit, localDate: today }) });
+        onDone();
+      });
     }}>
       <h2>Weekly check-in</h2>
       <p className="muted">Only you can see this. It is not on the family dashboard.</p>
-      <label>Weight ({unit})<input value={weight} onChange={(event) => setWeight(event.target.value)} inputMode="decimal" required /></label>
-      <button type="submit">Save</button>
+      <label>Weight ({unit})<input value={weight} onChange={(event) => setWeight(event.target.value)} inputMode="decimal" required disabled={busy} /></label>
+      <button type="submit" className="primary" disabled={busy} aria-busy={busy}>{busy ? 'Saving…' : 'Save'}</button>
     </form>
   );
 }

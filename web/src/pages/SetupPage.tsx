@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAsyncAction } from '../lib/useAsyncAction';
 import { api } from '../api/client';
 import { HelixMark } from '../components/HelixMark';
 import { navigate } from '../nav';
@@ -8,6 +9,7 @@ type SetupPageProps = { onReady: (session: Session) => void };
 
 export function SetupPage({ onReady }: SetupPageProps) {
   const [error, setError] = useState<string | null>(null);
+  const { busy, run } = useAsyncAction();
   async function submit(form: FormData): Promise<void> {
     const password = String(form.get('password') ?? '');
     if (password !== String(form.get('confirm') ?? '')) {
@@ -36,13 +38,18 @@ export function SetupPage({ onReady }: SetupPageProps) {
   return (
     <main className="app auth-screen">
       <div className="brand"><HelixMark size={56} /></div>
-      <form className="card" onSubmit={(event) => { event.preventDefault(); void submit(new FormData(event.currentTarget)); }}>
-        <label>Household name<input name="householdName" required /></label>
-        <label>Your name<input name="name" required /></label>
-        <label>Password<input name="password" type="password" minLength={8} required /></label>
-        <label>Confirm password<input name="confirm" type="password" minLength={8} required /></label>
-        {error && <p className="notice">{error}</p>}
-        <button className="primary" type="submit">Create the household</button>
+      <form className="card" onSubmit={(event) => {
+        event.preventDefault();
+        void run(() => submit(new FormData(event.currentTarget)));
+      }}>
+        <label>Household name<input name="householdName" required disabled={busy} /></label>
+        <label>Your name<input name="name" required disabled={busy} /></label>
+        <label>Password<input name="password" type="password" minLength={8} required disabled={busy} /></label>
+        <label>Confirm password<input name="confirm" type="password" minLength={8} required disabled={busy} /></label>
+        {error && <p className="notice" role="alert">{error}</p>}
+        <button className="primary" type="submit" disabled={busy} aria-busy={busy}>
+          {busy ? 'Creating…' : 'Create the household'}
+        </button>
       </form>
     </main>
   );

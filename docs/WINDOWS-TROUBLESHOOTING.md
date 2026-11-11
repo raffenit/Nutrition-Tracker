@@ -123,4 +123,4 @@ docker compose version
 ## Related
 
 - [SETUP-WINDOWS-WSL.md](./SETUP-WINDOWS-WSL.md) — install and first deploy
-- [playbooks/server-deploy-frankenstein.md](./playbooks/server-deploy-frankenstein.md) — Linux server deploy (not Windows)
+- [playbooks/server-deploy-production.md](./playbooks/server-deploy-production.md) — Linux server deploy (not Windows)

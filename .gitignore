@@ -7,6 +7,7 @@ data/
 *.log
 .DS_Store
 
-# Host-specific test logs and notes (see local.example/); config is .env only
+# Host-specific logs, playbooks, and OCR photos under local/ (see local.example/); config is .env only
 local/
+docs/local/
 .cursor/

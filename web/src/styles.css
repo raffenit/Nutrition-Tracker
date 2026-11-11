@@ -71,7 +71,61 @@ button.primary {
   font-weight: 650;
 }
 button.danger { color: var(--danger); }
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button:not(:disabled):hover {
+  filter: brightness(1.06);
+}
+button:not(:disabled):active {
+  transform: scale(0.98);
+}
+button.primary:not(:disabled):hover {
+  filter: brightness(1.05);
+}
+button.primary:not(:disabled):active {
+  transform: scale(0.985);
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.import-tile:focus-visible,
+.chip:focus-visible,
+.library-item:focus-visible,
+.back-link:focus-visible,
+.linkish:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+.import-tile:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent-soft) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 8%, var(--surface-inset));
+}
+.import-tile:not(:disabled):active {
+  transform: scale(0.99);
+}
+.chip:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent-soft) 50%, var(--line));
+}
+.chip.active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 22%, var(--raise));
+  border-color: var(--accent-soft);
+}
+.library-item:not(:disabled):hover,
+.library-item:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 10%, transparent);
+}
+.settings-secondary-btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent-soft) 40%, var(--line));
+}
+.segmented button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent-soft) 12%, transparent);
+}
 a { color: var(--accent-soft); }
+a:hover { color: var(--accent-warm); }
 .app {
   width: 100%;
   min-height: 100dvh;

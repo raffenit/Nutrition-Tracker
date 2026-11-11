@@ -6,11 +6,11 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 
 | Read this | When |
 | --- | --- |
-| [../AGENTS.md](../AGENTS.md) | Repo rules, deploy, privacy, Frankenstein mount notes (workspace parent) |
+| [../AGENTS.md](../AGENTS.md) | Repo rules, deploy, privacy |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Data model, API summary, privacy rules, testing gates |
+| [testing-standards.md](./testing-standards.md) | Typecheck + test gates, clean-code expectations for `npm test` |
 | [CODE-MAP.md](./CODE-MAP.md) | **Feature → file paths and symbol names** (start here to find code) |
-| [playbooks/](./playbooks/README.md) | Task guides (OCR, import UI, privacy, Frankenstein deploy) |
-| [../../docs/AGENT-INDEX.md](../../docs/AGENT-INDEX.md) | Whole-workspace repo index (parent `Projects/`) |
+| [playbooks/](./playbooks/README.md) | Task guides (OCR, import UI, privacy, production deploy) |
 | [ROADMAP.md](./ROADMAP.md) | Phases, acceptance criteria, what’s next vs done |
 
 **Workflow:** [CODE-MAP.md](./CODE-MAP.md) or a [playbook](./playbooks/README.md) → grep the listed **symbol** → read [ARCHITECTURE.md](./ARCHITECTURE.md) if the shape of the system changes → implement → update CODE-MAP if you added modules → `npm test` (see [Testing](#testing)).
@@ -34,7 +34,7 @@ From repo root:
 npm test
 ```
 
-Runs `scripts/run-tests.sh` → server `node --test` on all `dist-test/**/*.test.js` + web `tsc --noEmit`. Layout: [server/src/test/README.md](../server/src/test/README.md). **HTTPS smoke** runs at end of **`./deploy.sh`** (after Docker health), not during `npm test`; skip with `SKIP_HTTPS_SMOKE=1` in `.env`. Logs: `local/test-last-run.log` (full test run), `local/https-smoke-last.txt` (last smoke step when it runs).
+Runs `scripts/run-tests.sh` → **server typecheck** (production + test tsconfigs), **server tests**, **web typecheck** — see [testing-standards.md](./testing-standards.md). Layout: [server/src/test/README.md](../server/src/test/README.md). **HTTPS smoke** runs at end of **`./deploy.sh`** (after Docker health), not during `npm test`; skip with `SKIP_HTTPS_SMOKE=1` in `.env`. Logs: `local/test-last-run.log` (full test run), `local/https-smoke-last.txt` (last smoke step when it runs).
 
 Before any PR that touches logs or family APIs, use the privacy checklist in [ROADMAP.md — Tracking](./ROADMAP.md#tracking).
 
@@ -54,7 +54,7 @@ Before any PR that touches logs or family APIs, use the privacy checklist in [RO
 | 9 | Offline PWA + sync | Done — outbox, pins, offline library/today (import still online-only) |
 | 10 | Meal-kit recipe cards | In progress — PDF import, instructions |
 | 11 | Data persistence + backup | Done — deploy guard, scheduled backups, [playbook](./playbooks/data-backup-recovery.md) |
-| 12 | Multi-label photo/PDF import | Planned — `test-images/` fixtures; pick one vs import all |
+| 12 | Multi-label photo/PDF import | Planned — `local/test-images/` for manual checks; pick one vs import all |
 | 13 | Tags (foods + ingredients) | Planned — overlapping tags, library filter; optional `drink` tag with hydration toggle |
 
 Update this table when a phase ships (date in ROADMAP + row here).

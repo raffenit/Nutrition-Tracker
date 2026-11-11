@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { postMealLog } from '../offline/mutations';
 import { mergeFoodsCache, readTargetsCache } from '../offline/db';
 import { FoodLibraryPicker, type LibraryShelf } from '../components/FoodLibraryPicker';
+import { useAsyncAction } from '../lib/useAsyncAction';
 import { navigate, nowLocalInput } from '../nav';
 import { CORE_NUTRIENT_FIELDS, setCoreNutrient, setExtraAt } from '../nutrientFields';
 import { EMPTY_NUTRIENTS, type Food, type MealLog, type Nutrients, type Targets } from '../types';
@@ -22,6 +23,7 @@ export function AddLogPage() {
   const [entryTotals, setEntryTotals] = useState(false);
   const [quickNutrients, setQuickNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [error, setError] = useState<string | null>(null);
+  const { busy: saveBusy, run: runSave } = useAsyncAction();
 
   useEffect(() => {
     void api<{ targets: Targets }>('/api/targets').then((result) => {
@@ -72,14 +74,16 @@ export function AddLogPage() {
     navigate('/');
   }
 
-  async function save(): Promise<void> {
-    setError(null);
-    try {
-      if (mode === 'quick') await saveQuick();
-      else await saveLibrary();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save');
-    }
+  function save(): void {
+    void runSave(async () => {
+      setError(null);
+      try {
+        if (mode === 'quick') await saveQuick();
+        else await saveLibrary();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Could not save');
+      }
+    });
   }
 
   return (
@@ -113,7 +117,7 @@ export function AddLogPage() {
       )}
 
       {mode === 'library' && food && (
-        <form className="card form-section" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <form className="card form-section" onSubmit={(event) => { event.preventDefault(); save(); }}>
           <div className="form-head">
             <button type="button" className="back-link" onClick={() => setFood(null)}>← Pick another</button>
             <h1>{food.name}</h1>
@@ -125,12 +129,14 @@ export function AddLogPage() {
             <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>
           )}
           {error && <p className="notice">{error}</p>}
-          <button className="primary form-save" type="submit">Add to today</button>
+          <button className="primary form-save" type="submit" disabled={saveBusy} aria-busy={saveBusy}>
+            {saveBusy ? 'Adding…' : 'Add to today'}
+          </button>
         </form>
       )}
 
       {mode === 'quick' && (
-        <form className="card form-section add-log-quick-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <form className="card form-section add-log-quick-form" onSubmit={(event) => { event.preventDefault(); save(); }}>
           <h1>Quick entry</h1>
           <p className="muted">Log once without saving to your library.</p>
           <label>Name<input value={quickName} onChange={(event) => setQuickName(event.target.value)} required /></label>
@@ -177,7 +183,9 @@ export function AddLogPage() {
             <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>
           )}
           {error && <p className="notice">{error}</p>}
-          <button className="primary form-save" type="submit">Add to today</button>
+          <button className="primary form-save" type="submit" disabled={saveBusy} aria-busy={saveBusy}>
+            {saveBusy ? 'Adding…' : 'Add to today'}
+          </button>
         </form>
       )}
     </div>

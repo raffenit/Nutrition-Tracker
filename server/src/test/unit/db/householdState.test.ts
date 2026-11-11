@@ -13,7 +13,7 @@ test('syncHouseholdMarker writes marker when users exist', () => {
   const db = openDatabase(path.join(dir, 'nutrition.sqlite'));
   try {
     assert.equal(readHouseholdMarker(dir), null);
-    insertUser(db, 'Rachael', hashPassword('pw-test-12'), 'admin');
+    insertUser(db, 'Admin', hashPassword('pw-test-12'), 'admin');
     const marker = syncHouseholdMarker(dir, db);
     assert.ok(marker);
     assert.equal(marker?.userCount, 1);

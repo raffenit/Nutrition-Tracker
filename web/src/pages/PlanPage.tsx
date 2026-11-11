@@ -222,6 +222,7 @@ export function PlanPage() {
         <AddPlanMealDialog
           day={addDay}
           recipes={planFoods}
+          saving={busy}
           onClose={() => setAddDay(null)}
           onAdd={(draft) => {
             setAddDay(null);
@@ -246,11 +247,13 @@ export function PlanPage() {
 function AddPlanMealDialog({
   day,
   recipes,
+  saving,
   onClose,
   onAdd,
 }: {
   day: string;
   recipes: Food[];
+  saving: boolean;
   onClose: () => void;
   onAdd: (entry: { localDate: string; slot: PlanEntry['slot']; foodId: string; foodName: string; servings: number }) => void;
 }) {
@@ -299,7 +302,9 @@ function AddPlanMealDialog({
         )}
         <div className="row">
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary" disabled={!recipe}>Add</button>
+          <button type="submit" className="primary" disabled={!recipe || saving} aria-busy={saving}>
+            {saving ? 'Saving…' : 'Add'}
+          </button>
         </div>
       </form>
     </div>

@@ -7,7 +7,7 @@ Short guides for common agent work. Each lists **files and symbol names** to sea
 | [label-ocr-and-parsing.md](./label-ocr-and-parsing.md) | Wrong/missing nutrients from photos, slow OCR, EasyOCR/Tesseract behavior |
 | [food-import-ui.md](./food-import-ui.md) | Upload progress, import UX, `/api/uploads` client flow |
 | [family-privacy.md](./family-privacy.md) | Family/kiosk APIs, weight must not leak |
-| [server-deploy-frankenstein.md](./server-deploy-frankenstein.md) | Apps vs `docker-files` mount, `./deploy.sh` |
+| [server-deploy-production.md](./server-deploy-production.md) | Dev clone vs host stack, `./deploy.sh` |
 | [data-backup-recovery.md](./data-backup-recovery.md) | `data/` backups, deploy data guard, empty-household prevention |
 | [../WINDOWS-TROUBLESHOOTING.md](../WINDOWS-TROUBLESHOOTING.md) | WSL, CRLF, `.env`, Docker, `deploy-from-windows.bat` |
 

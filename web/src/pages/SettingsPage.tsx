@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAsyncAction } from '../lib/useAsyncAction';
 import { api } from '../api/client';
 import { RemoveButton } from '../components/RemoveButton';
 import { navigate } from '../nav';
@@ -201,6 +202,7 @@ function DietPresetPicker({ onApplied }: { onApplied: (targets: Targets) => Prom
         type="button"
         className="primary"
         disabled={!selectedId || busy}
+        aria-busy={busy}
         onClick={() => {
           setBusy(true);
           void api<{ targets: Targets }>('/api/targets/apply-preset', {
@@ -212,7 +214,7 @@ function DietPresetPicker({ onApplied }: { onApplied: (targets: Targets) => Prom
             .finally(() => setBusy(false));
         }}
       >
-        Apply template to my targets
+        {busy ? 'Applying…' : 'Apply template to my targets'}
       </button>
     </section>
   );
@@ -220,9 +222,10 @@ function DietPresetPicker({ onApplied }: { onApplied: (targets: Targets) => Prom
 
 function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: Targets) => Promise<void> }) {
   const [draft, setDraft] = useState(targets);
+  const { busy, run } = useAsyncAction();
   useEffect(() => setDraft(targets), [targets]);
   return (
-    <form className="card" onSubmit={(event) => { event.preventDefault(); void onSave(draft); }}>
+    <form className="card" onSubmit={(event) => { event.preventDefault(); void run(() => onSave(draft)); }}>
       <h2>Daily targets</h2>
       <p className="muted">Personal goals, not medical advice.</p>
       {(['calories', 'protein', 'fiber', 'fat', 'carbs'] as const).map((key) => (
@@ -266,7 +269,9 @@ function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: T
         onChange={(extras) => setDraft({ ...draft, extras })}
       />
       <div className="settings-form-actions">
-        <button className="primary settings-save-btn" type="submit">Save daily targets</button>
+        <button className="primary settings-save-btn" type="submit" disabled={busy} aria-busy={busy}>
+          {busy ? 'Saving…' : 'Save daily targets'}
+        </button>
       </div>
     </form>
   );
@@ -464,6 +469,7 @@ function MultiLabelImportSettings({
 }) {
   const [choice, setChoice] = useState<MultiLabelImportDefault | 'ask'>(value ?? 'ask');
   const [status, setStatus] = useState<string | null>(null);
+  const { busy, run } = useAsyncAction();
   return (
     <section className="card settings-multi-label">
       <h2>Multi-label imports</h2>
@@ -501,11 +507,14 @@ function MultiLabelImportSettings({
       <button
         type="button"
         className="settings-secondary-btn"
-        onClick={() =>
-          void onSave(choice === 'ask' ? null : choice).then(() => setStatus('Saved multi-label default.'))
-        }
+        disabled={busy}
+        aria-busy={busy}
+        onClick={() => void run(async () => {
+          await onSave(choice === 'ask' ? null : choice);
+          setStatus('Saved multi-label default.');
+        })}
       >
-        Save import default
+        {busy ? 'Saving…' : 'Save import default'}
       </button>
       {status && <p className="muted">{status}</p>}
     </section>
@@ -516,29 +525,31 @@ function MemberForm() {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const { busy, run } = useAsyncAction();
   return (
     <form
       className="settings-subsection settings-member-form"
       onSubmit={(event) => {
         event.preventDefault();
-        setMessage(null);
-        const memberName = name.trim();
-        void api('/api/users', { method: 'POST', body: JSON.stringify({ name: memberName, password, role: 'member' }) })
-          .then(() => {
-            setName('');
-            setPassword('');
-            setMessage(`${memberName} can sign in with the password you set.`);
-          })
-          .catch((caught: unknown) => setMessage(caught instanceof Error ? caught.message : 'Could not add member'));
+        void run(async () => {
+          setMessage(null);
+          const memberName = name.trim();
+          await api('/api/users', { method: 'POST', body: JSON.stringify({ name: memberName, password, role: 'member' }) });
+          setName('');
+          setPassword('');
+          setMessage(`${memberName} can sign in with the password you set.`);
+        }).catch((caught: unknown) => setMessage(caught instanceof Error ? caught.message : 'Could not add member'));
       }}
     >
       <h3>Add household member</h3>
       <p className="muted">Creates a login for someone who shares this household. Each member has their own daily targets and logs.</p>
-      <label>Name<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required /></label>
-      <label>Password<input type="password" value={password} minLength={8} autoComplete="new-password" onChange={(event) => setPassword(event.target.value)} required /></label>
-      {message && <p className="notice">{message}</p>}
+      <label>Name<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required disabled={busy} /></label>
+      <label>Password<input type="password" value={password} minLength={8} autoComplete="new-password" onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
+      {message && <p className="notice" role="status">{message}</p>}
       <div className="settings-form-actions">
-        <button type="submit" className="primary settings-save-btn">Add household member</button>
+        <button type="submit" className="primary settings-save-btn" disabled={busy} aria-busy={busy}>
+          {busy ? 'Adding…' : 'Add household member'}
+        </button>
       </div>
     </form>
   );

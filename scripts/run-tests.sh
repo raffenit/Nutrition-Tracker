@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run server tests + web typecheck; mirror all output to local/test-last-run.log
+# Typecheck (server + web) and server tests; mirror all output to local/test-last-run.log
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,24 +32,38 @@ log "Started: $(date -Iseconds)"
 log "Directory: $ROOT"
 log "========================================"
 
-server_ok=true
-web_ok=true
+server_typecheck_ok=true
+server_tests_ok=true
+web_typecheck_ok=true
 
-if ! run_phase "[1/2] Server — all dist-test/**/*.test.js (node --test)" npm --prefix "$ROOT/server" test; then
-  server_ok=false
+if ! run_phase "[1/3] Server — TypeScript (production tsconfig.json, --noEmit)" npm --prefix "$ROOT/server" run check; then
+  server_typecheck_ok=false
 fi
 
-if ! run_phase "[2/2] Web — TypeScript check (tsc --noEmit)" npm --prefix "$ROOT/web" run check; then
-  web_ok=false
+if $server_typecheck_ok; then
+  if ! run_phase "[1/3] Server — TypeScript (test tsconfig.test.json, --noEmit)" npm --prefix "$ROOT/server" run check:test; then
+    server_typecheck_ok=false
+  fi
+fi
+
+if $server_typecheck_ok; then
+  if ! run_phase "[2/3] Server — tests (dist-test/**/*.test.js)" npm --prefix "$ROOT/server" run test:run; then
+    server_tests_ok=false
+  fi
+fi
+
+if ! run_phase "[3/3] Web — TypeScript (tsc --noEmit)" npm --prefix "$ROOT/web" run check; then
+  web_typecheck_ok=false
 fi
 
 log ""
 log "========================================"
 log "Summary"
-log "  Server tests:  $([ "$server_ok" = true ] && echo PASS || echo FAIL)"
-log "  Web typecheck: $([ "$web_ok" = true ] && echo PASS || echo FAIL)"
-if $server_ok && $web_ok; then
-  log "  Overall:       PASS"
+log "  Server typecheck: $([ "$server_typecheck_ok" = true ] && echo PASS || echo FAIL)"
+log "  Server tests:     $([ "$server_tests_ok" = true ] && echo PASS || echo FAIL)"
+log "  Web typecheck:    $([ "$web_typecheck_ok" = true ] && echo PASS || echo FAIL)"
+if $server_typecheck_ok && $server_tests_ok && $web_typecheck_ok; then
+  log "  Overall:          PASS"
   log "Finished: $(date -Iseconds)"
   log "========================================"
   log ""
@@ -57,9 +71,10 @@ if $server_ok && $web_ok; then
   exit 0
 fi
 
-log "  Overall:       FAIL"
+log "  Overall:          FAIL"
 log "Finished: $(date -Iseconds)"
 log "========================================"
 log ""
-log "Both gates must pass before deploy. Fix failures above (server test counts alone are not enough)."
+log "All three gates must pass before deploy. Typecheck failures are listed above — fix TS errors before relying on test counts."
+log "See docs/testing-standards.md"
 exit 1

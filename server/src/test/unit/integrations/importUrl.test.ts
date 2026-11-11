@@ -10,7 +10,7 @@ test('blocks loopback and link-local hosts', () => {
 });
 
 test('allows tailscale and home LAN hosts', () => {
-  assert.doesNotThrow(() => assertSafeHostname('100.100.67.105'));
+  assert.doesNotThrow(() => assertSafeHostname('100.64.0.10'));
   assert.doesNotThrow(() => assertSafeHostname('192.168.1.20'));
 });
 

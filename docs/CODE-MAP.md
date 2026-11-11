@@ -1,6 +1,6 @@
 # Code map — feature → files
 
-Find code by **feature or export name**, not line numbers. See [playbooks/](./playbooks/README.md) for task walkthroughs and `.devin/rules/navigation.md` in the workspace for navigation rules.
+Find code by **feature or export name**, not line numbers. See [playbooks/](./playbooks/README.md) for task walkthroughs and [AGENTS.md](../AGENTS.md) for navigation rules.
 
 Types are mirrored in `server/src/types.ts` and `web/src/types.ts` unless noted.
 
@@ -29,7 +29,9 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Concern | Module | Key exports / symbols |
 | --- | --- | --- |
 | Upload + merge into draft | `server/src/routes/foodRoutes.ts` | `receiveUpload`, `applySlotMergedNutrients`, `extractUploadText` |
-| OCR orchestration | `server/src/integrations/extractText.ts` | `extractImageLabel`, `extractPdfText`, `collectOcrCandidateTexts` |
+| OCR orchestration | `server/src/integrations/extractText.ts` | `extractImageLabel`, `extractPdfText` |
+| Layout routing (wide table / candidate pick) | `server/src/domain/labelLayout.ts`, `server/src/integrations/imageLayoutHint.ts` | `inferLabelLayoutFromText`, `pickImportTextCandidateIndex`, `inferLabelLayoutHint` |
+| Import job progress (server phases) | `server/src/import/importJobProgress.ts`, `web/src/lib/runImportWithProgress.ts` | `reportImportJobStep`, `GET /api/import-jobs/:id`, `createImportProgressRunner` |
 | Image preprocess (Sharp) | `server/src/integrations/ocrPreprocess.ts` | `buildOcrImageVariants`, `easyOcrVariantSubset`, `tesseractVariantSubset` |
 | Focus / threshold variants | `server/src/integrations/focusCrop.ts`, `adaptiveThreshold.ts` | `focusCropVariants`, `adaptiveThresholdVariants` |
 | EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `easyOcrPassEnvironments` |
@@ -134,7 +136,7 @@ Shell / nav: `web/src/components/AppShell.tsx`.
 
 ## Tests
 
-See [server/src/test/README.md](../server/src/test/README.md). `./deploy.sh` runs **`npm test`** unless `--skip-test`.
+See [server/src/test/README.md](../server/src/test/README.md) and [testing-standards.md](./testing-standards.md). `./deploy.sh` runs **`npm test`** unless `--skip-test`.
 
 | Kind | Location | Search for |
 | --- | --- | --- |

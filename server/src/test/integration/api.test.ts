@@ -16,10 +16,10 @@ test('health, setup, dashboard, family privacy, and trends', async () => {
 
     const setup = await api<{ user: { name: string } }>(port, '/api/setup', {
       method: 'POST',
-      body: { name: 'Rachael', password: 'password1', householdName: 'Home' },
+      body: { name: 'Morgan', password: 'password1', householdName: 'Home' },
     });
     assert.equal(setup.status, 200);
-    assert.equal(setup.body.user.name, 'Rachael');
+    assert.equal(setup.body.user.name, 'Morgan');
 
     const ready = await api<{ setupRequired: boolean }>(port, '/api/health', { cookie: setup.cookie });
     assert.equal(ready.body.setupRequired, false);
@@ -71,7 +71,7 @@ test('health, setup, dashboard, family privacy, and trends', async () => {
 
     const family = await api<{ members: Array<{ user: { name: string } }> }>(port, '/api/family', { cookie: setup.cookie });
     assert.equal(family.status, 200);
-    assert.equal(family.body.members[0]?.user.name, 'Rachael');
+    assert.equal(family.body.members[0]?.user.name, 'Morgan');
     assert.equal(JSON.stringify(family.body).toLowerCase().includes('weight'), false);
   });
 });
@@ -227,7 +227,7 @@ test('custom recipes return ingredient lines for editing', async () => {
   await withTestServer(async ({ port }) => {
     const setup = await api<{ user: { name: string } }>(port, '/api/setup', {
       method: 'POST',
-      body: { name: 'Rachael', password: 'password1', householdName: 'Home' },
+      body: { name: 'Morgan', password: 'password1', householdName: 'Home' },
     });
     assert.equal(setup.status, 200);
 

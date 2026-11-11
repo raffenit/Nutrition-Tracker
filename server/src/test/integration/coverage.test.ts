@@ -100,7 +100,7 @@ test('DELETE /api/logs/:id removes meal from dashboard totals', async () => {
 
 test('login after logout restores session', async () => {
   await withTestServer(async ({ port }) => {
-    const { cookie } = await setupTestHousehold(port, 'Rachael');
+    const { cookie } = await setupTestHousehold(port, 'Morgan');
     const logout = await api(port, '/api/auth/logout', { method: 'POST', cookie });
     assert.equal(logout.status, 200);
     const denied = await api(port, '/api/dashboard', { cookie });
@@ -108,7 +108,7 @@ test('login after logout restores session', async () => {
 
     const login = await api(port, '/api/auth/login', {
       method: 'POST',
-      body: { name: 'Rachael', password: 'password1' },
+      body: { name: 'Morgan', password: 'password1' },
     });
     assert.equal(login.status, 200);
     const dashboard = await api(port, '/api/dashboard', { cookie: login.cookie });
