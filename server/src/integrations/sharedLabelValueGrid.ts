@@ -14,7 +14,17 @@ import {
   columnBoundariesFromInkProfile,
   type ColumnStripRegion,
 } from './labelColumnStrips.js';
-import { valueColumnsFromRuledGrid } from './ruledTableGridDetect.js';
+import type { BandLuminanceRoles } from '../domain/bandLuminanceRoles.js';
+import {
+  classifyBandLuminanceInScanBand,
+  inkProfileGutterThreshold,
+  type InkProfileGutterSense,
+} from './bandLuminanceCluster.js';
+import { DEFAULT_RULED_TABLE_GRID_PARAMS } from '../domain/ruledTableGridParams.js';
+import { categoriesFromRuledGrid, valueColumnsFromRuledGrid } from './ruledTableGridDetect.js';
+import { columnWidthCv, refineUniformProductColumns } from './uniformColumnGeometry.js';
+import { collectColumnGeometryWitnesses, fitUniformValueColumns } from './labelTableLayoutFit.js';
+import { fitEqualWidthColumnGrid } from './uniformColumnGeometry.js';
 
 export { detectSharedLabelValueGrid } from './varietyPackGridPipeline.js';
 
@@ -115,6 +125,30 @@ export function sharedLabelBoundaryForTest(profile: Float64Array, shared?: Parti
   return findLabelValueBoundary(profile, { ...DEFAULT_SHARED_LABEL_GRID_PARAMS, ...shared });
 }
 
+/**
+ * Left/right ink asymmetry for layout hypothesis scoring — uses ink-profile label boundary
+ * when width is plausible, not the first ruled category edge (misleading on per-column tables).
+ */
+export function profileInkAsymmetryForLayoutScores(
+  profile: Float64Array,
+  fallbackLabelEndX: number,
+  shared: Partial<SharedLabelGridParams> = {},
+): number | undefined {
+  const params = { ...DEFAULT_SHARED_LABEL_GRID_PARAMS, ...shared };
+  const inkBoundary = findLabelValueBoundary(profile, params);
+  const labelFrac = (inkBoundary ?? fallbackLabelEndX) / Math.max(1, profile.length);
+  const labelEndX =
+    inkBoundary !== null &&
+    labelFrac >= params.labelColumnMinWidthFraction &&
+    labelFrac <= params.labelColumnMaxWidthFraction
+      ? inkBoundary
+      : fallbackLabelEndX;
+  if (labelEndX <= 0 || labelEndX >= profile.length) return undefined;
+  const rightMean = meanInk(profile, labelEndX, profile.length);
+  if (rightMean <= 0) return undefined;
+  return meanInk(profile, 0, labelEndX) / rightMean;
+}
+
 /** Ink-profile shared rail + value column bounds (analysis x). */
 export function sharedRailLayoutFromInkProfile(
   pixels: Uint8Array,
@@ -190,19 +224,74 @@ function valueColumnBoundaries(
   shared: SharedLabelGridParams,
   maxColumns: number,
 ): Segment[] {
+  const luminanceRoles = classifyBandLuminanceInScanBand(pixels, width, height, boundaryX, width);
+  let ruledCats = categoriesFromRuledGrid(pixels, width, height, boundaryX, undefined, maxColumns, {
+    requireHorizontalRules: true,
+  });
+  if (ruledCats.length < shared.minValueColumns) {
+    ruledCats = categoriesFromRuledGrid(pixels, width, height, boundaryX, undefined, maxColumns, {
+      requireHorizontalRules: false,
+    });
+  }
+  if (ruledCats.length > 0) {
+    const ruledSegs = ruledCats.map((s) => ({ x0: s.x0, x1: s.x1 }));
+    const refined = refineUniformProductColumns(
+      pixels,
+      width,
+      height,
+      ruledSegs,
+      ruledCats.map((c) => ({ horizontalRuleCount: c.horizontalRuleCount })),
+      boundaryX,
+      width,
+      maxColumns,
+    );
+    const cv = columnWidthCv(refined.map((s) => s.x1 - s.x0));
+    if (refined.length >= shared.minValueColumns && cv <= shared.maxValueColumnWidthCv) {
+      const valueW = width - boundaryX;
+      const widths = refined.map((segment) => segment.x1 - segment.x0);
+      const median = [...widths].sort((a, b) => a - b)[Math.floor(widths.length / 2)] ?? 0;
+      const target = median > 0 ? Math.round(valueW / median) : 0;
+      if (
+        target >= shared.minValueColumns &&
+        refined.length > target &&
+        refined.length - target <= 2 &&
+        cv <= shared.maxValueColumnWidthCv
+      ) {
+        return fitEqualWidthColumnGrid(boundaryX, width, target);
+      }
+      return refined;
+    }
+  }
+
   const ruled = valueColumnsFromRuledGrid(pixels, width, height, boundaryX, undefined, maxColumns);
   if (ruled.length >= shared.minValueColumns) return ruled;
 
-  const valueOnlyProfile = profileSliceValueColumns(pixels, width, height, boundaryX);
-  const dense = columnBoundariesFromInkProfile(valueOnlyProfile, {
-    ...stripParams,
-    maxColumns,
-    minStripWidthFraction: Math.min(stripParams.minStripWidthFraction, 0.028),
-    gutterThresholdRatio: Math.min(stripParams.gutterThresholdRatio, shared.valueGutterThresholdRatio),
-  });
+  const valueOnlyProfile = profileSliceValueColumns(pixels, width, height, boundaryX, luminanceRoles);
+  const dense = columnBoundariesFromInkProfile(
+    valueOnlyProfile,
+    {
+      ...stripParams,
+      maxColumns,
+      minStripWidthFraction: Math.min(stripParams.minStripWidthFraction, 0.028),
+      gutterThresholdRatio: Math.min(stripParams.gutterThresholdRatio, shared.valueGutterThresholdRatio),
+    },
+    luminanceRoles,
+  );
   const denseAbs = dense.map((segment) => ({ x0: segment.x0 + boundaryX, x1: segment.x1 + boundaryX }));
-  if (denseAbs.length >= shared.minValueColumns) return denseAbs;
-  const sparse = sparseValueColumnBoundaries(valueOnlyProfile, shared, maxColumns);
+  if (denseAbs.length >= shared.minValueColumns) {
+    const denseCv = columnWidthCv(denseAbs.map((s) => s.x1 - s.x0));
+    if (denseCv <= shared.maxValueColumnWidthCv) return denseAbs;
+  }
+
+  const ruledCv =
+    ruledCats.length > 0 ? columnWidthCv(ruledCats.map((s) => s.x1 - s.x0)) : Number.POSITIVE_INFINITY;
+  if (ruledCats.length > shared.minValueColumns && ruledCv > shared.maxValueColumnWidthCv) {
+    const witnesses = collectColumnGeometryWitnesses(pixels, width, height, stripParams, maxColumns);
+    const layoutFit = fitUniformValueColumns(witnesses, boundaryX, width, maxColumns, 4);
+    if (layoutFit.length >= shared.minValueColumns) return layoutFit;
+  }
+
+  const sparse = sparseValueColumnBoundaries(valueOnlyProfile, shared, maxColumns, luminanceRoles);
   return sparse.map((segment) => ({ x0: segment.x0 + boundaryX, x1: segment.x1 + boundaryX }));
 }
 
@@ -211,13 +300,15 @@ function profileSliceValueColumns(
   width: number,
   height: number,
   boundaryX: number,
+  luminanceRoles: BandLuminanceRoles,
 ): Float64Array {
   const valueW = width - boundaryX;
   const profile = new Float64Array(valueW);
+  const glareCap = luminanceRoles.glareCap;
   for (let x = boundaryX; x < width; x += 1) {
     let sum = 0;
     for (let y = 0; y < height; y += 1) {
-      sum += 255 - pixels[y * width + x]!;
+      sum += 255 - Math.min(pixels[y * width + x]!, glareCap);
     }
     profile[x - boundaryX] = sum / height;
   }
@@ -228,19 +319,33 @@ function sparseValueColumnBoundaries(
   profile: Float64Array,
   shared: SharedLabelGridParams,
   maxColumns: number,
+  luminanceRoles: BandLuminanceRoles,
 ): Segment[] {
   const max = profile.reduce((peak, value) => Math.max(peak, value), 0);
   if (max <= 0) return [];
 
-  const gutterLevel = max * shared.valueGutterThresholdRatio;
+  const gutter =
+    Math.abs(luminanceRoles.ink - luminanceRoles.background) >= 18
+      ? inkProfileGutterThreshold(luminanceRoles, DEFAULT_RULED_TABLE_GRID_PARAMS.gutterBrightnessMinFraction)
+      : {
+          level: max * shared.valueGutterThresholdRatio,
+          sense: 'local_minimum' as InkProfileGutterSense,
+        };
+  const gutterLevel = gutter.level;
+  const gutterIsMinimum = gutter.sense === 'local_minimum';
   const rawSpacing = Math.max(1, Math.round(profile.length * shared.valueRawGutterSpacingFraction));
   const minProductSpacing = profile.length * shared.valueColumnMinSpacingFraction;
 
   const rawGutters: number[] = [];
   for (let x = 2; x < profile.length - 2; x += 1) {
     const value = profile[x]!;
-    if (value > gutterLevel) continue;
-    if (profile[x - 1]! < value || profile[x + 1]! < value) continue;
+    if (gutterIsMinimum) {
+      if (value > gutterLevel) continue;
+      if (profile[x - 1]! < value || profile[x + 1]! < value) continue;
+    } else {
+      if (value < gutterLevel) continue;
+      if (profile[x - 1]! > value || profile[x + 1]! > value) continue;
+    }
     const last = rawGutters[rawGutters.length - 1];
     if (last !== undefined && x - last < rawSpacing) continue;
     rawGutters.push(x);

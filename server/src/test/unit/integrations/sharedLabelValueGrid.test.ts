@@ -8,65 +8,50 @@ import sharp from 'sharp';
 import { DEFAULT_COLUMN_STRIP_DETECT_PARAMS } from '../../../domain/columnStripDetectParams.js';
 import { detectSharedLabelValueGrid } from '../../../integrations/varietyPackGridPipeline.js';
 import {
+  profileInkAsymmetryForLayoutScores,
   sharedLabelBoundaryForTest,
   valueBoundariesAfterLabelForTest,
 } from '../../../integrations/sharedLabelValueGrid.js';
 import { buildColumnInkProfileFromBand } from '../../../integrations/labelColumnStrips.js';
+import { LOCAL_SHARED_LABEL_MULTI_VALUE_JPG } from '../../fixtures/localTestImageNames.js';
+import {
+  DEFAULT_PER_COLUMN_LABEL_GRID,
+  DEFAULT_SHARED_LABEL_GRID,
+  paintPerColumnLabelGrid,
+  paintSharedLabelGrid,
+  syntheticSharedLabelGridPng,
+} from '../../fixtures/syntheticVarietyPackGrids.js';
 
-const VALUE_GRID = {
-  labelFraction: 0.2,
-  count: 5,
-  columnFraction: 0.1,
-  gutterFraction: 0.025,
-} as const;
-
-function paintSharedLabelGrid(
-  pixels: Uint8Array,
-  width: number,
-  height: number,
-  spec: typeof VALUE_GRID,
-  ink = 30,
-  background = 250,
-): void {
-  pixels.fill(background);
-  const labelWidth = Math.round(width * spec.labelFraction);
-  for (let y = Math.round(height * 0.12); y < height * 0.88; y += 1) {
-    for (let x = 0; x < labelWidth; x += 1) {
-      pixels[y * width + x] = ink;
-    }
-  }
-  let x = labelWidth + Math.round(width * spec.gutterFraction);
-  const colW = Math.round(width * spec.columnFraction);
-  const gutterW = Math.round(width * spec.gutterFraction);
-  const ruleInk = Math.min(255, ink + 50);
-  for (let i = 0; i < spec.count; i += 1) {
-    const colX0 = x;
-    for (let y = Math.round(height * 0.18); y < height * 0.88; y += 1) {
-      for (let cx = x; cx < x + colW && cx < width; cx += 1) {
-        pixels[y * width + cx] = ink;
-      }
-    }
-    for (let rule = 0; rule < 8; rule += 1) {
-      const ry = Math.round(height * (0.22 + rule * 0.07));
-      for (let cx = colX0 + 2; cx < colX0 + colW - 2 && cx < width; cx += 1) {
-        pixels[ry * width + cx] = ruleInk;
-      }
-    }
-    x += colW + gutterW;
-  }
-}
-
-async function syntheticSharedGridPng(width: number, height: number): Promise<Buffer> {
+test('profileInkAsymmetryForLayoutScores uses ink boundary on shared rail, not first column edge', () => {
+  const width = 1200;
+  const height = 120;
   const pixels = new Uint8Array(width * height);
-  paintSharedLabelGrid(pixels, width, height, VALUE_GRID);
-  return sharp(pixels, { raw: { width, height, channels: 1 } }).png().toBuffer();
-}
+  paintSharedLabelGrid(pixels, width, height, DEFAULT_SHARED_LABEL_GRID);
+  const profile = buildColumnInkProfileFromBand(pixels, width, height);
+  const boundary = sharedLabelBoundaryForTest(profile);
+  assert.ok(boundary);
+  const fallback = Math.round(width * DEFAULT_SHARED_LABEL_GRID.columnFraction);
+  const asym = profileInkAsymmetryForLayoutScores(profile, fallback);
+  assert.ok(asym !== undefined && asym > 1);
+  assert.notEqual(boundary, fallback);
+});
+
+test('profileInkAsymmetryForLayoutScores ignores bogus narrow ink boundary on per-column grid', () => {
+  const width = 1200;
+  const height = 300;
+  const pixels = new Uint8Array(width * height);
+  paintPerColumnLabelGrid(pixels, width, height, DEFAULT_PER_COLUMN_LABEL_GRID);
+  const profile = buildColumnInkProfileFromBand(pixels, width, height);
+  const firstColEnd = Math.round(width / DEFAULT_PER_COLUMN_LABEL_GRID.count);
+  const asym = profileInkAsymmetryForLayoutScores(profile, firstColEnd);
+  assert.ok(asym === undefined || asym < 1.5);
+});
 
 test('sharedLabelBoundaryForTest finds label/value split on synthetic profile', () => {
   const width = 1200;
   const height = 120;
   const pixels = new Uint8Array(width * height);
-  paintSharedLabelGrid(pixels, width, height, VALUE_GRID);
+  paintSharedLabelGrid(pixels, width, height, DEFAULT_SHARED_LABEL_GRID);
   const profile = buildColumnInkProfileFromBand(pixels, width, height);
   const boundary = sharedLabelBoundaryForTest(profile);
   assert.ok(boundary);
@@ -75,32 +60,32 @@ test('sharedLabelBoundaryForTest finds label/value split on synthetic profile', 
     ...DEFAULT_COLUMN_STRIP_DETECT_PARAMS,
     maxColumns: 12,
   });
-  assert.equal(values.length, VALUE_GRID.count);
+  assert.equal(values.length, DEFAULT_SHARED_LABEL_GRID.count);
 });
 
 test('detectSharedLabelValueGrid on synthetic shared-label table', async () => {
-  const bytes = await syntheticSharedGridPng(1200, 300);
+  const bytes = await syntheticSharedLabelGridPng(1200, 300);
   const plan = await detectSharedLabelValueGrid(bytes, { requireWideAspect: true, maxColumns: 12 });
   assert.ok(plan);
-  assert.equal(plan!.valueColumns.length, VALUE_GRID.count);
+  assert.equal(plan!.valueColumns.length, DEFAULT_SHARED_LABEL_GRID.count);
   assert.ok(plan!.labelColumn.width / 1200 < 0.35);
 });
 
 test('repeated full-width column detect is not preferred on shared-label layout', async () => {
-  const bytes = await syntheticSharedGridPng(1200, 300);
+  const bytes = await syntheticSharedLabelGridPng(1200, 300);
   const plan = await detectSharedLabelValueGrid(bytes);
   assert.ok(plan);
-  assert.ok(plan!.valueColumns.length >= VALUE_GRID.count);
+  assert.ok(plan!.valueColumns.length >= DEFAULT_SHARED_LABEL_GRID.count);
 });
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
-const varietyPack = path.join(repoRoot, 'local', 'test-images', 'costco-candy.jpg');
+const sharedLabelMultiValueFixture = path.join(repoRoot, 'local', 'test-images', LOCAL_SHARED_LABEL_MULTI_VALUE_JPG);
 
 test(
-  'local variety pack matches shared-label grid layout',
-  { skip: !existsSync(varietyPack) },
+  'local shared-label multi-value fixture matches grid layout',
+  { skip: !existsSync(sharedLabelMultiValueFixture) },
   async () => {
-    const bytes = await readFile(varietyPack);
+    const bytes = await readFile(sharedLabelMultiValueFixture);
     const plan = await detectSharedLabelValueGrid(bytes, { maxColumns: 14 });
     assert.ok(plan, 'expected shared label + value grid');
     assert.ok(plan!.valueColumns.length >= 4, 'expected multiple value columns');
