@@ -22,7 +22,7 @@ import { parseMultiProductLabelTable } from '../dist/domain/parseMultiProductLab
 import { scoreLabelExtraction } from '../dist/domain/labelSlots.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const defaultImage = path.join(repoRoot, 'local/test-images/IMG_20261105_211226.jpg');
+const defaultImage = path.join(repoRoot, 'local/test-images/costco-candy.jpg');
 const imagePath = process.argv[2] ? path.resolve(process.argv[2]) : defaultImage;
 const outDir = path.join(repoRoot, 'local/diagnostics/shared-label-grid');
 const cachePath = os.tmpdir();

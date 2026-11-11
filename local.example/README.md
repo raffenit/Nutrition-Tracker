@@ -13,6 +13,7 @@ Use a **single `.env`** (from `.env.example`) for the app **and** `./deploy.sh`.
 | `local/test-last-run.log` | Written by `npm test` / deploy |
 | `local/https-smoke-last.txt` | Last HTTPS smoke output (when enabled) |
 | **`local/test-images/`** | Real label photos for manual OCR / import experiments |
+| **`local/test-images/manifest.json`** | Ground truth per photo (copy from `local.example/test-images-manifest.example.json`) |
 
 You can store private notes under `local/` if you want; nothing here is committed.
 

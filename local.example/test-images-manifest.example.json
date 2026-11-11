@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "file": "your-wide-variety.jpg",
+      "description": "Human-readable note (optional).",
+      "layout": "shared_rail",
+      "valueColumnCount": 10,
+      "varietyPackPipeline": {
+        "expectRun": true,
+        "expectLastOkStep": 4,
+        "expectSharedRailPlan": true,
+        "minValueColumns": 10
+      }
+    },
+    {
+      "file": "split-halves.jpg",
+      "layout": "split_single",
+      "valueColumnCount": null,
+      "varietyPackPipeline": {
+        "expectRun": true,
+        "expectSharedRailPlan": false,
+        "forbidLayout": "shared_rail"
+      },
+      "splitSingleLabel": {
+        "expectDetect": true
+      }
+    },
+    {
+      "file": "single-panel.jpg",
+      "layout": "single",
+      "valueColumnCount": null,
+      "varietyPackPipeline": {
+        "expectRun": false,
+        "expectFailStep": 1,
+        "expectFailCode": "band_unavailable"
+      }
+    }
+  ]
+}

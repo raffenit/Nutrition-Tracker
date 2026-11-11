@@ -28,11 +28,14 @@ Step 4 does **not** run OCR. It confirms the **row mesh** exists so stitch can a
 
 **Unit tests:** `server/src/test/unit/integrations/varietyPackGridPipeline.test.ts` — runs steps 1→4 on a synthetic ruled grid; `stopAfterStep` ensures gating.
 
+**Ground truth:** Copy `local.example/test-images-manifest.example.json` to `local/test-images/manifest.json` and set `layout`, `valueColumnCount`, and pipeline expectations per photo. `server/scripts/run-test-images-pipeline.mjs` compares actual vs manifest and exits non-zero on mismatch.
+
 **Local image diagnose:**
 
 ```bash
 cd Apps/Nutrition-Tracker/server
 npm run build
+node scripts/run-test-images-pipeline.mjs
 node scripts/diagnose-shared-label-grid.mjs [path-to.jpg]
 ```
 

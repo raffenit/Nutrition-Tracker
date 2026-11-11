@@ -94,7 +94,7 @@ test('repeated full-width column detect is not preferred on shared-label layout'
 });
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
-const varietyPack = path.join(repoRoot, 'local', 'test-images', 'IMG_20261105_211226.jpg');
+const varietyPack = path.join(repoRoot, 'local', 'test-images', 'costco-candy.jpg');
 
 test(
   'local variety pack matches shared-label grid layout',

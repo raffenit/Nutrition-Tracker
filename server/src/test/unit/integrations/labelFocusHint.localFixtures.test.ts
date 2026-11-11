@@ -11,9 +11,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const localImagesDir = path.join(repoRoot, 'local', 'test-images');
 
 const FIXTURES = {
-  portrait: 'IMG_20261022_120045.jpg',
-  varietyPack: 'IMG_20261105_211226.jpg',
-  incidentalBlur: 'IMG_20261106_234207.jpg',
+  portrait: 'protein-shake.jpg',
+  varietyPack: 'costco-candy.jpg',
+  incidentalBlur: 'ice-cream.jpg',
 } as const;
 
 async function fullWidth(bytes: Buffer): Promise<number> {

@@ -15,9 +15,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const localImagesDir = path.join(repoRoot, 'local', 'test-images');
 
 const FIXTURES = {
-  varietyPack: 'IMG_20261105_211226.jpg',
-  singlePortrait: 'IMG_20261022_120045.jpg',
-  twoProducts: 'IMG_20261106_234207.jpg',
+  varietyPack: 'costco-candy.jpg',
+  singlePortrait: 'protein-shake.jpg',
+  twoProducts: 'ice-cream.jpg',
 } as const;
 
 test(

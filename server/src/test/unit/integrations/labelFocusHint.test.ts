@@ -12,9 +12,9 @@ const localImagesDir = path.join(repoRoot, 'local', 'test-images');
 
 test(
   'ice cream photo reads as single subject in focus',
-  { skip: !existsSync(path.join(localImagesDir, 'IMG_20261106_234207.jpg')) },
+  { skip: !existsSync(path.join(localImagesDir, 'ice-cream.jpg')) },
   async () => {
-    const bytes = await readFile(path.join(localImagesDir, 'IMG_20261106_234207.jpg'));
+    const bytes = await readFile(path.join(localImagesDir, 'ice-cream.jpg'));
     const focus = await inferDepthOfFieldHint(bytes);
     assert.equal(focus.singleSubjectInFocus, true);
     assert.ok(focus.sharpFocusWidthFraction < 0.52);
@@ -27,9 +27,9 @@ test(
 
 test(
   'costco variety pack reads as wide in-focus table',
-  { skip: !existsSync(path.join(localImagesDir, 'IMG_20261105_211226.jpg')) },
+  { skip: !existsSync(path.join(localImagesDir, 'costco-candy.jpg')) },
   async () => {
-    const bytes = await readFile(path.join(localImagesDir, 'IMG_20261105_211226.jpg'));
+    const bytes = await readFile(path.join(localImagesDir, 'costco-candy.jpg'));
     const focus = await inferDepthOfFieldHint(bytes);
     const width = (await sharp(bytes).rotate().metadata()).width ?? 0;
     assert.equal(focus.singleSubjectInFocus, false);
