@@ -289,7 +289,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ## Phase 12 — Multi-label photos and PDFs
 
-**Status:** Not started — dev fixtures in `test-images/` (multiple Nutrition Facts panels per photo; use for OCR/segmentation tests).
+**Status:** In progress (2026-11-11) — text split on repeated Nutrition Facts headings; pick-one or import-all UI on Add food. Per-page PDF raster split still TODO; Settings default preference TODO.
 
 **Problem:** One camera shot or PDF page may contain **several** separate nutrition labels. Today the pipeline assumes a single label (or PDF menu name list), not multiple label regions.
 

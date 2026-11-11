@@ -45,6 +45,18 @@ type RecipeCardImport = {
   instructions: string;
 };
 
+type LabelPanelImport = {
+  index: number;
+  preview: string;
+  draft: {
+    nutrients: Nutrients;
+    servingLabel: string;
+    servingsPerContainer: number | null;
+    kind: 'packaged' | 'restaurant';
+  };
+  fieldReview?: ImportFieldReviewMap;
+};
+
 type ImportResult = {
   uploadId: string | null;
   kind?: 'pdf' | 'image';
@@ -55,6 +67,7 @@ type ImportResult = {
   warning: string | null;
   fieldReview?: ImportFieldReviewMap;
   recipeCard?: RecipeCardImport | null;
+  labelPanels?: LabelPanelImport[];
 };
 
 type ImportStatus = FoodImportStatus;
@@ -86,6 +99,8 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const [batchSelect, setBatchSelect] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(() => new Set());
   const [stubBusy, setStubBusy] = useState(false);
+  const [labelPanels, setLabelPanels] = useState<LabelPanelImport[]>([]);
+  const [importAllBusy, setImportAllBusy] = useState(false);
   const [loading, setLoading] = useState(Boolean(editId));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -127,6 +142,17 @@ function FoodEditor({ editId }: { editId: string | null }) {
     setImportFieldReview(result.fieldReview ?? null);
     setImportKind(result.kind ?? null);
     setTextPreview(result.textPreview ?? null);
+    const panels = result.labelPanels ?? [];
+    setLabelPanels(panels);
+    if (panels.length > 1) {
+      setCandidates([]);
+      setMenuItems([]);
+      setImportStatus({
+        kind: 'warn',
+        text: result.warning ?? `Found ${panels.length} nutrition labels. Pick one to edit, or import all as separate foods.`,
+      });
+      return;
+    }
     if (result.kind === 'pdf' && (result.candidates.length > 0 || (result.menuItems?.length ?? 0) === 0)) {
       setFoodKind('restaurant');
     }
@@ -184,6 +210,52 @@ function FoodEditor({ editId }: { editId: string | null }) {
     setName(candidate);
     setFoodKind('restaurant');
     setImportStatus({ kind: 'ok', text: `“${candidate}” — add nutrition facts below, then save.` });
+  }
+
+  function applyLabelPanel(panel: LabelPanelImport): void {
+    setLabelPanels([]);
+    setFoodKind(panel.draft.kind);
+    setNutrients(panel.draft.nutrients);
+    setServing(panel.draft.servingLabel);
+    setServingsPerContainer(
+      panel.draft.servingsPerContainer != null ? String(panel.draft.servingsPerContainer) : '',
+    );
+    setImportFieldReview(panel.fieldReview ?? null);
+    setImportStatus({ kind: 'ok', text: `Label ${panel.index + 1} loaded — review and save.` });
+  }
+
+  async function importAllLabelPanels(): Promise<void> {
+    if (labelPanels.length === 0) return;
+    setImportAllBusy(true);
+    setSaveError(null);
+    const source = importKind === 'pdf' ? 'pdf' as const : 'image' as const;
+    try {
+      for (const panel of labelPanels) {
+        const canonicalCore = canonicalizeCoreNutrients(panel.draft.nutrients, nutrientUnits);
+        await api('/api/foods', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: `Imported label ${panel.index + 1}`,
+            brand: null,
+            kind: panel.draft.kind,
+            servingLabel: panel.draft.servingLabel,
+            servingsPerContainer: panel.draft.servingsPerContainer,
+            nutrients: { ...canonicalCore, extras: panel.draft.nutrients.extras, units: nutrientUnits },
+            isDrink: false,
+            drinkMl: null,
+            isFavorite: false,
+            source,
+            uploadId: panel.index === 0 ? uploadId ?? undefined : undefined,
+          }),
+        });
+      }
+      setLabelPanels([]);
+      navigate('/library?shelf=foods');
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : 'Could not import all labels');
+    } finally {
+      setImportAllBusy(false);
+    }
   }
 
   function toggleCandidate(candidate: string): void {
@@ -410,7 +482,34 @@ function FoodEditor({ editId }: { editId: string | null }) {
             ))}
           </ul>
         )}
-        {menuItems.length === 0 && candidates.length > 0 && (
+        {labelPanels.length > 1 && (
+          <div className="label-panel-pick">
+            <h3 className="form-section-title">Multiple nutrition labels</h3>
+            <p className="muted">This photo or PDF has {labelPanels.length} labels. Pick one to edit, or save each as its own food.</p>
+            <ul className="library-list compact-list menu-pick-list">
+              {labelPanels.map((panel) => (
+                <li key={panel.index}>
+                  <button type="button" className="library-item" onClick={() => applyLabelPanel(panel)}>
+                    <span className="library-item-text">
+                      <span className="library-item-title">Label {panel.index + 1}</span>
+                      <span className="library-item-meta">{panel.preview}</span>
+                    </span>
+                    <span className="library-item-kcal">{Math.round(panel.draft.nutrients.calories)} kcal</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="settings-secondary-btn"
+              disabled={importAllBusy}
+              onClick={() => void importAllLabelPanels()}
+            >
+              {importAllBusy ? 'Importing…' : `Import all ${labelPanels.length} as separate foods`}
+            </button>
+          </div>
+        )}
+        {labelPanels.length <= 1 && menuItems.length === 0 && candidates.length > 0 && (
           <div className="pdf-candidate-batch">
             <div className="library-toolbar-top">
               <p className="muted">Name suggestions from the PDF</p>

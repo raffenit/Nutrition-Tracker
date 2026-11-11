@@ -9,7 +9,7 @@ import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
-import { buildNutritionImport } from '../domain/nutritionImport.js';
+import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
 import { extractImageLabel } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
@@ -173,7 +173,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
   await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
   const extracted = await readExtractedText(kind, file.bytes, ctx.config);
-  const built = buildNutritionImport(extracted.text, kind);
+  const built = buildNutritionImportWithPanels(extracted.text, kind);
   if (extracted.slotMergedNutrients) {
     applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
   }
@@ -185,16 +185,13 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
     extractedText: extracted.text,
     createdBy: user.id,
   });
-  sendJson(ctx.res, 200, {
+  sendImportJson(ctx.res, {
     uploadId: saved.id,
     kind,
     warning,
     textPreview: previewExtractedText(extracted.text),
-    draft: { ...built.draft, source: kind },
-    candidates: built.candidates,
-    menuItems: built.menuItems,
-    fieldReview: built.fieldReview,
-    recipeCard: built.recipeCard,
+    built,
+    sourceKind: kind,
     usedOcr: extracted.usedOcr ?? false,
   });
 }
@@ -205,18 +202,47 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
   if (!isRecord(body)) throw new HttpError(400, 'Expected a URL');
   const url = requiredText(body.url, 'URL');
   const fetched = await importNutritionFromUrl(url);
-  const built = buildNutritionImport(fetched.text, fetched.kind, fetched.html);
-  sendJson(ctx.res, 200, {
+  const built = buildNutritionImportWithPanels(fetched.text, fetched.kind, fetched.html);
+  sendImportJson(ctx.res, {
     uploadId: null,
     kind: fetched.kind,
     finalUrl: fetched.finalUrl,
     warning: built.warning,
     textPreview: previewExtractedText(fetched.text),
-    draft: built.draft,
-    candidates: built.candidates,
-    menuItems: built.menuItems,
-    fieldReview: built.fieldReview,
-    recipeCard: built.recipeCard,
+    built,
+    sourceKind: fetched.kind,
+  });
+}
+
+type ImportJsonBody = {
+  uploadId: string | null;
+  kind: 'pdf' | 'image' | 'html';
+  warning: string | null;
+  textPreview: string | null;
+  built: NutritionImportDraft;
+  sourceKind: 'pdf' | 'image' | 'html';
+  finalUrl?: string;
+  usedOcr?: boolean;
+};
+
+function sendImportJson(
+  res: import('node:http').ServerResponse,
+  body: ImportJsonBody,
+): void {
+  const draftSource = body.sourceKind === 'pdf' ? 'pdf' : body.sourceKind === 'image' ? 'image' : 'manual';
+  sendJson(res, 200, {
+    uploadId: body.uploadId,
+    kind: body.kind === 'html' ? 'html' : body.kind,
+    finalUrl: body.finalUrl,
+    warning: body.warning ?? body.built.warning,
+    textPreview: body.textPreview,
+    draft: { ...body.built.draft, source: draftSource },
+    candidates: body.built.candidates,
+    menuItems: body.built.menuItems,
+    fieldReview: body.built.fieldReview,
+    recipeCard: body.built.recipeCard,
+    labelPanels: body.built.labelPanels,
+    usedOcr: body.usedOcr,
   });
 }
 
