@@ -372,7 +372,7 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 **Status:** Done (2026-11-11) — split on repeated Nutrition Facts headings; pick-one or import-all on Add food; per-page PDF OCR/page text for multi-label; Settings household default (`import_all` auto-saves all panels).
 
-**12b — Variety-pack column panels (in progress):** text-matrix parser `parseMultiProductLabelTable.ts` → `labelPanels` (synthetic fixtures in `server/src/test/fixtures/multiProductLabelTables.ts`). **Next:** column-strip OCR when full-page text fails (part B).
+**12b — Variety-pack column panels (in progress):** Part A — text-matrix parser `parseMultiProductLabelTable.ts` → `labelPanels`. **Part B:** `labelColumnStrips.ts` + per-column OCR + `stitchColumnStripTexts` in `extractImageLabel` (done); real-photo validation next.
 
 **Problem:** One camera shot or PDF page may contain **several** separate nutrition labels. Today the pipeline assumes a single label (or PDF menu name list), not multiple label regions.
 

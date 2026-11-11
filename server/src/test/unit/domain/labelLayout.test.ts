@@ -5,6 +5,9 @@ import {
   initialOcrLayoutProfile,
   pickImportTextCandidateIndex,
   shouldRetryWideTableOcr,
+  shouldRunColumnStripOcr,
+  type LabelLayoutFromText,
+  type LabelLayoutHint,
 } from '../../../domain/labelLayout.js';
 import { MULTI_PRODUCT_FIXTURE_SPACED_COLUMNS } from '../../fixtures/multiProductLabelTables.js';
 import { primaryCandidateIndex } from '../../../domain/labelSlotExtract.js';
@@ -43,6 +46,28 @@ test('shouldRetryWideTableOcr only when wide image lacks multi-column parse', ()
 
   const strong = inferLabelLayoutFromText([MULTI_PRODUCT_FIXTURE_SPACED_COLUMNS]);
   assert.equal(shouldRetryWideTableOcr(hint, strong), false);
+});
+
+test('shouldRunColumnStripOcr gate for wide variety-pack recovery', () => {
+  const wide: LabelLayoutHint = { widePanel: true, width: 900, height: 300, aspectRatio: 3 };
+  const narrow: LabelLayoutHint = { widePanel: false, width: 400, height: 800, aspectRatio: 0.5 };
+  const weak: LabelLayoutFromText = {
+    kind: 'single',
+    bestCandidateIndex: 0,
+    multiProductColumnCount: 0,
+    nutritionFactsCount: 1,
+  };
+  const parsed: LabelLayoutFromText = { ...weak, kind: 'multi_column_table', multiProductColumnCount: 3 };
+  const almost: LabelLayoutFromText = { ...weak, multiProductColumnCount: 1 };
+  const repeated: LabelLayoutFromText = { ...weak, kind: 'repeated_nutrition_facts', nutritionFactsCount: 2 };
+  const noNf: LabelLayoutFromText = { ...weak, nutritionFactsCount: 0 };
+
+  assert.equal(shouldRunColumnStripOcr(wide, weak), true);
+  assert.equal(shouldRunColumnStripOcr(wide, almost), true);
+  assert.equal(shouldRunColumnStripOcr(wide, parsed), false);
+  assert.equal(shouldRunColumnStripOcr(wide, repeated), false);
+  assert.equal(shouldRunColumnStripOcr(wide, noNf), false);
+  assert.equal(shouldRunColumnStripOcr(narrow, weak), false);
 });
 
 test('repeated nutrition facts layout picks candidate with most headings', () => {

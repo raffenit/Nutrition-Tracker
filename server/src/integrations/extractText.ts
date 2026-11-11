@@ -5,9 +5,13 @@ import {
   inferLabelLayoutFromText,
   pickImportTextCandidateIndex,
   shouldRetryWideTableOcr,
+  shouldRunColumnStripOcr,
   variantCapBoost,
   type OcrLayoutProfile,
 } from '../domain/labelLayout.js';
+import { parseMultiProductLabelTable } from '../domain/parseMultiProductLabelTable.js';
+import { scoreLabelExtraction } from '../domain/labelSlots.js';
+import { stitchColumnStripOcrTexts } from '../domain/stitchColumnStripTexts.js';
 import {
   mergeSlotReadingsAcrossCandidates,
 } from '../domain/labelSlotExtract.js';
@@ -15,6 +19,7 @@ import type { Nutrients } from '../types.js';
 import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
 import { reportImportJobStep } from '../import/importJobProgress.js';
 import { inferLabelLayoutHint } from './imageLayoutHint.js';
+import { detectColumnStrips, extractColumnStripBuffers } from './labelColumnStrips.js';
 import {
   buildOcrImageVariants,
   easyOcrVariantSubset,
@@ -72,6 +77,20 @@ export async function extractImageLabel(
     );
     candidates = mergeCandidateLists(candidates, retryCandidates);
     layout = inferLabelLayoutFromText(candidates);
+  }
+
+  if (shouldRunColumnStripOcr(hint, layout)) {
+    const stitched = await ocrAndStitchColumnStrips(
+      bytes,
+      cachePath,
+      options?.easyocrModelDir,
+      hint,
+      profiles.at(-1) ?? 'wideTable',
+    );
+    if (stitched) {
+      candidates = mergeCandidateLists([stitched], candidates);
+      layout = inferLabelLayoutFromText(candidates);
+    }
   }
 
   reportImportJobStep('Parse', 'Matching label rows…', 'Selecting the best OCR candidate and merging nutrients.');
@@ -157,4 +176,56 @@ async function collectOcrCandidateTexts(
   mergeUniqueCandidates(seen, out, tessTexts);
   if (out.length === 0) out.push('');
   return out;
+}
+
+async function ocrAndStitchColumnStrips(
+  bytes: Buffer,
+  cachePath: string,
+  modelDir: string | undefined,
+  hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
+  profile: OcrLayoutProfile,
+): Promise<string | null> {
+  const plan = await detectColumnStrips(bytes);
+  if (!plan || plan.strips.length < 2) return null;
+
+  reportImportJobStep(
+    'OCR',
+    'Locating product columns…',
+    `Found ${plan.strips.length} vertical strips — OCR per column.`,
+  );
+
+  const buffers = await extractColumnStripBuffers(bytes, plan);
+  const stripTexts: string[] = [];
+  for (let index = 0; index < buffers.length; index += 1) {
+    reportImportJobStep(
+      'OCR',
+      `Reading column ${index + 1} of ${buffers.length}…`,
+      'Per-column OCR on strip crop.',
+    );
+    const stripCandidates = await collectOcrCandidateTexts(
+      buffers[index]!,
+      cachePath,
+      modelDir,
+      hint,
+      profile,
+    );
+    stripTexts.push(pickBestStripCandidate(stripCandidates));
+  }
+
+  const stitched = stitchColumnStripOcrTexts(stripTexts);
+  if (!stitched || !parseMultiProductLabelTable(stitched)) return null;
+  return stitched;
+}
+
+function pickBestStripCandidate(candidates: string[]): string {
+  let best = candidates[0] ?? '';
+  let bestScore = scoreLabelExtraction(best);
+  for (const candidate of candidates.slice(1)) {
+    const score = scoreLabelExtraction(candidate);
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best;
 }

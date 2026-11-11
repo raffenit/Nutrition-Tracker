@@ -34,6 +34,14 @@ export function shouldRetryWideTableOcr(hint: LabelLayoutHint, layout: LabelLayo
   return true;
 }
 
+/** Part B — per-column OCR when full-page text did not parse as a multi-product table. */
+export function shouldRunColumnStripOcr(hint: LabelLayoutHint, layout: LabelLayoutFromText): boolean {
+  if (!hint.widePanel) return false;
+  if (layout.kind === 'multi_column_table' && layout.multiProductColumnCount >= 2) return false;
+  if (layout.kind === 'repeated_nutrition_facts') return false;
+  return layout.nutritionFactsCount >= 1;
+}
+
 export function inferLabelLayoutFromText(candidates: string[]): LabelLayoutFromText {
   const scored = candidates.map((text, index) => scoreTextLayout(text, index));
   let best = scored[0] ?? emptyLayoutScore(0);

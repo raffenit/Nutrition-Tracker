@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import {
+  DEFAULT_ADAPTIVE_THRESHOLD_PARAMS,
+  resolveAdaptiveBlockSize,
+} from '../../../domain/adaptiveThresholdParams.js';
 import { adaptiveMeanThresholdForTest } from '../../../integrations/adaptiveThreshold.js';
+
+test('adaptive block size scales with min image side', () => {
+  const fraction = DEFAULT_ADAPTIVE_THRESHOLD_PARAMS.variants[0]!.blockSizeFraction;
+  const small = resolveAdaptiveBlockSize(400, 300, fraction);
+  const large = resolveAdaptiveBlockSize(2200, 1800, fraction);
+  assert.ok(small >= DEFAULT_ADAPTIVE_THRESHOLD_PARAMS.minOddBlockSize);
+  assert.ok(large > small);
+  assert.equal(small % 2, 1);
+  assert.equal(large % 2, 1);
+});
 
 test('adaptive mean threshold separates dark text from a gradient background', () => {
   const width = 120;

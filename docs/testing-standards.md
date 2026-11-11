@@ -18,7 +18,7 @@ Full transcript: **`local/test-last-run.log`**. The summary block lists **Server
 1. **Fix type errors first** — do not skip or `--skip-test` deploy to work around `tsc` failures.
 2. **Both server tsconfigs** — production and test configs are checked separately; a file can compile in one and fail in the other.
 3. **Web check on every change** — any `web/` or shared-type change should pass gate 3; server-only edits still run gate 3 in CI/deploy.
-4. **Behavior tests** — non-trivial server behavior gets tests under `server/src/test/` (see [server/src/test/README.md](../server/src/test/README.md)); prefer layout-pattern fixtures over one-off product strings (see [AGENTS.md](../AGENTS.md)).
+4. **Behavior tests** — non-trivial server behavior gets tests under `server/src/test/` (see [server/src/test/README.md](../server/src/test/README.md)); prefer layout-pattern fixtures over one-off product strings (see [AGENTS.md](../AGENTS.md)). Image heuristics: fractional layouts and multi-scale checks per [resolution-invariant-image-pipelines.md](./resolution-invariant-image-pipelines.md).
 5. **No duplicate “check” scripts** — use `npm test` at repo root; package scripts are `server` `check` / `check:test` / `test:run` and `web` `check`.
 
 ### Related commands

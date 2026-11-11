@@ -32,6 +32,13 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | OCR orchestration | `server/src/integrations/extractText.ts` | `extractImageLabel`, `extractPdfText` |
 | Layout routing (wide table / candidate pick) | `server/src/domain/labelLayout.ts`, `server/src/integrations/imageLayoutHint.ts` | `inferLabelLayoutFromText`, `pickImportTextCandidateIndex`, `inferLabelLayoutHint` |
 | Import job progress (server phases) | `server/src/import/importJobProgress.ts`, `web/src/lib/runImportWithProgress.ts` | `reportImportJobStep`, `GET /api/import-jobs/:id`, `createImportProgressRunner` |
+| Variety-pack column strips (12b part B) | `server/src/integrations/labelColumnStrips.ts` | `detectColumnStrips`, `extractColumnStripBuffers`, `shouldRunColumnStripOcr` |
+| Column strip stitch | `server/src/domain/stitchColumnStripTexts.ts` | `stitchColumnStripOcrTexts`; wired in `extractImageLabel` |
+| Image analysis geometry (shared) | `server/src/domain/imageAnalysisGeometry.ts` | `IMAGE_ANALYSIS_WIDTH`, side/crop fractions |
+| Column-strip geometry | `server/src/domain/columnStripDetectParams.ts` | `DEFAULT_COLUMN_STRIP_DETECT_PARAMS` |
+| Focus crop geometry | `server/src/domain/focusCropParams.ts` | `DEFAULT_FOCUS_CROP_PARAMS` |
+| Adaptive threshold geometry | `server/src/domain/adaptiveThresholdParams.ts` | `blockSizeFraction` vs `min(width,height)` |
+| Resolution-invariant pipelines doc | [resolution-invariant-image-pipelines.md](./resolution-invariant-image-pipelines.md) | Named fraction params for image geometry |
 | Image preprocess (Sharp) | `server/src/integrations/ocrPreprocess.ts` | `buildOcrImageVariants`, `easyOcrVariantSubset`, `tesseractVariantSubset` |
 | Focus / threshold variants | `server/src/integrations/focusCrop.ts`, `adaptiveThreshold.ts` | `focusCropVariants`, `adaptiveThresholdVariants` |
 | EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `easyOcrPassEnvironments` |
