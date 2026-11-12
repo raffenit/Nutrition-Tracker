@@ -56,6 +56,18 @@ test('parseMultiProductLabelTable tolerates bare percent lines between macros', 
   assert.equal(cols[0]?.nutrients.sodium, 210);
 });
 
+test('parseMultiProductLabelTable prefers gap split over OCR pipe noise', () => {
+  const cols = parseMultiProductLabelTable(`Nutrition Facts
+Snack A    Snack B    Snack C
+Calories
+90 | 5%    110 | 6%    80 | 4%
+Total Fat
+5g  6g  7g`);
+  assert.ok(cols && cols.length === 3);
+  assert.equal(cols[0]?.nutrients.calories, 90);
+  assert.equal(cols[1]?.nutrients.calories, 110);
+});
+
 test('parseMultiProductLabelTable ignores single-product panels', () => {
   const cols = parseMultiProductLabelTable(MULTI_PRODUCT_FIXTURE_SINGLE_PANEL);
   assert.equal(cols, null);

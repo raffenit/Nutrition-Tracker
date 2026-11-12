@@ -65,6 +65,11 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
       continue;
     }
 
+    if (pendingRow && cells.length >= columnCount) {
+      applyRowValues(columns, pendingRow, padValues(cells, columnCount));
+      pendingRow = null;
+      continue;
+    }
     if (pendingRow && isValueOnlyLine(cells)) {
       applyRowValues(columns, pendingRow, padValues(cells, columnCount));
       pendingRow = null;
@@ -122,8 +127,10 @@ function looksLikeProductName(cell: string): boolean {
 
 function splitTableCells(line: string): string[] {
   if (line.includes('\t')) return line.split('\t').map((cell) => cell.trim()).filter(Boolean);
+  const byGap = line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+  if (byGap.length >= 2) return byGap;
   if (line.includes('|')) return line.split('|').map((cell) => cell.trim()).filter(Boolean);
-  return line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+  return byGap;
 }
 
 function matchNutrientRowLabel(line: string): string | null {
