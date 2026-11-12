@@ -411,14 +411,20 @@ async function ocrAndStitchSharedLabelPlan(
     return null;
   }
   const parsed = parseMultiProductLabelTable(stitched);
-  if (!parsed || parsed.length < 2) {
-    appendImportJobDebug(
-      `shared-label grid: stitch did not parse as multi-product (${parsed?.length ?? 0} columns)`,
-    );
-    return null;
+  if (parsed && parsed.length >= 2) {
+    appendImportJobDebug(`shared-label grid: stitch OK — ${parsed.length} products`);
+    return stitched;
   }
-  appendImportJobDebug(`shared-label grid: stitch OK — ${parsed.length} products`);
-  return stitched;
+  if (stitchDiag.ok) {
+    appendImportJobDebug(
+      `shared-label grid: stitch structurally OK; parse saw ${parsed?.length ?? 0} columns — returning stitched OCR`,
+    );
+    return stitched;
+  }
+  appendImportJobDebug(
+    `shared-label grid: stitch did not parse as multi-product (${parsed?.length ?? 0} columns)`,
+  );
+  return null;
 }
 
 async function ocrSplitSingleLabel(

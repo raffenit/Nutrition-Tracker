@@ -58,6 +58,12 @@ export function buildNutritionImportWithPanels(
   html: string | null = null,
   pageTexts: string[] | null = null,
 ): NutritionImportDraft {
+  const multiProductEarly = parseMultiProductLabelTable(text);
+  if (multiProductEarly && multiProductEarly.length >= 2) {
+    const primary = buildNutritionImport(text, kind, html);
+    return panelsFromMultiProductColumns(multiProductEarly, text, kind, primary.warning);
+  }
+
   const primary = buildNutritionImport(text, kind, html);
   if (primary.menuItems.length > 0 || primary.recipeCard) {
     return { ...primary, labelPanels: [] };
@@ -73,10 +79,6 @@ export function buildNutritionImportWithPanels(
   const fallbackBlocks = splitNutritionLabelTexts(text);
   if (blocksLookLikeSeparateLabels(fallbackBlocks)) {
     return panelsFromBlocks(fallbackBlocks, text, kind, html, primary.warning);
-  }
-  const multiProduct = parseMultiProductLabelTable(text);
-  if (multiProduct && multiProduct.length >= 2) {
-    return panelsFromMultiProductColumns(multiProduct, text, kind, primary.warning);
   }
   return { ...primary, labelPanels: [] };
 }
