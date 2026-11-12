@@ -59,3 +59,27 @@ test('diagnoseSharedLabelGridStitch reports row_count_zero', () => {
   const diag = diagnoseSharedLabelGridStitch('Nutrition Facts\nCalories', ['footnote only', '90'], '');
   assert.equal(diag.failure, 'too_few_product_columns');
 });
+
+test('extractRowLabels finds nutrients when OCR prefixes garbage on the line', () => {
+  const garbled = `
+5, hl = Calories
+i "| Saturated Fat
+: j wl Trans Fat
+ly ). Cholesterol
+; 1 [Sodium
+LY (J Total Carbohyd
+» J Dietary Fiber
+i Total Sugars
+Protein
+`;
+  const diag = diagnoseSharedLabelGridStitch(
+    garbled,
+    [
+      'SNICKERS\n% Daily Value*\nVaries\n90\n5g\n120mg',
+      'TWIX\n% Daily Value*\nVaries\n110\n6g\n140mg',
+    ],
+    'Snack A    Snack B',
+  );
+  assert.ok(diag.rowLabelCount >= 4, `expected row labels, got ${diag.rowLabelCount}`);
+  assert.equal(diag.failure, null);
+});

@@ -2,6 +2,9 @@ import { SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN } from './splitSingleLabelParams
 
 const NUTRIENT_ROW =
   /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|includes.+added sugars|protein)\b/i;
+/** Nutrient name anywhere on a line — shared label-column OCR often prefixes garbage. */
+const NUTRIENT_ROW_INLINE =
+  /\b(calories|total\s+fat|saturated\s+fat|trans\s+fat|cholesterol|sodium|total\s+carb(?:ohydrate|ohyd\w*)?|dietary\s+fiber|(?<!dietary\s)\bfiber\b|total\s+sugars?|includes[^\n]{0,40}added\s+sugars?|protein)\b/gi;
 const SKIP_LINE = /^(nutrition\s+facts|serving size|servings per|amount per serving|\*|% daily value)/i;
 
 export type SharedLabelGridStitchFailure =
@@ -109,20 +112,41 @@ function filterProductColumns(valueColumnTexts: string[]): Array<{ text: string;
 }
 
 function extractRowLabels(text: string): string[] {
+  const seen = new Set<string>();
   const labels: string[] = [];
+  const push = (raw: string) => {
+    const norm = normalizeRowLabel(raw.replace(/\s+/g, ' ').trim());
+    const key = norm.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    labels.push(norm);
+  };
+
   const lines = text.replace(/\r/g, '\n').split(/\n/).map((line) => line.trim()).filter(Boolean);
   for (const line of lines) {
     if (SKIP_LINE.test(line)) continue;
     if (/%\s*daily\s*value/i.test(line)) continue;
-    const inline = line.match(
+    const lineStart = line.match(
       /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|protein)\b/i,
     );
-    if (inline) {
-      labels.push(normalizeRowLabel(inline[0]!));
+    if (lineStart) {
+      push(lineStart[0]!);
       continue;
     }
     const labelOnly = line.match(NUTRIENT_ROW);
-    if (labelOnly) labels.push(normalizeRowLabel(labelOnly[1]!));
+    if (labelOnly) {
+      push(labelOnly[1]!);
+      continue;
+    }
+    for (const match of line.matchAll(NUTRIENT_ROW_INLINE)) {
+      push(match[1]!);
+    }
+  }
+
+  if (labels.length === 0) {
+    for (const match of text.matchAll(NUTRIENT_ROW_INLINE)) {
+      push(match[1]!);
+    }
   }
   return labels;
 }
