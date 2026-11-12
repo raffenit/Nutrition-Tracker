@@ -68,7 +68,7 @@ async function thresholdPreppedGreyscale(
 ): Promise<Buffer> {
   const { data, info } = await prepped.clone().raw().toBuffer({ resolveWithObject: true });
   const binary = adaptiveMeanThreshold(new Uint8Array(data), info.width, info.height, blockSize, c);
-  return sharp(binary, { raw: { width, height, channels: 1 } }).png().toBuffer();
+  return sharp(binary, { raw: { width: info.width, height: info.height, channels: 1 } }).png().toBuffer();
 }
 
 /** Exported for unit tests (synthetic gradients without Sharp normalize). */
