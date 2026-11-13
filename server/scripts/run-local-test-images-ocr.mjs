@@ -1,6 +1,9 @@
 /**
  * Full extractImageLabel + import build on local/test-images/*.jpg
  * Usage: npm run build && node scripts/run-local-test-images-ocr.mjs
+ *
+ * Live progress: streams the same import steps/messages as the app (Receive → Draft)
+ * and pipeline debug lines. Set IMPORT_JOB_CLI_PROGRESS=0 to silence and print debug tail only.
  */
 import { readFile, readdir, access } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,10 +20,18 @@ import {
 } from '../dist/integrations/varietyPackGridPipeline.js';
 import { detectSplitSingleLabel } from '../dist/integrations/splitSingleLabel.js';
 import {
+  finishImportJob,
   getImportJobForUser,
   newImportJobId,
   runWithImportJob,
 } from '../dist/import/importJobProgress.js';
+import {
+  formatImportJobSnapshotBlock,
+  startImportJobConsoleWatch,
+  stopImportJobConsoleWatch,
+} from '../dist/import/importJobCliProgress.js';
+
+const streamImportProgress = process.env.IMPORT_JOB_CLI_PROGRESS !== '0';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const imageDir = path.join(repoRoot, 'local/test-images');
@@ -96,11 +107,29 @@ for (const name of names) {
 
   const t0 = Date.now();
   const jobId = newImportJobId();
+  const progressUser = 'local-ocr-script';
   let result;
   try {
-    result = await runWithImportJob(jobId, 'local-ocr-script', 'image', () =>
-      extractImageLabel(bytes, tessCache, { easyocrModelDir }),
-    );
+    if (streamImportProgress) {
+      console.log('import progress (same steps as in-app import):');
+    }
+    result = await runWithImportJob(jobId, progressUser, 'image', async () => {
+      let stopWatch = () => {};
+      if (streamImportProgress) {
+        stopWatch = startImportJobConsoleWatch(jobId, progressUser, { pollMs: 350, streamDebug: true });
+      }
+      try {
+        return await extractImageLabel(bytes, tessCache, { easyocrModelDir });
+      } finally {
+        stopWatch();
+        stopImportJobConsoleWatch(jobId);
+        finishImportJob(jobId);
+        if (streamImportProgress) {
+          const finalSnap = getImportJobForUser(jobId, progressUser);
+          if (finalSnap) console.log(formatImportJobSnapshotBlock(finalSnap));
+        }
+      }
+    });
   } catch (err) {
     console.error('extractImageLabel failed:', err);
     continue;
@@ -113,12 +142,14 @@ for (const name of names) {
     console.log(`stitch metrics: ${JSON.stringify(stitchMetrics)}`);
   }
 
-  const trail = debug.filter((l) =>
-    /geometry preflight|geometry: skip|shared-label grid:|variety pack|column-strip|stitch|split-single/i.test(l),
-  );
-  if (trail.length) {
-    console.log('pipeline debug (tail):');
-    for (const line of trail.slice(-20)) console.log(`  ${line}`);
+  if (!streamImportProgress) {
+    const trail = debug.filter((l) =>
+      /geometry preflight|geometry: skip|shared-label grid:|variety pack|column-strip|stitch|split-single/i.test(l),
+    );
+    if (trail.length) {
+      console.log('pipeline debug (tail):');
+      for (const line of trail.slice(-20)) console.log(`  ${line}`);
+    }
   }
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
