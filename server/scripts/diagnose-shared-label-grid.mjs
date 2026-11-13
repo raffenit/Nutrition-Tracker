@@ -11,13 +11,19 @@ import {
   formatVarietyPackStepValidation,
   runVarietyPackGridPipeline,
 } from '../dist/integrations/varietyPackGridPipeline.js';
-import { extractSharedLabelGridBuffers } from '../dist/integrations/sharedLabelValueGrid.js';
+import {
+  extractSharedLabelColumnPngsByRowBands,
+  extractSharedLabelGridBuffers,
+  useRowBandSliceOcrForPlan,
+} from '../dist/integrations/sharedLabelValueGrid.js';
 import { buildColumnStripOcrVariants } from '../dist/integrations/ocrPreprocess.js';
 import { recognizeTesseractBatch } from '../dist/integrations/tesseractOcr.js';
 import {
   diagnoseSharedLabelGridStitch,
   stitchSharedLabelGridTexts,
 } from '../dist/domain/stitchSharedLabelGridTexts.js';
+import { separateSharedLabelValueTexts } from '../dist/domain/sharedLabelColumnSeparation.js';
+import { analyzeSharedLabelGridStageReport } from '../dist/domain/sharedLabelGridStageReport.js';
 import { parseMultiProductLabelTable } from '../dist/domain/parseMultiProductLabelTable.js';
 import { scoreLabelExtraction } from '../dist/domain/labelSlots.js';
 
@@ -82,7 +88,21 @@ if (!plan) {
   process.exit(1);
 }
 
-console.log('plan: label width', plan.labelColumn.width, 'value columns', plan.valueColumns.length);
+const rowBandOcr = useRowBandSliceOcrForPlan(plan);
+console.log(
+  'plan: label width',
+  plan.labelColumn.width,
+  'value columns',
+  plan.valueColumns.length,
+  'body top',
+  plan.nutrientBodyTop,
+  'body h',
+  plan.nutrientBodyHeight,
+  'row slices',
+  plan.rowBandSlices.length,
+  'rowOcr',
+  rowBandOcr,
+);
 
 const crops = await extractSharedLabelGridBuffers(bytes, plan);
 await writeFile(path.join(outDir, 'label-column.png'), crops.labelColumn);
@@ -91,24 +111,45 @@ for (let i = 0; i < crops.valueColumns.length; i += 1) {
   await writeFile(path.join(outDir, `value-${String(i + 1).padStart(2, '0')}.png`), crops.valueColumns[i]);
 }
 
-const labelOcr = await ocrCrop(crops.labelColumn, 'diag-label');
-const headerOcr = await ocrCrop(crops.headerBand, 'diag-header');
-const valueOcrs = [];
-for (let i = 0; i < crops.valueColumns.length; i += 1) {
-  valueOcrs.push(await ocrCrop(crops.valueColumns[i], `diag-value-${i + 1}`));
+async function ocrColumnByRowBands(column, fallbackPng, name) {
+  const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, plan.rowBandSlices);
+  if (slicePngs.length === 0) {
+    return ocrCrop(fallbackPng, `${name}-body`);
+  }
+  const lines = [];
+  for (let i = 0; i < slicePngs.length; i += 1) {
+    await writeFile(path.join(outDir, `${name}-row-${String(i + 1).padStart(2, '0')}.png`), slicePngs[i]);
+    lines.push((await ocrCrop(slicePngs[i], `${name}-row-${i + 1}`)).text.trim());
+  }
+  const text = lines.filter(Boolean).join('\n');
+  return { text, score: scoreLabelExtraction(text), variantCount: slicePngs.length };
 }
 
-const stitched = stitchSharedLabelGridTexts(
-  labelOcr.text,
-  valueOcrs.map((v) => v.text),
-  headerOcr.text,
-);
-const diag = diagnoseSharedLabelGridStitch(
-  labelOcr.text,
-  valueOcrs.map((v) => v.text),
-  headerOcr.text,
-);
+const headerOcr = await ocrCrop(crops.headerBand, 'diag-header');
+const labelOcr = rowBandOcr
+  ? await ocrColumnByRowBands(plan.labelColumn, crops.labelColumn, 'diag-label')
+  : await ocrCrop(crops.labelColumn, 'diag-label');
+const valueOcrs = [];
+for (let i = 0; i < plan.valueColumns.length; i += 1) {
+  const col = plan.valueColumns[i];
+  valueOcrs.push(
+    rowBandOcr
+      ? await ocrColumnByRowBands(col, crops.valueColumns[i], `diag-value-${i + 1}`)
+      : await ocrCrop(crops.valueColumns[i], `diag-value-${i + 1}`),
+  );
+}
+
+const stitched = stitchSharedLabelGridTexts(labelOcr.text, productValueTexts, headerOcr.text);
+const diag = diagnoseSharedLabelGridStitch(labelOcr.text, productValueTexts, headerOcr.text);
 const parsed = stitched ? parseMultiProductLabelTable(stitched) : null;
+const rawValueTexts = valueOcrs.map((v) => v.text);
+const { valueColumnTexts: productValueTexts, droppedIndexes: labelBleedDropped } =
+  separateSharedLabelValueTexts(labelOcr.text, rawValueTexts);
+const stageReport = analyzeSharedLabelGridStageReport(
+  labelOcr.text,
+  productValueTexts,
+  headerOcr.text,
+);
 
 const report = {
   imagePath,
@@ -118,6 +159,10 @@ const report = {
     labelWidthPx: plan.labelColumn.width,
     valueColumnCount: plan.valueColumns.length,
     headerHeightPx: plan.headerBand.height,
+    nutrientBodyTopPx: plan.nutrientBodyTop,
+    nutrientBodyHeightPx: plan.nutrientBodyHeight,
+    rowBandSliceCount: plan.rowBandSlices.length,
+    rowBandOcr,
   },
   ocr: {
     label: { score: labelOcr.score, chars: labelOcr.text.length, preview: labelOcr.text.slice(0, 400) },
@@ -131,6 +176,14 @@ const report = {
     })),
   },
   stitch: { ...diag, parsedCount: parsed?.length ?? 0, stitchedPreview: stitched?.slice(0, 800) ?? null },
+  stageReport: {
+    rowLabels: stageReport.rowLabels,
+    valueLineCounts: stageReport.valueLineCounts,
+    macroImportBlocker: stageReport.macroImportBlocker,
+    calorieColumnCount: stageReport.calorieColumnCount,
+    macroColumnCount: stageReport.macroColumnCount,
+  },
+  labelBleedDropped,
 };
 
 await writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));

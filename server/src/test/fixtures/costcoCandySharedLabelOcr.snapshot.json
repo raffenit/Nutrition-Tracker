@@ -1,0 +1,41 @@
+{
+  "sourceImage": "costco-candy.jpg",
+  "capturedAt": "2026-11-13T05:04:54.750Z",
+  "geometry": {
+    "lastOkStep": 4,
+    "valueColumnCount": 10,
+    "rowBandOcr": false,
+    "rowBandSliceCount": 7,
+    "rowPitchPx": 50
+  },
+  "labelColumnText": "x » a= ¥ a F\n0? 3 b> A a\na oe Ph\nRe BN Servos\nre i Serving si:\n“Von, a 5\n. 3 A [Amount per se\nyal [Calories\n4 3 F iE i\nA BN pew\ni Ei \"| Saturated Fat\n; ) i Trans Fat\nN 4 Cholesterol\n; RN, \"Sodium\nNd (3 Total Carbohyd\nIS Sl J\n",
+  "headerBandText": "§ - & ig he\ngo Fe. — V4 & - fi 0\n— i al a 2 Zz E . bE ; :\n= REI td . A gt ee 2 a -\n",
+  "valueColumnTexts": [
+    "TC a\na A tne. mre.\n ————\non Facts |\ncainer\nry (ESET al\nving\nCr CT ———\nHeel ew A\n",
+    "A = i\nIYPES AN!\nEn\nKIT KAT® SN\nWafer Bar Fu\nEemeR TERE s=m=——\nVaries\n2 Packs (28g)\nERIE). | Ea\nee — SS Fea\n% Daily Value* | %Da\nTo % [4\n45g 23% 159\n- at\n<5mg 0% | Omg\n15mg 1% | 40mg\n19g 7% | 10g\n",
+    ". —\nee. SEE\ner  ——\n=\nICKERS® M&M'S® Pe;\n1 Size Bar Chocolate Ca\n= 1 Lats aa ——\nVaries Va\n1Bar (17g) 1 Pack (\nSFT EE | eas\ne— = _ ___\nily Value* % Daily Valu\n5% | 5g\n8% | 2g\net HR\n0% | Omg\n2% | 10mg\n4% | Nig\n",
+    "~\n\ni A—e—\nES WILL VARY A IH\n— Re\nnut TWIx®\nndies Fun Size Bar C\na TENE e— F\nries Varies\n18g) ar (16g)\n|e eam | |\n| oss |\ne* % Daily Value*\n\n6% | 35g 4%\n10% | 2g 10%\n\n0g\n\n0% | Omg 0%\n\n0% | 30mg 1%\n\n4% | Nig 4%\n",
+    "3 A G RIAY A } f L L HN\n\nM&M'S® Milk MILK\nhocolate Candies Fun $\namie = CIE | E—\n\nVaries\n\n2 Packs (27g) 1\nSERENE | TEE\nEm mesEs——— a em —\n% Daily Value* % Daily\n5 6% | 30\n3a 15% | 2g\n0g 0g\nOmg 0% | Omg\n20mg 1% | 25mg\n19g 7% | 129\n",
+    "a N L \\ E eS i\n© a—\nWA | RE\n— | e——\nVaries var!\nBar (17g) | 2 Pieces (3\n6\n— | 5% Daily Value\n4% | 9g I\n10% | 3g I\n\n0g\n0% | <5mg (\n1% | 100mg 4\n4% | 18g ,\n",
+    "yd\n\nRY a\nle —\n\nMUSKETEERS®\nud : Fun Size Bar\n— A ——\nes Varies\n1g) 2 Bars (30g)\nI Ew $a\nad ESE. J\n| % Daily Vaiue*\n2% | 49 5%\n% | 2.59 13%\n— LT\n% | Omg 0% |\n% | 55mg 2% | |\n%| 289 gx:\n",
+    "—\nBUTTERFINGER® | AL\n— C5\nVaries\n2Bars (37g) | 2P\nia SVEN EES\n170)\n% Daily Value* _ | % Dai\nLE Ey.\nsg w% |g\n0g 0g\nOmg 0% omg\n10mg 5% | 45mg\n5g 9% [20g\n",
+    "| [iar xr wa\n\n(NGREDIENT\n\ncom} ARTUACIAL F\n\nSNICKERS®\n\nMOND JOY* INGREDIENT\n\nandy Bar ij FLAVOR. CON\n\nem MAM'S® PE\n\nVaries NGREDIENT\njeces (34g) olL,\n\na fain\n\nTWIX® FUN §\n\nINGREDIENT:\n\n170 [=o\n\nCONTAINS: M\n\nES SA MEM'S® MIL\n\nly Value® = BN nGReDiENT:\n\n12% COLORS (INCL\n\n35% || xy ware\n\n———————— INGREDIENTS\n\nee [ cocorrown\n\n0% Bb Resse's Pen\n\n— TT TT ——— INGREDIENTS\n\n2% CONTAINS: PE\n\n7% 3 MUSKETEERS\n",
+    "FER BAR\n\n3: SUGAR, WHEAT FLOUR, COCOA BUTTER\nFUN SIZE BAR\n\nS: MILK CHOCOLATE (SUGAR, COCOA BUY\nTAINS: PEANUTS, MILK, EGGS, AND SOX\nANUT CHOCOLATE CANDIES\n\nS$: MILK CHOCOLATE (SUGAR, CHOCOLAT\nRUP, DEXTRIN, COLORS (INCLUDES BLUE\nK, AND SOY. MAY CONTAIN: TREE NUTS.\n{ZE BAR\n\n5: MILK CHOCOLATE (SUGAR, COCOA BU\nE, RIBOFLAVIN, FOLIC ACID), SUGAR, PAL\nILK, SOY AND WHEAT MAY CONTAIN: F\nK CHOCOLATE CANDIES\n\n3: MILK CHOCOLATE (SUGAR, CHOCOU\nUDES BLLIE 1 LAKE, YELLOW 6, RED 40\nNUTS.\n\nFUN SIZE BAR\n\nx MILK CHOCOLATE (SUGAR, COCOA B\nER PROCESSED WITH ALKALL BARLEY\nJUT BUTTER CUP\n\n: MILK CHOCOLATE (SUGAR, COCOA Bi\nANUTS, MILK, SOY\n\nIS® FUN SIZE BAR\n"
+  ],
+  "ocrScores": {
+    "label": 5.5,
+    "header": 0,
+    "values": [
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      0
+    ]
+  }
+}
