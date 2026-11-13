@@ -204,8 +204,12 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
       const extracted = await readExtractedText(kind, file.bytes, ctx.config);
       reportImportJobStep('Draft', 'Building your draft…', 'Applying parsers and import panels.');
-      const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts);
-      if (extracted.slotMergedNutrients) {
+      const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts, {
+        varietyPackExpectedColumns: extracted.varietyPackExpectedColumns,
+      });
+      const varietyPackPanels =
+        (extracted.varietyPackExpectedColumns ?? 0) >= 2 && built.labelPanels.length > 0;
+      if (extracted.slotMergedNutrients && !varietyPackPanels) {
         applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
       }
       const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
@@ -436,6 +440,7 @@ async function readExtractedText(
   slotMergedNutrients: Nutrients | null;
   usedOcr?: boolean;
   pageTexts: string[] | null;
+  varietyPackExpectedColumns?: number;
 }> {
   try {
     if (kind === 'pdf') {
@@ -450,14 +455,19 @@ async function readExtractedText(
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
       return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts };
     }
-    const { text, slotMergedNutrients } = await extractImageLabel(bytes, config.tessdataDir, {
-      easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
-    });
+    const { text, slotMergedNutrients, varietyPackExpectedColumns } = await extractImageLabel(
+      bytes,
+      config.tessdataDir,
+      {
+        easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
+      },
+    );
     return {
       text,
       warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.',
       slotMergedNutrients,
       pageTexts: null,
+      varietyPackExpectedColumns,
     };
   } catch {
     return {

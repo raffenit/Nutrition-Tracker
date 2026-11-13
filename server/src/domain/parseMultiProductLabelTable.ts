@@ -86,8 +86,11 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
     }
   }
 
-  const filled = columns.filter((col) => col.nutrients.calories > 0 || col.nutrients.protein > 0);
-  if (filled.length < 2) return null;
+  const withMacros = columns.filter((col) => col.nutrients.calories > 0 || col.nutrients.protein > 0);
+  if (withMacros.length < 1) {
+    if (names.length >= 2) return columns;
+    return null;
+  }
   return columns;
 }
 

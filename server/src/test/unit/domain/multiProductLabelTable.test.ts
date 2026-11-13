@@ -79,3 +79,37 @@ test('buildNutritionImportWithPanels exposes multi-product columns as labelPanel
   assert.equal(built.labelPanels[1]?.draft.name, 'Cocoa Bar');
   assert.equal(built.labelPanels[1]?.draft.nutrients.calories, 150);
 });
+
+test('varietyPackExpectedColumns always returns placeholder panels without table parse', () => {
+  const built = buildNutritionImportWithPanels('noise only', 'image', null, null, {
+    varietyPackExpectedColumns: 10,
+  });
+  assert.equal(built.labelPanels.length, 10);
+  assert.equal(built.menuItems.length, 0);
+  assert.match(built.warning ?? '', /Read 0 of 10/);
+  assert.equal(built.draft.nutrients.calories, 0);
+});
+
+test('buildNutritionImportWithPanels pads panels when parse fails but stitch text looks structured', () => {
+  const stitchedNoParse = `
+Nutrition Facts
+Column 1 | Column 2 | Column 3
+Calories 90 zz yy
+Total Fat 3g 4g zz
+`;
+  const built = buildNutritionImportWithPanels(stitchedNoParse, 'image', null, null, {
+    varietyPackExpectedColumns: 3,
+  });
+  assert.equal(built.labelPanels.length, 3);
+  assert.match(built.warning ?? '', /3 of 3|3 products/);
+});
+
+test('buildNutritionImportWithPanels pads missing variety-pack columns for manual entry', () => {
+  const built = buildNutritionImportWithPanels(MULTI_PRODUCT_FIXTURE_SPACED_COLUMNS, 'image', null, null, {
+    varietyPackExpectedColumns: 4,
+  });
+  assert.equal(built.labelPanels.length, 4);
+  assert.equal(built.labelPanels[3]?.draft.name, 'Product 4');
+  assert.ok(built.labelPanels[3]?.warning);
+  assert.match(built.warning ?? '', /Read 3 of 4/);
+});

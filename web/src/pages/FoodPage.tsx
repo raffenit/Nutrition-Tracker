@@ -57,6 +57,7 @@ type LabelPanelImport = {
     kind: 'packaged' | 'restaurant';
   };
   fieldReview?: ImportFieldReviewMap;
+  warning?: string | null;
 };
 
 type ImportResult = {
@@ -445,7 +446,9 @@ function FoodEditor({ editId }: { editId: string | null }) {
                       <span className="library-item-title">Label {panel.index + 1}</span>
                       <span className="library-item-meta">{panel.preview}</span>
                     </span>
-                    <span className="library-item-kcal">{Math.round(panel.draft.nutrients.calories)} kcal</span>
+                    <span className="library-item-kcal">
+                      {panel.warning ? 'Needs review' : `${Math.round(panel.draft.nutrients.calories)} kcal`}
+                    </span>
                   </button>
                 </li>
               ))}

@@ -55,9 +55,28 @@ test('stitchSharedLabelGridTexts accepts word values like Varies and units', () 
   assert.equal(diag.ok, true);
 });
 
-test('diagnoseSharedLabelGridStitch reports row_count_zero', () => {
+test('diagnoseSharedLabelGridStitch reports when output lacks calories row', () => {
   const diag = diagnoseSharedLabelGridStitch('Nutrition Facts\nCalories', ['footnote only', '90'], '');
-  assert.equal(diag.failure, 'too_few_product_columns');
+  assert.equal(diag.failure, 'missing_calories_in_output');
+});
+
+test('stitchSharedLabelGridTexts keeps weak columns as blank cells', () => {
+  const stitched = stitchSharedLabelGridTexts(
+    'Nutrition Facts\nCalories\nTotal Fat',
+    [
+      '% Daily Value*\n90\n5g',
+      '% Daily Value*\n110\n6g',
+      'INGREDIENTS: SUGAR, FLOUR, MILK',
+    ],
+    'Snack A    Snack B    Snack C',
+  );
+  assert.ok(stitched);
+  assert.match(stitched!, /Snack A  Snack B  Snack C/);
+  assert.match(stitched!, /90 {2}110 {2}$/m);
+  const cols = parseMultiProductLabelTable(stitched!);
+  assert.equal(cols?.length, 3);
+  assert.equal(cols![0]!.nutrients.calories, 90);
+  assert.equal(cols![2]!.nutrients.calories, 0);
 });
 
 test('extractRowLabels finds nutrients when OCR prefixes garbage on the line', () => {
