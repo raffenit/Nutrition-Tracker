@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import {
   buildPerColumnVarietyPackPlanFromPipeline,
   buildSharedLabelPlanFromPipeline,
+  productColumnsForUniformityWidthCheck,
+  sharedRailProductValueColumns,
   prepareVarietyPackBandContext,
   runVarietyPackGridStep1,
   runVarietyPackGridStep2,
@@ -49,6 +51,44 @@ test('runVarietyPackGridPipeline stopAfterStep halts before OCR plan', async () 
   assert.equal(full.lastOkStep, 4);
   assert.ok(full.plan);
   assert.equal(full.plan!.valueColumns.length, DEFAULT_SHARED_LABEL_GRID.count);
+  assert.ok(full.plan!.nutrientBodyTop > full.plan!.band.top);
+  assert.ok(full.plan!.rowBandSlices.length >= 3);
+  assert.equal(full.plan!.labelColumn.top, full.plan!.band.top);
+  assert.ok(
+    full.plan!.labelColumn.height >= full.plan!.nutrientBodyHeight,
+    'label rail OCR crop spans header + nutrient body',
+  );
+  const labelRight = full.plan!.labelColumn.left + full.plan!.labelColumn.width;
+  for (const col of full.plan!.valueColumns) {
+    assert.equal(col.top, full.plan!.nutrientBodyTop);
+    assert.equal(col.height, full.plan!.nutrientBodyHeight);
+    assert.ok(col.left >= labelRight - 1, 'value strips must not overlap label rail');
+  }
+});
+
+test('sharedRailProductValueColumns drops the label rail from product stacks', () => {
+  const label = { index: 0, x0: 0, x1: 120, horizontalRuleCount: 2 };
+  const products = [
+    label,
+    { index: 1, x0: 120, x1: 220, horizontalRuleCount: 10 },
+    { index: 2, x0: 220, x1: 320, horizontalRuleCount: 10 },
+  ];
+  const valueOnly = sharedRailProductValueColumns(products, label);
+  assert.equal(valueOnly.length, 2);
+  assert.equal(valueOnly[0]!.x0, 120);
+});
+
+test('productColumnsForUniformityWidthCheck ignores wide left label rail', () => {
+  const categories = [
+    { index: 0, x0: 0, x1: 200, horizontalRuleCount: 12 },
+    { index: 1, x0: 200, x1: 300, horizontalRuleCount: 12 },
+    { index: 2, x0: 300, x1: 400, horizontalRuleCount: 12 },
+  ];
+  const productColumns = [...categories];
+  const widths = productColumnsForUniformityWidthCheck(categories, productColumns, 1.35).map(
+    (c) => c.x1 - c.x0,
+  );
+  assert.deepEqual(widths, [100, 100]);
 });
 
 test('synthetic per-column variety pack classifies per_column_labels', async () => {
@@ -93,7 +133,9 @@ test('buildPerColumnVarietyPackPlanFromPipeline maps ruled columns to strips', a
   const stripPlan = buildPerColumnVarietyPackPlanFromPipeline(ctx!, step3.data!);
   assert.ok(stripPlan);
   assert.equal(stripPlan!.strips.length, step3.data!.valueColumns.length);
-  assert.equal(buildSharedLabelPlanFromPipeline(ctx!, runVarietyPackGridStep2(ctx!, step1.data!).data!, step3.data!), null);
+  const step2 = runVarietyPackGridStep2(ctx!, step1.data!);
+  const step4 = runVarietyPackGridStep4(ctx!, step3.data!);
+  assert.equal(buildSharedLabelPlanFromPipeline(ctx!, step2.data!, step3.data!, step4.data!), null);
 });
 
 test('step 3 routing: shared-label synthetic commits to shared_rail', async () => {

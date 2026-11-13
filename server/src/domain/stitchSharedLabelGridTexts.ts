@@ -29,17 +29,19 @@ export function diagnoseSharedLabelGridStitch(
   headerBandText?: string,
 ): SharedLabelGridStitchDiagnosis {
   const rowLabels = extractRowLabels(labelColumnText);
-  const filtered = filterProductColumns(valueColumnTexts);
-  const valueLineCounts = filtered.map((col) => col.values.length);
+  const allColumns = productColumnsForStitch(valueColumnTexts);
+  const valueLineCounts = allColumns.map((col) => col.values.length);
+  const confidentCount = allColumns.filter(
+    (col) => col.values.length >= SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN,
+  ).length;
+  const maxValueLines = valueLineCounts.length > 0 ? Math.max(...valueLineCounts) : 0;
   const rowCount =
-    rowLabels.length > 0 && valueLineCounts.length > 0
-      ? Math.min(rowLabels.length, ...valueLineCounts)
-      : 0;
+    rowLabels.length > 0 && maxValueLines > 0 ? Math.min(rowLabels.length, maxValueLines) : 0;
 
   let failure: SharedLabelGridStitchFailure | null = null;
   if (valueColumnTexts.length < 2) failure = 'too_few_columns';
   else if (rowLabels.length === 0) failure = 'no_row_labels';
-  else if (filtered.length < 2) failure = 'too_few_product_columns';
+  else if (confidentCount < 2 && rowCount === 0) failure = 'too_few_product_columns';
   else if (rowCount === 0) failure = 'row_count_zero';
   else {
     const stitched = stitchSharedLabelGridTexts(labelColumnText, valueColumnTexts, headerBandText);
@@ -50,7 +52,7 @@ export function diagnoseSharedLabelGridStitch(
     ok: failure === null,
     failure,
     rowLabelCount: rowLabels.length,
-    productColumnCount: filtered.length,
+    productColumnCount: confidentCount,
     valueLineCounts,
     rowCount,
   };
@@ -71,6 +73,9 @@ export function formatSharedLabelStitchFailure(diag: SharedLabelGridStitchDiagno
 /**
  * Build a wide table string for {@link parseMultiProductLabelTable} from a shared label column
  * and per-product strips (values — amounts, units, words like "Varies", not labels-only).
+ *
+ * Inputs follow `sharedLabelStitchContract.ts` (`SharedLabelStitchColumnTexts`):
+ * `labelColumnText` is the full nutrient-name rail; `valueColumnTexts` are product values only.
  */
 export function stitchSharedLabelGridTexts(
   labelColumnText: string,
@@ -80,17 +85,19 @@ export function stitchSharedLabelGridTexts(
   const rowLabels = extractRowLabels(labelColumnText);
   if (rowLabels.length === 0 || valueColumnTexts.length < 2) return null;
 
-  const filtered = filterProductColumns(valueColumnTexts);
-  if (filtered.length < 2) return null;
+  const columns = productColumnsForStitch(valueColumnTexts);
+  const confident = columns.filter((col) => col.values.length >= SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN);
+  if (confident.length < 2) return null;
 
-  const valueRows = filtered.map((col) => col.values);
-  const columnCount = filtered.length;
-  const rowCount = Math.min(rowLabels.length, ...valueRows.map((rows) => rows.length));
+  const valueRows = columns.map((col) => col.values);
+  const columnCount = columns.length;
+  const maxValueLines = Math.max(...valueRows.map((rows) => rows.length));
+  const rowCount = Math.min(rowLabels.length, maxValueLines);
   if (rowCount === 0) return null;
 
   const names =
     extractProductNames(headerBandText, columnCount) ??
-    filtered.map((_, index) => `Column ${index + 1}`);
+    columns.map((_, index) => `Column ${index + 1}`);
 
   const lines = ['Nutrition Facts', padNames(names, columnCount).join('  ')];
   for (let row = 0; row < rowCount; row += 1) {
@@ -106,12 +113,11 @@ export function stitchSharedLabelGridTexts(
   return /calories/i.test(text) ? text : null;
 }
 
-function filterProductColumns(valueColumnTexts: string[]): Array<{ text: string; values: string[] }> {
-  const columns = valueColumnTexts.map((text) => ({ text, values: extractValueLines(text) }));
-  return columns.filter((col) => col.values.length >= SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN);
+function productColumnsForStitch(valueColumnTexts: string[]): Array<{ text: string; values: string[] }> {
+  return valueColumnTexts.map((text) => ({ text, values: extractValueLines(text) }));
 }
 
-function extractRowLabels(text: string): string[] {
+export function extractRowLabels(text: string): string[] {
   const seen = new Set<string>();
   const labels: string[] = [];
   const push = (raw: string) => {
@@ -151,7 +157,7 @@ function extractRowLabels(text: string): string[] {
   return labels;
 }
 
-function extractValueLines(text: string): string[] {
+export function extractValueLines(text: string): string[] {
   const values: string[] = [];
   let inTable = false;
   for (const raw of text.replace(/\r/g, '\n').split(/\n/)) {

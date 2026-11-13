@@ -30,8 +30,8 @@ Code symbols (`varietyPackGridPipeline`, `varietyPackPipeline` in manifest, etc.
 
 Use this phrase when you mean **`shared_rail` only**:
 
-- One **shared label column** (nutrient names).
-- Multiple **value columns** with shared horizontal rules.
+- One **shared label column** (nutrient names), OCR’d as **full-height** text on that strip; its width may differ from product columns and is not part of value-column width uniformity.
+- Multiple **product value columns** with shared horizontal rules (amounts per SKU only — see `sharedLabelStitchContract.ts`).
 - OCR/stitch path: `SharedLabelValueGridPlan`, `extractSharedLabelGridBuffers`, `stitchSharedLabelGridTexts` (step 4 plan today is built for this layout).
 
 ## Per-column labels (subtype)

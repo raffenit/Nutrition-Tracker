@@ -1,3 +1,5 @@
+import { nutrientBodyExtents } from '../domain/sharedLabelGridLayout.js';
+import { enforceValueColumnsDisjointFromLabel, productValueSegmentsRightOfLabel } from '../domain/sharedLabelColumnSeparation.js';
 import {
   DEFAULT_SHARED_LABEL_GRID_PARAMS,
   type SharedLabelGridParams,
@@ -192,7 +194,11 @@ export function runVarietyPackGridStep1(ctx: VarietyPackBandContext): GatedStepR
     );
   }
 
-  const widths = productCols.map((col) => col.x1 - col.x0);
+  const widths = productColumnsForUniformityWidthCheck(
+    categories,
+    productCols,
+    pipeline.sharedRailWidthRatioMin,
+  ).map((col) => col.x1 - col.x0);
   const cv = columnWidthCv(widths);
   if (cv > pipeline.maxProductColumnWidthCv) {
     return gatedFail<VarietyPackGridStep1>(
@@ -368,7 +374,14 @@ export function runVarietyPackGridStep3(
       );
     }
 
-    const valueColumns = step1.productColumns;
+    const valueColumns = sharedRailProductValueColumns(step1.productColumns, first);
+    if (valueColumns.length < ctx.shared.minValueColumns) {
+      return gatedFail<VarietyPackGridStep3>(
+        stepValidation(3, false, 'shared_rail_rejected', 'Too few product value columns after label rail.', {
+          valueColumnCount: valueColumns.length,
+        }),
+      );
+    }
     return gated(
       stepValidation(3, true, 'ok', 'Shared label rail with product value columns.', {
         layout: 'shared_rail',
@@ -448,25 +461,29 @@ export function buildSharedLabelPlanFromPipeline(
   ctx: VarietyPackBandContext,
   step2: VarietyPackGridStep2,
   step3: VarietyPackGridStep3,
+  step4: VarietyPackGridStep4,
 ): SharedLabelValueGridPlan | null {
   if (step3.layout !== 'shared_rail' || !step3.labelColumn) return null;
 
   const { bandAnalysis, ocrBand, stripParams } = ctx;
-  const { band: detectionBand, fullWidth, analysisW } = bandAnalysis;
+  const { band: detectionBand, fullWidth, analysisW, analysisH } = bandAnalysis;
+  const shared = DEFAULT_SHARED_LABEL_GRID_PARAMS;
   const mapX = (analysisX: number) =>
     detectionBand.left + Math.round((analysisX / analysisW) * detectionBand.width);
 
   const labelRight = mapX(step3.labelBoundaryX);
+  const bodyLayout = nutrientBodyExtents(analysisH, step2.bodyTopY, step4.rowBandYs, ocrBand.top, ocrBand.height, shared);
+
+  const nutrientBodyBottom = bodyLayout.top + bodyLayout.height;
   const labelColumn: ColumnStripRegion = {
     index: 0,
     left: detectionBand.left,
     top: ocrBand.top,
     width: Math.max(1, labelRight - detectionBand.left),
-    height: ocrBand.height,
+    height: Math.max(bodyLayout.height, nutrientBodyBottom - ocrBand.top),
   };
 
-  const bodyTopImageY =
-    ocrBand.top + Math.round((step2.bodyTopY / bandAnalysis.analysisH) * ocrBand.height);
+  const bodyTopImageY = bodyLayout.top;
   const headerBand = {
     left: labelRight,
     top: ocrBand.top,
@@ -474,20 +491,44 @@ export function buildSharedLabelPlanFromPipeline(
     height: Math.max(8, bodyTopImageY - ocrBand.top),
   };
 
+  const minAnalysisWidth = Math.max(
+    2,
+    Math.round(analysisW * stripParams.minStripWidthFraction * 0.5),
+  );
+  const productSegments = productValueSegmentsRightOfLabel(
+    step3.valueColumns,
+    step3.labelBoundaryX,
+    minAnalysisWidth,
+  );
+  if (productSegments.length < shared.minValueColumns) return null;
+
   const minOutputWidth = Math.max(1, Math.round(fullWidth * stripParams.minOutputStripWidthFraction));
-  const valueColumns: ColumnStripRegion[] = step3.valueColumns.map((segment, index) => {
+  const valueColumns: ColumnStripRegion[] = productSegments.map((segment, index) => {
     const left = mapX(segment.x0);
     const right = mapX(segment.x1);
     const width = Math.max(minOutputWidth, right - left);
-    return { index, left, top: ocrBand.top, width, height: ocrBand.height };
+    return {
+      index,
+      left,
+      top: bodyLayout.top,
+      width,
+      height: bodyLayout.height,
+    };
   });
+
+  const valueColumnsDisjoint = enforceValueColumnsDisjointFromLabel(labelColumn, valueColumns);
+  if (valueColumnsDisjoint.length < shared.minValueColumns) return null;
 
   return {
     band: ocrBand,
     labelColumn,
     headerBand,
-    valueColumns,
+    valueColumns: valueColumnsDisjoint,
     valueGridAnalysisX: step3.labelBoundaryX,
+    nutrientBodyTop: bodyLayout.top,
+    nutrientBodyHeight: bodyLayout.height,
+    rowBandSlices: bodyLayout.rowBandSlices,
+    rowPitchPx: bodyLayout.rowPitchPx,
   };
 }
 
@@ -496,6 +537,32 @@ export async function detectSharedLabelValueGrid(
   options?: VarietyPackGridPipelineOptions,
 ): Promise<SharedLabelValueGridPlan | null> {
   return (await runVarietyPackGridPipeline(bytes, { ...options, stopAfterStep: 4 })).plan;
+}
+
+/** Product stacks only — shared label rail is carried on `labelColumn`, not in value OCR strips. */
+export function sharedRailProductValueColumns(
+  productColumns: VarietyPackGridCategory[],
+  labelRail: VarietyPackGridCategory,
+): VarietyPackGridCategory[] {
+  return productColumns.filter((col) => col.x0 !== labelRail.x0 || col.x1 !== labelRail.x1);
+}
+
+/**
+ * Step 1 width CV applies to product value stacks only; the left label rail may be any width.
+ */
+export function productColumnsForUniformityWidthCheck(
+  categories: VarietyPackGridCategory[],
+  productColumns: VarietyPackGridCategory[],
+  sharedRailWidthRatioMin: number,
+): VarietyPackGridCategory[] {
+  const labelRail = categories[0];
+  if (!labelRail) return productColumns;
+  const productWidths = productColumns.map((col) => col.x1 - col.x0);
+  const labelWidth = labelRail.x1 - labelRail.x0;
+  if (firstColumnWideVsSiblings(labelWidth, productWidths, sharedRailWidthRatioMin)) {
+    return sharedRailProductValueColumns(productColumns, labelRail);
+  }
+  return productColumns;
 }
 
 export async function runVarietyPackGridPipeline(
@@ -593,7 +660,7 @@ export async function runVarietyPackGridPipeline(
   const step4Ok = step4.validation.ok;
   const plan =
     step4Ok && step3.data!.layout === 'shared_rail'
-      ? buildSharedLabelPlanFromPipeline(ctx, step2.data!, step3.data!)
+      ? buildSharedLabelPlanFromPipeline(ctx, step2.data!, step3.data!, step4.data!)
       : null;
   const perColumnStripPlan =
     step4Ok && step3.data!.layout === 'per_column_labels'
