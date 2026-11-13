@@ -25,6 +25,7 @@ import { categoriesFromRuledGrid, valueColumnsFromRuledGrid } from './ruledTable
 import { columnWidthCv, refineUniformProductColumns } from './uniformColumnGeometry.js';
 import { collectColumnGeometryWitnesses, fitUniformValueColumns } from './labelTableLayoutFit.js';
 import { fitEqualWidthColumnGrid } from './uniformColumnGeometry.js';
+import { medianRowBandSliceHeight, type SharedLabelRowBandSlice } from '../domain/sharedLabelGridLayout.js';
 
 export { detectSharedLabelValueGrid } from './varietyPackGridPipeline.js';
 
@@ -35,6 +36,12 @@ export type SharedLabelValueGridPlan = {
   valueColumns: ColumnStripRegion[];
   /** Analysis-space x where the value grid starts (after shared labels). */
   valueGridAnalysisX: number;
+  /** Nutrient table body (excludes header band and typical footer). */
+  nutrientBodyTop: number;
+  nutrientBodyHeight: number;
+  rowBandSlices: SharedLabelRowBandSlice[];
+  /** Median nutrient row pitch in full-image px (from consensus rules). */
+  rowPitchPx: number;
 };
 
 export type SharedLabelGridDetectOptions = ColumnStripDetectOptions & {
@@ -73,6 +80,38 @@ export async function extractSharedLabelGridBuffers(
     headerBand: await extract(plan.headerBand),
     valueColumns,
   };
+}
+
+/** OCR one column as one line per horizontal row-band slice (ordered top → bottom). */
+export async function extractSharedLabelColumnPngsByRowBands(
+  bytes: Buffer,
+  column: Pick<ColumnStripRegion, 'left' | 'width'>,
+  slices: SharedLabelRowBandSlice[],
+): Promise<Buffer[]> {
+  if (slices.length === 0) return [];
+  const base = sharp(bytes).rotate();
+  const meta = await base.metadata();
+  const maxW = meta.width ?? 0;
+  const maxH = meta.height ?? 0;
+  const buffers: Buffer[] = [];
+  for (const slice of slices) {
+    const left = Math.max(0, column.left);
+    const width = Math.min(column.width, Math.max(1, maxW - left));
+    const top = Math.max(0, slice.top);
+    const height = Math.min(slice.height, Math.max(1, maxH - top));
+    buffers.push(await base.clone().extract({ left, top, width, height }).png().toBuffer());
+  }
+  return buffers;
+}
+
+export function useRowBandSliceOcrForPlan(plan: SharedLabelValueGridPlan): boolean {
+  const params = DEFAULT_SHARED_LABEL_GRID_PARAMS;
+  if (plan.rowBandSlices.length < params.minRowBandSlicesForRowOcr) return false;
+  const medianH = medianRowBandSliceHeight(plan.rowBandSlices);
+  if (medianH < params.rowBandOcrMinMedianSliceHeightPx) return false;
+  const pitch = plan.rowPitchPx > 0 ? plan.rowPitchPx : medianH;
+  if (pitch > 0 && medianH > pitch * params.rowBandMaxMedianSlicePitchRatio) return false;
+  return true;
 }
 
 function findLabelValueBoundary(profile: Float64Array, shared: SharedLabelGridParams): number | null {
