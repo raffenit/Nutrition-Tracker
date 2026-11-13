@@ -76,12 +76,44 @@ export function inferLabelLayoutFromText(candidates: string[]): LabelLayoutFromT
   };
 }
 
+export type PickImportTextOptions = {
+  /** Geometry column count — prefer structured/stitched OCR over noisy full-page text. */
+  varietyPackExpectedColumns?: number;
+  /** Index of variety-pack stitched table in `candidates` (if known). */
+  structuredTableCandidateIndex?: number;
+};
+
 /** Which OCR string to feed import parsers (may differ from primaryCandidateIndex for tables). */
 export function pickImportTextCandidateIndex(
   candidates: string[],
   layout: LabelLayoutFromText,
+  options?: PickImportTextOptions,
 ): number {
   if (candidates.length === 0) return 0;
+
+  const expectedCols = options?.varietyPackExpectedColumns ?? 0;
+  if (expectedCols >= 2) {
+    if (
+      options?.structuredTableCandidateIndex != null &&
+      options.structuredTableCandidateIndex >= 0 &&
+      options.structuredTableCandidateIndex < candidates.length
+    ) {
+      return options.structuredTableCandidateIndex;
+    }
+    let bestIdx = -1;
+    let bestCols = 0;
+    for (let i = 0; i < candidates.length; i += 1) {
+      const cols = parseMultiProductLabelTable(candidates[i]!)?.length ?? 0;
+      if (cols > bestCols) {
+        bestCols = cols;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0 && bestCols >= 1) return bestIdx;
+    const structuredIdx = candidates.findIndex((text) => looksLikeStructuredVarietyTable(text));
+    if (structuredIdx >= 0) return structuredIdx;
+  }
+
   if (layout.kind === 'multi_column_table' && layout.multiProductColumnCount >= 2) {
     return layout.bestCandidateIndex;
   }
@@ -93,6 +125,20 @@ export function pickImportTextCandidateIndex(
     if (wideTableish >= 0) return wideTableish;
   }
   return primaryCandidateIndex(candidates);
+}
+
+/** Stitched shared-rail table or wide columnar OCR — not a scored single panel. */
+export function looksLikeStructuredVarietyTable(text: string): boolean {
+  if (!/nutrition\s+facts/i.test(text)) return false;
+  if (looksLikeWideTableOcr(text)) return true;
+  const lines = text.replace(/\r/g, '\n').split(/\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 4) return false;
+  const nutrientRows = lines.filter((line) =>
+    /^(calories|total fat|saturated|trans fat|cholesterol|sodium|total carb|dietary fiber|protein)\b/i.test(line),
+  );
+  if (nutrientRows.length >= 2) return true;
+  if (/\bcolumn\s+\d+/i.test(text) && nutrientRows.length >= 1) return true;
+  return false;
 }
 
 type LayoutScore = {

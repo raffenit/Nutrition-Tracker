@@ -46,6 +46,29 @@ test('inferLabelLayoutFromText detects multi-column table among candidates', () 
   assert.equal(pickImportTextCandidateIndex([noisy, good], layout), 1);
 });
 
+test('pickImportTextCandidateIndex prefers structured stitch when geometry set expected columns', () => {
+  const noisy =
+    'S24 : OPRRCLS random wide photo garbage '.repeat(40) +
+    '\nNutrition Facts\nCalories 140\n';
+  const stitched = `
+Nutrition Facts
+Column 1 | Column 2 | Column 3
+Calories 90 110 95
+Total Fat 3g 4g 3g
+Sodium 100mg 120mg 90mg
+`;
+  const layout = inferLabelLayoutFromText([noisy, stitched]);
+  const idx = pickImportTextCandidateIndex([noisy, stitched], layout, {
+    varietyPackExpectedColumns: 10,
+  });
+  assert.equal(idx, 1);
+  const pinned = pickImportTextCandidateIndex([stitched, noisy], layout, {
+    varietyPackExpectedColumns: 10,
+    structuredTableCandidateIndex: 0,
+  });
+  assert.equal(pinned, 0);
+});
+
 test('pickImportTextCandidateIndex uses wide-table heuristic when Part A parse is not ready', () => {
   const tableish = `
 Nutrition Facts

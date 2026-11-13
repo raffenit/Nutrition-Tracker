@@ -1,5 +1,5 @@
 import sharp, { type Sharp } from 'sharp';
-import { COLUMN_STRIP_OCR_TARGET_WIDTH } from '../domain/columnStripOcrParams.js';
+import { COLUMN_STRIP_OCR_TARGET_WIDTH, ROW_BAND_OCR_MIN_HEIGHT } from '../domain/columnStripOcrParams.js';
 import type { OcrLayoutProfile } from '../domain/labelLayout.js';
 import { appendImportJobDebug } from '../import/importJobProgress.js';
 import { adaptiveThresholdVariants } from './adaptiveThreshold.js';
@@ -47,24 +47,55 @@ export type OcrVariantMode = 'full' | 'columnStrip';
  * Per-column strip OCR — no rotations or focus crops (those break on narrow crops).
  * Upscales the strip, then a small preprocess set tuned for one vertical panel.
  */
-export async function buildColumnStripOcrVariants(bytes: Buffer): Promise<Buffer[]> {
-  const source = sharp(bytes).rotate();
+async function upscaleColumnStripSource(source: Sharp, minWidth: number, minHeight = 0): Promise<Sharp> {
   const meta = await source.metadata();
-  const width = meta.width ?? COLUMN_STRIP_OCR_TARGET_WIDTH;
-  const target = Math.max(COLUMN_STRIP_OCR_TARGET_WIDTH, width);
-  const scaled =
-    width < target - 4
-      ? source.clone().resize({ width: target, kernel: sharp.kernel.lanczos3 })
-      : source.clone();
+  const width = meta.width ?? minWidth;
+  const height = meta.height ?? minHeight;
+  const targetW = Math.max(minWidth, width);
+  const targetH = minHeight > 0 ? Math.max(minHeight, height) : height;
+  let pipeline = source.clone();
+  if (width < targetW - 4) {
+    pipeline = pipeline.resize({ width: targetW, kernel: sharp.kernel.lanczos3 });
+  }
+  if (minHeight > 0 && height < targetH - 2) {
+    pipeline = pipeline.resize({ height: targetH, kernel: sharp.kernel.lanczos3 });
+  }
+  return pipeline;
+}
+
+export async function buildColumnStripOcrVariants(bytes: Buffer): Promise<Buffer[]> {
+  const scaled = await upscaleColumnStripSource(sharp(bytes).rotate(), COLUMN_STRIP_OCR_TARGET_WIDTH);
 
   const buffers: Buffer[] = [
     await scaled.clone().greyscale().normalize().png().toBuffer(),
     await scaled.clone().greyscale().normalize().sharpen({ sigma: 1 }).png().toBuffer(),
     await scaled.clone().greyscale().linear(1.3, -20).normalize().png().toBuffer(),
   ];
-  const adaptive = await adaptiveThresholdVariants(scaled);
-  if (adaptive[0]) buffers.push(adaptive[0]);
+  const meta = await scaled.metadata();
+  const h = meta.height ?? 0;
+  const w = meta.width ?? 0;
+  if (h >= 40 && w >= 24) {
+    const adaptive = await adaptiveThresholdVariants(scaled);
+    if (adaptive[0]) buffers.push(adaptive[0]);
+  }
   return uniqueBuffers(buffers);
+}
+
+/** One horizontal nutrient row — upscale height, skip adaptive threshold on tiny crops. */
+export async function buildRowBandOcrVariants(bytes: Buffer): Promise<Buffer[]> {
+  const scaled = await upscaleColumnStripSource(
+    sharp(bytes).rotate(),
+    COLUMN_STRIP_OCR_TARGET_WIDTH,
+    ROW_BAND_OCR_MIN_HEIGHT,
+  );
+  const primary = await scaled.clone().greyscale().normalize().png().toBuffer();
+  if (process.env.TESSERACT_ROW_BAND_DUAL_VARIANT === '1') {
+    return uniqueBuffers([
+      primary,
+      await scaled.clone().greyscale().normalize().sharpen({ sigma: 1 }).png().toBuffer(),
+    ]);
+  }
+  return [primary];
 }
 
 export async function buildOcrImageVariants(bytes: Buffer, options?: BuildOcrVariantOptions): Promise<Buffer[]> {

@@ -1,4 +1,4 @@
-import Tesseract, { type PSM } from 'tesseract.js';
+import Tesseract, { type PSM, type Worker } from 'tesseract.js';
 import { appendImportJobDebug } from '../import/importJobProgress.js';
 
 export type TesseractBatchResult = {
@@ -17,6 +17,62 @@ function pushDebug(lines: string[]): void {
   }
 }
 
+function workerLogger(label: string, logLines: string[]) {
+  return (message: { status: string; progress?: number }) => {
+    if (message.status === 'recognizing text') return;
+    const line = `tesseract.js [${label}] ${message.status}${message.progress ? ` ${Math.round(message.progress * 100)}%` : ''}`;
+    logLines.push(line);
+  };
+}
+
+/** One English worker — reuse across many crops in the same import job (avoids reloading eng). */
+export async function openTesseractWorker(cachePath: string, label: string): Promise<Worker> {
+  const logLines: string[] = [];
+  return Tesseract.createWorker('eng', 1, {
+    cachePath,
+    logger: workerLogger(label, logLines),
+    errorHandler: (error: unknown) => {
+      const line = `tesseract.js [${label}] error: ${String(error)}`;
+      logLines.push(line);
+      appendImportJobDebug(line);
+    },
+  });
+}
+
+/** Recognize many images with an already-loaded worker (caller owns terminate). */
+export async function recognizeImagesOnWorker(
+  worker: Worker,
+  images: Buffer[],
+  psmModes: PSM[],
+  label: string,
+): Promise<TesseractBatchResult> {
+  const logLines: string[] = [];
+  const texts: string[] = [];
+
+  for (let imageIndex = 0; imageIndex < images.length; imageIndex += 1) {
+    for (const psm of psmModes) {
+      await worker.setParameters({ tessedit_pageseg_mode: psm });
+      const { result, stderr } = await withStderrCapture(async () => {
+        const recognition = await worker.recognize(images[imageIndex]!);
+        return recognition.data.text ?? '';
+      });
+      texts.push(result);
+
+      const notableStderr = stderr.filter((line) => STDERR_PATTERNS.test(line));
+      if (notableStderr.length > 0) {
+        for (const line of notableStderr) {
+          const tagged = `tesseract native [${label} img ${imageIndex + 1} psm ${psm}]: ${line}`;
+          logLines.push(tagged);
+          appendImportJobDebug(tagged);
+        }
+      }
+    }
+  }
+
+  pushDebug(logLines);
+  return { texts, logLines };
+}
+
 /** Run Tesseract on one or more PNG buffers; capture logger, errorHandler, and process stderr. */
 export async function recognizeTesseractBatch(
   images: Buffer[],
@@ -24,48 +80,12 @@ export async function recognizeTesseractBatch(
   psmModes: PSM[],
   label: string,
 ): Promise<TesseractBatchResult> {
-  const logLines: string[] = [];
-  const texts: string[] = [];
-  const worker = await Tesseract.createWorker('eng', 1, {
-    cachePath,
-    logger: (message) => {
-      if (message.status === 'recognizing text') return;
-      const line = `tesseract.js [${label}] ${message.status}${message.progress ? ` ${Math.round(message.progress * 100)}%` : ''}`;
-      logLines.push(line);
-    },
-    errorHandler: (error: unknown) => {
-      const line = `tesseract.js [${label}] error: ${String(error)}`;
-      logLines.push(line);
-      appendImportJobDebug(line);
-    },
-  });
-
+  const worker = await openTesseractWorker(cachePath, label);
   try {
-    for (let imageIndex = 0; imageIndex < images.length; imageIndex += 1) {
-      for (const psm of psmModes) {
-        await worker.setParameters({ tessedit_pageseg_mode: psm });
-        const { result, stderr } = await withStderrCapture(async () => {
-          const recognition = await worker.recognize(images[imageIndex]!);
-          return recognition.data.text ?? '';
-        });
-        texts.push(result);
-
-        const notableStderr = stderr.filter((line) => STDERR_PATTERNS.test(line));
-        if (notableStderr.length > 0) {
-          for (const line of notableStderr) {
-            const tagged = `tesseract native [${label} img ${imageIndex + 1} psm ${psm}]: ${line}`;
-            logLines.push(tagged);
-            appendImportJobDebug(tagged);
-          }
-        }
-      }
-    }
+    return await recognizeImagesOnWorker(worker, images, psmModes, label);
   } finally {
     await worker.terminate();
   }
-
-  pushDebug(logLines);
-  return { texts, logLines };
 }
 
 async function withStderrCapture<T>(fn: () => Promise<T>): Promise<{ result: T; stderr: string[] }> {
