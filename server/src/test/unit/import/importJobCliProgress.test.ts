@@ -18,6 +18,7 @@ test('formatImportJobSnapshotBlock matches import job steps', async () => {
     const block = formatImportJobSnapshotBlock(snapshot!);
     assert.match(block, /Reading shared label table/);
     assert.match(block, /Label column \+ 3 value columns/);
-    assert.match(block, /→ OCR/);
+    assert.match(block, /Step \d+ of \d+/);
+    assert.match(block, />\s*Read label text/);
   });
 });

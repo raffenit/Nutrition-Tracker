@@ -32,6 +32,8 @@ import {
 } from '../dist/import/importJobCliProgress.js';
 
 const streamImportProgress = process.env.IMPORT_JOB_CLI_PROGRESS !== '0';
+const verboseImportDebug = process.env.IMPORT_JOB_VERBOSE_DEBUG === '1';
+const cliImageFilter = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const imageDir = path.join(repoRoot, 'local/test-images');
@@ -50,9 +52,17 @@ try {
   console.warn('No manifest at local/test-images/manifest.json — metrics only, no ground-truth line.');
 }
 
-const names = (await readdir(imageDir))
+let names = (await readdir(imageDir))
   .filter((f) => /\.jpe?g$/i.test(f))
   .sort();
+if (cliImageFilter.length > 0) {
+  names = names.filter((n) => cliImageFilter.some((pat) => n.includes(pat)));
+  if (names.length === 0) {
+    console.error(`No images match filter: ${cliImageFilter.join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`Running ${names.length} image(s): ${names.join(', ')}`);
+}
 
 function summarizeNutrients(parsed) {
   if (!parsed) return null;
@@ -86,8 +96,13 @@ for (const name of names) {
 
   console.log(`\n${'='.repeat(72)}\n${name}`);
   if (fx) {
+    const nr = fx.nutrientRows;
+    const rowGt =
+      nr != null
+        ? ` nutrientRows=${nr.mainSectionRows}+${nr.secondarySectionRows}`
+        : '';
     console.log(
-      `manifest: layout=${fx.layout}${fx.valueColumnCount != null ? ` expectValueCols=${fx.valueColumnCount}` : ''}`,
+      `manifest: layout=${fx.layout}${fx.valueColumnCount != null ? ` expectValueCols=${fx.valueColumnCount}` : ''}${rowGt}`,
     );
   }
   console.log(
@@ -116,7 +131,11 @@ for (const name of names) {
     result = await runWithImportJob(jobId, progressUser, 'image', async () => {
       let stopWatch = () => {};
       if (streamImportProgress) {
-        stopWatch = startImportJobConsoleWatch(jobId, progressUser, { pollMs: 350, streamDebug: true });
+        stopWatch = startImportJobConsoleWatch(jobId, progressUser, {
+          pollMs: 350,
+          streamDebug: true,
+          verboseDebug: verboseImportDebug,
+        });
       }
       try {
         return await extractImageLabel(bytes, tessCache, { easyocrModelDir });
