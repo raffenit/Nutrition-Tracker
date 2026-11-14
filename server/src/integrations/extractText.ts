@@ -552,14 +552,21 @@ async function ocrSharedLabelGridColumns(
     label: string,
     psmModes: PSM[],
   ): Promise<string> => {
-    const slicePngs = await extractSharedLabelColumnPngsByRowBands(
-      bytes,
-      column,
-      plan.rowBandSlices,
-      rowBandMinExtractSize(plan, column.width, fullImageWidth),
+    const minSize = rowBandMinExtractSize(plan, column.width, fullImageWidth);
+    appendImportJobDebug(
+      `${label} row-band: min extract ${minSize.minWidthPx}×${minSize.minHeightPx}px (column ${column.width}px)`,
     );
+    const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, plan.rowBandSlices, minSize);
     if (slicePngs.length === 0) {
       return ocrStripText(fallbackPng, `${label} body`);
+    }
+    for (let sliceIndex = 0; sliceIndex < slicePngs.length; sliceIndex += 1) {
+      const sliceMeta = await sharp(slicePngs[sliceIndex]).metadata();
+      const w = sliceMeta.width ?? 0;
+      const h = sliceMeta.height ?? 0;
+      if (w < minSize.minWidthPx || h < minSize.minHeightPx) {
+        appendImportJobDebug(`${label} slice ${sliceIndex + 1}: ${w}×${h}px (below min)`);
+      }
     }
     const images = await preprocessRowBandSlices(slicePngs);
     const { texts } = await recognizeImagesOnWorker(worker, images, psmModes, `${label}-rows`);
@@ -587,7 +594,17 @@ async function ocrSharedLabelGridColumns(
         tesseractRowBandLabelPsmModes(),
       );
       appendImportJobDebug(`shared-label grid: label OCR ${labelText.trim().length} chars`);
-      headerText = await ocrStripText(crops.headerBand, 'header');
+      const headerPrep = await buildRowBandOcrVariants(crops.headerBand);
+      const headerImages = [headerPrep[0] ?? crops.headerBand];
+      const headerMeta = await sharp(headerImages[0]).metadata();
+      appendImportJobDebug(`header row-band prep: ${headerMeta.width ?? 0}×${headerMeta.height ?? 0}px`);
+      const { texts: headerTexts } = await recognizeImagesOnWorker(
+        worker,
+        headerImages,
+        tesseractRowBandLabelPsmModes(),
+        'header',
+      );
+      headerText = headerTexts.map((line) => line.trim()).filter(Boolean).join('\n');
       appendImportJobDebug(`shared-label grid: header OCR ${headerText.trim().length} chars`);
       for (let index = 0; index < plan.valueColumns.length; index += 1) {
         const col = plan.valueColumns[index]!;
