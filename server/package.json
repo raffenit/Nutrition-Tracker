@@ -11,6 +11,7 @@
     "check:test": "tsc -p tsconfig.test.json --noEmit",
     "start": "node dist/index.js",
     "test:run": "rm -rf dist-test && tsc -p tsconfig.test.json && node --test $(find dist-test -name '*.test.js' | sort)",
+    "test:run:quick": "rm -rf dist-test && tsc -p tsconfig.test.json && node --test $(find dist-test -name '*.test.js' ! -name '*.localFixtures.test.js' | sort)",
     "test": "npm run check && npm run check:test && npm run test:run",
     "ocr:local-test-images": "npm run build && node scripts/run-local-test-images-ocr.mjs",
     "diag:shared-label-grid": "npm run build && node scripts/diagnose-shared-label-grid.mjs"
