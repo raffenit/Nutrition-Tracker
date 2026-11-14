@@ -1,5 +1,5 @@
 import { PDFParse } from 'pdf-parse';
-import { PSM } from 'tesseract.js';
+import { PSM, type Worker } from 'tesseract.js';
 import sharp from 'sharp';
 import {
   initialOcrLayoutProfile,
@@ -13,6 +13,7 @@ import {
 import {
   COLUMN_STRIP_MIN_OCR_WIDTH_FRACTION,
 } from '../domain/columnStripOcrParams.js';
+import { OCR_IMPORT_MAX_PRODUCT_COLUMNS } from '../domain/columnStripDetectParams.js';
 import { separateSharedLabelValueTexts } from '../domain/sharedLabelColumnSeparation.js';
 import { countSharedLabelMacroColumns } from '../domain/sharedLabelGridStageReport.js';
 import { parseMultiProductLabelTable } from '../domain/parseMultiProductLabelTable.js';
@@ -39,6 +40,7 @@ import {
 import {
   extractSharedLabelColumnPngsByRowBands,
   extractSharedLabelGridBuffers,
+  rowBandMinExtractSize,
   useRowBandSliceOcrForPlan,
 } from './sharedLabelValueGrid.js';
 import type { ColumnStripRegion } from './labelColumnStrips.js';
@@ -60,6 +62,7 @@ import {
   openTesseractWorker,
   recognizeImagesOnWorker,
   recognizeTesseractBatch,
+  resetTesseractRunCounter,
 } from './tesseractOcr.js';
 
 /** Cap OCR text candidates while still feeding the per-slot merge pool. */
@@ -110,6 +113,7 @@ export async function extractImageLabel(
   cachePath: string,
   options?: { easyocrModelDir?: string },
 ): Promise<ImageLabelExtraction> {
+  resetTesseractRunCounter();
   reportImportJobStep('Preprocess', 'Preparing image for OCR…', 'Auto-rotate, upscale, and layout hints.');
   const resolved = await resolveLabelProcessingImage(bytes);
   const ocrBytes = resolved.bytes;
@@ -126,7 +130,7 @@ export async function extractImageLabel(
   let varietyPackPreflight: VarietyPackPipelineRunResult | null = null;
   if (activeHint.widePanel) {
     varietyPackPreflight = await runVarietyPackGridPipeline(ocrBytes, {
-      maxColumns: 14,
+      maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS,
       layoutHint: {
         singleSubjectInFocus: activeHint.singleSubjectInFocus,
         sharpPeakCount: activeHint.sharpPeakCount,
@@ -261,16 +265,38 @@ function mergeUniqueCandidates(seen: Set<string>, out: string[], texts: string[]
   }
 }
 
+type CollectOcrOptions = {
+  tessWorker?: Worker;
+  /** Default: skip on columnStrip unless EASYOCR_COLUMN_STRIPS=1 */
+  allowEasyOcr?: boolean;
+};
+
 async function collectTesseractCandidateTexts(
   images: Buffer[],
   cachePath: string,
   logLabel: string,
+  existingWorker?: Worker,
 ): Promise<string[]> {
   const seen = new Set<string>();
   const out: string[] = [];
-  const { texts } = await recognizeTesseractBatch(images, cachePath, tesseractPsmModes(), logLabel);
+  const psm = tesseractPsmModes();
+  const texts = existingWorker
+    ? (await recognizeImagesOnWorker(existingWorker, images, psm, logLabel)).texts
+    : (await recognizeTesseractBatch(images, cachePath, psm, logLabel)).texts;
   mergeUniqueCandidates(seen, out, texts);
   return out;
+}
+
+function columnStripTesseractVariantCount(): number {
+  const raw = Number(process.env.TESSERACT_COLUMN_STRIP_VARIANTS ?? '1');
+  return Number.isFinite(raw) && raw > 0 ? Math.min(4, Math.round(raw)) : 1;
+}
+
+function easyOcrAllowedForMode(mode: 'full' | 'columnStrip' | 'rowBand', allowEasyOcr?: boolean): boolean {
+  if (mode === 'rowBand') return false;
+  if (allowEasyOcr === false) return false;
+  if (mode === 'columnStrip' && process.env.EASYOCR_COLUMN_STRIPS !== '1') return false;
+  return true;
 }
 
 async function collectOcrCandidateTexts(
@@ -280,6 +306,7 @@ async function collectOcrCandidateTexts(
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
   profile: OcrLayoutProfile,
   mode: 'full' | 'columnStrip' | 'rowBand',
+  options?: CollectOcrOptions,
 ): Promise<string[]> {
   const variantOptions: BuildOcrVariantOptions = {
     profile,
@@ -296,14 +323,23 @@ async function collectOcrCandidateTexts(
 
   const stripLike = mode === 'columnStrip' || mode === 'rowBand';
   const cap = stripLike ? { tess: 0, easy: 1 } : variantCapBoost(profile);
-  const forEasyOcr = modelDir && mode !== 'rowBand' ? easyOcrVariantSubset(variants, cap.easy) : [];
-  const tessExtra = mode === 'rowBand' ? 1 : mode === 'columnStrip' ? 3 : cap.tess;
+  const forEasyOcr =
+    modelDir && easyOcrAllowedForMode(mode, options?.allowEasyOcr)
+      ? easyOcrVariantSubset(variants, cap.easy)
+      : [];
+  const tessExtra =
+    mode === 'rowBand' ? 1 : mode === 'columnStrip' ? columnStripTesseractVariantCount() : cap.tess;
   const forTesseract = tesseractVariantSubset(variants, tessExtra);
 
   const [easyTexts, tessTexts] = await Promise.all([
-    modelDir ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir) : Promise.resolve([]),
+    forEasyOcr.length > 0 ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir!) : Promise.resolve([]),
     forTesseract.length > 0
-      ? collectTesseractCandidateTexts(forTesseract, cachePath, `${mode}-${profile}`)
+      ? collectTesseractCandidateTexts(
+          forTesseract,
+          cachePath,
+          `${mode}-${profile}`,
+          options?.tessWorker,
+        )
       : Promise.resolve([]),
   ]);
 
@@ -324,7 +360,7 @@ async function ocrAndStitchColumnStrips(
   const variety = await ocrAndStitchVarietyPack(bytes, cachePath, modelDir, hint);
   if (variety) return variety;
 
-  const plan = await detectColumnStrips(bytes, { maxColumns: 14 });
+  const plan = await detectColumnStrips(bytes, { maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS });
   if (!plan || plan.strips.length < 2) {
     appendImportJobDebug(
       plan ? `column-strip: only ${plan.strips.length} strip(s) — skip per-column OCR` : 'column-strip: detect returned null',
@@ -383,7 +419,7 @@ async function ocrAndStitchVarietyPack(
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
 ): Promise<StitchedColumnOcrResult | null> {
   const pipeline = await runVarietyPackGridPipeline(bytes, {
-    maxColumns: 14,
+    maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS,
     layoutHint: {
       singleSubjectInFocus: hint.singleSubjectInFocus,
       sharpPeakCount: hint.sharpPeakCount,
@@ -506,6 +542,9 @@ async function ocrSharedLabelGridColumns(
     return images;
   };
 
+  const imageMeta = await sharp(bytes).rotate().metadata();
+  const fullImageWidth = imageMeta.width ?? 0;
+
   const ocrColumnByRowBandsWithWorker = async (
     worker: Awaited<ReturnType<typeof openTesseractWorker>>,
     column: Pick<ColumnStripRegion, 'left' | 'width'>,
@@ -513,7 +552,12 @@ async function ocrSharedLabelGridColumns(
     label: string,
     psmModes: PSM[],
   ): Promise<string> => {
-    const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, plan.rowBandSlices);
+    const slicePngs = await extractSharedLabelColumnPngsByRowBands(
+      bytes,
+      column,
+      plan.rowBandSlices,
+      rowBandMinExtractSize(plan, column.width, fullImageWidth),
+    );
     if (slicePngs.length === 0) {
       return ocrStripText(fallbackPng, `${label} body`);
     }
@@ -562,13 +606,34 @@ async function ocrSharedLabelGridColumns(
       await worker.terminate();
     }
   } else {
-    labelText = await ocrStripText(crops.labelColumn, 'label body');
-    appendImportJobDebug(`shared-label grid: label OCR ${labelText.trim().length} chars`);
-    headerText = await ocrStripText(crops.headerBand, 'header');
-    appendImportJobDebug(`shared-label grid: header OCR ${headerText.trim().length} chars`);
-    for (let index = 0; index < plan.valueColumns.length; index += 1) {
-      appendImportJobDebug(`shared-label grid value ${index + 1}/${plan.valueColumns.length}`);
-      valueTexts.push(await ocrStripText(crops.valueColumns[index]!, `value ${index + 1} body`));
+    const worker = await openTesseractWorker(cachePath, 'shared-label-grid-body');
+    const tessOpts = { tessWorker: worker };
+    try {
+      const ocrBodyColumn = async (png: Buffer, label: string) => {
+        const candidates = await collectOcrCandidateTexts(
+          png,
+          cachePath,
+          modelDir,
+          hint,
+          'wideTable',
+          'columnStrip',
+          tessOpts,
+        );
+        const best = pickBestStripCandidate(candidates);
+        appendImportJobDebug(`${label}: ${best.trim().length} chars`);
+        return best;
+      };
+      appendImportJobDebug('shared-label grid: body-column OCR (one Tesseract worker, tess-only strips)');
+      labelText = await ocrBodyColumn(crops.labelColumn, 'label body');
+      appendImportJobDebug(`shared-label grid: label OCR ${labelText.trim().length} chars`);
+      headerText = await ocrBodyColumn(crops.headerBand, 'header');
+      appendImportJobDebug(`shared-label grid: header OCR ${headerText.trim().length} chars`);
+      for (let index = 0; index < plan.valueColumns.length; index += 1) {
+        appendImportJobDebug(`shared-label grid value ${index + 1}/${plan.valueColumns.length}`);
+        valueTexts.push(await ocrBodyColumn(crops.valueColumns[index]!, `value ${index + 1} body`));
+      }
+    } finally {
+      await worker.terminate();
     }
   }
 

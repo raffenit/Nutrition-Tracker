@@ -35,7 +35,7 @@ These behaviors are **deliberate** but easy to break each other:
 
 6. **`preferSharedRail` branches** — (a) subtype `shared_rail`, (b) ink value cols ≥ ruled + 2, (c) ink tie epsilon. Tests: `varietyPackGridPipeline.test.ts` step 3 routing; manifest for photos.
 
-7. **Local manifest** — `local/test-images/manifest.json` is the main **photo** regression. Synthetics in `syntheticVarietyPackGrids.ts` cover layout **patterns**; they do not replace noisy-rule or glare variants.
+7. **Local manifest** — `local/test-images/manifest.json` is the main **photo** regression (`valueColumnCount`, **`nutrientRows.mainSectionRows` + `secondarySectionRows`** on every fixture). Synthetics in `syntheticVarietyPackGrids.ts` cover layout **patterns**; they do not replace noisy-rule or glare variants.
 
 8. **Shared-rail OCR stitch** — Failures often chain: label-column row labels (inline nutrient match) → value-line `extractValueLines` → `parseMultiProductLabelTable` gap vs `|` splitting. Use `npm run diag:shared-label-grid` on Costco fixture; `npm run ocr:local-test-images` for full import path.
 

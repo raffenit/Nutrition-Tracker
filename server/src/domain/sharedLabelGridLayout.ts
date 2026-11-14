@@ -62,7 +62,7 @@ export function rowBandSlicesBetweenRules(
   return slices;
 }
 
-/** Merge consecutive slices until each band is tall enough for OCR. */
+/** Merge only hairline slivers (shorter than minHeight) into an adjacent row band. */
 export function mergeSmallRowBandSlices(
   slices: SharedLabelRowBandSlice[],
   minHeight: number,
@@ -70,38 +70,104 @@ export function mergeSmallRowBandSlices(
   if (slices.length === 0 || minHeight <= 0) return slices;
 
   const merged: SharedLabelRowBandSlice[] = [];
-  let pending: SharedLabelRowBandSlice | null = null;
-
-  const flush = () => {
-    if (!pending) return;
-    if (merged.length > 0 && pending.height < minHeight) {
+  for (let i = 0; i < slices.length; i += 1) {
+    let slice = { ...slices[i]! };
+    if (slice.height >= minHeight) {
+      merged.push(slice);
+      continue;
+    }
+    if (merged.length > 0) {
       const last = merged[merged.length - 1]!;
       merged[merged.length - 1] = {
         rowIndex: last.rowIndex,
         top: last.top,
-        height: last.height + pending.height,
+        height: last.height + slice.height,
       };
-    } else {
-      merged.push(pending);
-    }
-    pending = null;
-  };
-
-  for (const slice of slices) {
-    if (!pending) {
-      pending = { ...slice };
       continue;
     }
-    pending = {
-      rowIndex: pending.rowIndex,
-      top: pending.top,
-      height: pending.height + slice.height,
-    };
-    if (pending.height >= minHeight) flush();
+    if (i + 1 < slices.length) {
+      const next = slices[i + 1]!;
+      slice = {
+        rowIndex: slice.rowIndex,
+        top: slice.top,
+        height: slice.height + next.height,
+      };
+      i += 1;
+    }
+    merged.push(slice);
   }
-  flush();
 
   return merged.map((slice, rowIndex) => ({ ...slice, rowIndex }));
+}
+
+/** Equal ~pitch chunks when a band spans multiple nutrient rows but has no interior rule Y. */
+function subdivideOversizedSliceByPitch(
+  slice: SharedLabelRowBandSlice,
+  pitch: number,
+  maxSlicePitchRatio: number,
+): SharedLabelRowBandSlice[] {
+  const maxH = pitch * maxSlicePitchRatio;
+  if (slice.height <= maxH + 0.5) return [slice];
+  const targetRows = Math.max(2, Math.ceil(slice.height / Math.max(8, pitch)));
+  const parts: SharedLabelRowBandSlice[] = [];
+  let top = slice.top;
+  let remaining = slice.height;
+  for (let i = 0; i < targetRows && remaining > 0; i += 1) {
+    const rowsLeft = targetRows - i;
+    const h =
+      rowsLeft === 1
+        ? remaining
+        : Math.min(remaining, Math.max(Math.round(pitch), Math.round(remaining / rowsLeft)));
+    parts.push({ rowIndex: 0, top, height: h });
+    top += h;
+    remaining -= h;
+  }
+  return parts;
+}
+
+/**
+ * Subdivide bands taller than one nutrient row using interior consensus rules
+ * (e.g. preamble + first row merged into one slice).
+ */
+export function splitOversizedRowBandSlices(
+  slices: SharedLabelRowBandSlice[],
+  ruleYs: number[],
+  pitch: number,
+  maxSlicePitchRatio: number,
+  minGapBetweenSubSlices: number,
+  pitchSubdivideMinMultiplier = 2.35,
+): SharedLabelRowBandSlice[] {
+  if (slices.length === 0 || pitch <= 0 || maxSlicePitchRatio <= 0) return slices;
+  const maxHeight = pitch * maxSlicePitchRatio;
+  const sortedRules = [...ruleYs].sort((a, b) => a - b);
+  const minSub = Math.max(4, minGapBetweenSubSlices);
+
+  const out: SharedLabelRowBandSlice[] = [];
+  for (const slice of slices) {
+    if (slice.height <= maxHeight + 0.5) {
+      out.push(slice);
+      continue;
+    }
+    const bottom = slice.top + slice.height;
+    const innerRules = sortedRules.filter(
+      (y) => y > slice.top + minSub && y < bottom - minSub,
+    );
+    if (innerRules.length === 0) {
+      if (slice.height > pitch * pitchSubdivideMinMultiplier) {
+        out.push(...subdivideOversizedSliceByPitch(slice, pitch, maxSlicePitchRatio));
+      } else {
+        out.push(slice);
+      }
+      continue;
+    }
+    const subs = rowBandSlicesBetweenRules(slice.top, bottom, innerRules, Math.max(4, Math.round(minSub * 0.5)));
+    if (subs.length <= 1) {
+      out.push(slice);
+      continue;
+    }
+    out.push(...subs);
+  }
+  return out.map((slice, rowIndex) => ({ ...slice, rowIndex }));
 }
 
 export function medianRowBandSliceHeight(slices: SharedLabelRowBandSlice[]): number {
@@ -119,15 +185,19 @@ export function prepareRowBandSlicesForOcr(
     | 'minRowBandSliceHeightPx'
     | 'minRowBandSliceHeightPitchFraction'
     | 'rowBandMergeHairlinePitchFraction'
+    | 'rowBandSplitOversizedPitchRatio'
+    | 'rowBandPitchSubdivideMinMultiplier'
   >,
 ): { slices: SharedLabelRowBandSlice[]; rowPitchPx: number } {
   const sortedRules = [...ruleYsImage].sort((a, b) => a - b);
-  const pitch = medianConsecutiveSpacing(sortedRules);
+  const coarsePitch = medianConsecutiveSpacing(sortedRules);
   const ruleMinGap =
-    pitch > 0
-      ? Math.max(2, Math.round(pitch * grid.rowBandRuleMinSpacingPitchFraction))
+    coarsePitch > 0
+      ? Math.max(2, Math.round(coarsePitch * grid.rowBandRuleMinSpacingPitchFraction))
       : grid.minRowBandSliceHeightPx;
   const consolidated = consolidateRowBandRuleYs(sortedRules, ruleMinGap);
+  const rulesInBody = consolidated.filter((y) => y > bodyTop + 2 && y < bodyBottom - 2);
+  const pitch = medianConsecutiveSpacing(rulesInBody.length >= 2 ? rulesInBody : consolidated);
   const minBetweenRules = Math.max(
     4,
     pitch > 0 ? Math.round(pitch * grid.minRowBandSliceHeightPitchFraction * 0.35) : 4,
@@ -137,7 +207,18 @@ export function prepareRowBandSlicesForOcr(
     pitch > 0
       ? Math.max(grid.minRowBandSliceHeightPx, Math.round(pitch * grid.rowBandMergeHairlinePitchFraction))
       : grid.minRowBandSliceHeightPx;
-  return { slices: mergeSmallRowBandSlices(slices, mergeHairlineBelow), rowPitchPx: pitch };
+  const merged = mergeSmallRowBandSlices(slices, mergeHairlineBelow);
+  const splitRules = rulesInBody.length > 0 ? consolidated : sortedRules;
+  const split = splitOversizedRowBandSlices(
+    merged,
+    splitRules,
+    pitch,
+    grid.rowBandSplitOversizedPitchRatio,
+    mergeHairlineBelow,
+    grid.rowBandPitchSubdivideMinMultiplier,
+  );
+  const finalSlices = mergeSmallRowBandSlices(split, mergeHairlineBelow);
+  return { slices: finalSlices, rowPitchPx: pitch };
 }
 
 export function nutrientBodyExtents(
@@ -153,6 +234,8 @@ export function nutrientBodyExtents(
     | 'minRowBandSliceHeightPx'
     | 'minRowBandSliceHeightPitchFraction'
     | 'rowBandMergeHairlinePitchFraction'
+    | 'rowBandSplitOversizedPitchRatio'
+    | 'rowBandPitchSubdivideMinMultiplier'
   >,
 ): { top: number; height: number; rowBandSlices: SharedLabelRowBandSlice[]; rowPitchPx: number } {
   const mapY = (y: number) => mapAnalysisYToOcrBand(y, analysisH, ocrBandTop, ocrBandHeight);

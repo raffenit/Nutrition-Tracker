@@ -9,6 +9,13 @@ export type TesseractBatchResult = {
 const STDERR_PATTERNS =
   /too small to scale|cannot be recognized|empty page|Error during processing/i;
 
+/** Monotonic id per `recognize()` in the current import job (reset in {@link resetTesseractRunCounter}). */
+let tesseractRunSeq = 0;
+
+export function resetTesseractRunCounter(): void {
+  tesseractRunSeq = 0;
+}
+
 function pushDebug(lines: string[]): void {
   for (const line of lines) {
     const trimmed = line.trim();
@@ -48,15 +55,26 @@ export async function recognizeImagesOnWorker(
 ): Promise<TesseractBatchResult> {
   const logLines: string[] = [];
   const texts: string[] = [];
+  const totalRuns = images.length * psmModes.length;
+  let runInBatch = 0;
 
   for (let imageIndex = 0; imageIndex < images.length; imageIndex += 1) {
     for (const psm of psmModes) {
+      runInBatch += 1;
+      const run = ++tesseractRunSeq;
+      appendImportJobDebug(
+        `Tesseract run ${run}: start — ${label}, crop ${imageIndex + 1}/${images.length} (${runInBatch}/${totalRuns} in batch)`,
+      );
+
       await worker.setParameters({ tessedit_pageseg_mode: psm });
       const { result, stderr } = await withStderrCapture(async () => {
         const recognition = await worker.recognize(images[imageIndex]!);
         return recognition.data.text ?? '';
       });
       texts.push(result);
+
+      const chars = result.trim().length;
+      appendImportJobDebug(`Tesseract run ${run}: done — ${chars} characters`);
 
       const notableStderr = stderr.filter((line) => STDERR_PATTERNS.test(line));
       if (notableStderr.length > 0) {

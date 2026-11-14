@@ -82,11 +82,40 @@ export async function extractSharedLabelGridBuffers(
   };
 }
 
+export type RowBandExtractMinSize = {
+  minHeightPx: number;
+  minWidthPx: number;
+};
+
+export function rowBandMinExtractSize(
+  plan: Pick<SharedLabelValueGridPlan, 'rowPitchPx'>,
+  columnWidth: number,
+  fullImageWidth: number,
+  shared: SharedLabelGridParams = DEFAULT_SHARED_LABEL_GRID_PARAMS,
+): RowBandExtractMinSize {
+  const pitch = plan.rowPitchPx > 0 ? plan.rowPitchPx : 0;
+  const minHeightFromPitch =
+    pitch > 0 ? Math.round(pitch * shared.rowBandMinOcrExtractHeightPitchFraction) : 0;
+  const minHeightPx = Math.max(shared.minRowBandSliceHeightPx, minHeightFromPitch);
+
+  const minWImage =
+    fullImageWidth > 0 ? Math.round(fullImageWidth * shared.rowBandMinOcrExtractWidthImageFraction) : 0;
+  const minWPitch =
+    pitch > 0 ? Math.round(pitch * shared.rowBandMinOcrExtractWidthPitchFraction) : 0;
+  const minWidthPx = Math.min(
+    Math.max(1, columnWidth),
+    Math.max(minWImage, minWPitch),
+  );
+
+  return { minHeightPx, minWidthPx };
+}
+
 /** OCR one column as one line per horizontal row-band slice (ordered top → bottom). */
 export async function extractSharedLabelColumnPngsByRowBands(
   bytes: Buffer,
   column: Pick<ColumnStripRegion, 'left' | 'width'>,
   slices: SharedLabelRowBandSlice[],
+  minSize?: RowBandExtractMinSize,
 ): Promise<Buffer[]> {
   if (slices.length === 0) return [];
   const base = sharp(bytes).rotate();
@@ -95,10 +124,27 @@ export async function extractSharedLabelColumnPngsByRowBands(
   const maxH = meta.height ?? 0;
   const buffers: Buffer[] = [];
   for (const slice of slices) {
-    const left = Math.max(0, column.left);
-    const width = Math.min(column.width, Math.max(1, maxW - left));
-    const top = Math.max(0, slice.top);
-    const height = Math.min(slice.height, Math.max(1, maxH - top));
+    let left = Math.max(0, column.left);
+    let width = Math.min(column.width, Math.max(1, maxW - left));
+    let top = Math.max(0, slice.top);
+    let height = Math.min(slice.height, Math.max(1, maxH - top));
+
+    if (minSize) {
+      if (width < minSize.minWidthPx && maxW > 0) {
+        const want = Math.min(minSize.minWidthPx, maxW);
+        const expand = want - width;
+        left = Math.max(0, left - Math.floor(expand / 2));
+        width = Math.min(want, maxW - left);
+      }
+      if (height < minSize.minHeightPx) {
+        const want = minSize.minHeightPx;
+        const deficit = want - height;
+        const expandUp = Math.min(top, Math.floor(deficit / 2));
+        top -= expandUp;
+        height = Math.min(maxH - top, height + deficit);
+      }
+    }
+
     buffers.push(await base.clone().extract({ left, top, width, height }).png().toBuffer());
   }
   return buffers;

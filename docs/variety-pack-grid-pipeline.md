@@ -30,7 +30,7 @@ Step 4 does **not** run OCR. For **`shared_rail`**, it confirms the row mesh and
 
 **Unit tests:** `server/src/test/unit/integrations/varietyPackGridPipeline.test.ts` — runs steps 1→4 on a synthetic ruled grid; `stopAfterStep` ensures gating.
 
-**Ground truth:** Copy `local.example/test-images-manifest.example.json` to `local/test-images/manifest.json` and set `layout`, `valueColumnCount`, and `varietyPackPipeline` expectations per photo. `server/scripts/run-test-images-pipeline.mjs` compares actual vs manifest and exits non-zero on mismatch.
+**Ground truth:** Copy `local.example/test-images-manifest.example.json` to `local/test-images/manifest.json` and set `layout`, `valueColumnCount`, `nutrientRows` (main + secondary section row counts on the label), and `varietyPackPipeline` expectations per photo. Shared-rail photos should eventually yield `plan.rowBandSlices.length === mainSectionRows + secondarySectionRows`. `server/scripts/run-test-images-pipeline.mjs` compares actual vs manifest and exits non-zero on mismatch.
 
 **Local image diagnose:**
 

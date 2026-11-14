@@ -40,6 +40,16 @@ export type SharedLabelGridParams = {
   rowBandMaxMedianSlicePitchRatio: number;
   /** Merge row bands only when shorter than pitch × this (double-rule slivers; not whole rows). */
   rowBandMergeHairlinePitchFraction: number;
+  /** Split a slice when height exceeds pitch × this (same scale as {@link rowBandMaxMedianSlicePitchRatio}). */
+  rowBandSplitOversizedPitchRatio: number;
+  /** Pitch-based chop only when height exceeds pitch × this (clearly multi-row, no interior rules). */
+  rowBandPitchSubdivideMinMultiplier: number;
+  /** Min readable row-band crop height as a fraction of {@link rowPitchPx}. */
+  rowBandMinOcrExtractHeightPitchFraction: number;
+  /** Min readable row-band crop width as a fraction of full-image width (see {@link IMAGE_ANALYSIS_WIDTH}). */
+  rowBandMinOcrExtractWidthImageFraction: number;
+  /** Min row-band crop width as a fraction of {@link rowPitchPx} (whichever is larger with image fraction, capped at column width). */
+  rowBandMinOcrExtractWidthPitchFraction: number;
   /** Sparse value grid: gutter level as fraction of value-region profile peak. */
   valueGutterThresholdRatio: number;
   /** Minimum spacing between raw gutter candidates (fraction of value profile length). */
@@ -68,6 +78,11 @@ export const DEFAULT_SHARED_LABEL_GRID_PARAMS: SharedLabelGridParams = {
   rowBandOcrMinMedianSliceHeightPx: 16,
   rowBandMaxMedianSlicePitchRatio: 1.22,
   rowBandMergeHairlinePitchFraction: 0.38,
+  rowBandSplitOversizedPitchRatio: 1.22,
+  rowBandPitchSubdivideMinMultiplier: 2.35,
+  rowBandMinOcrExtractHeightPitchFraction: 0.55,
+  rowBandMinOcrExtractWidthImageFraction: 48 / W,
+  rowBandMinOcrExtractWidthPitchFraction: 0.65,
   valueGutterThresholdRatio: 0.48,
   valueRawGutterSpacingFraction: 3 / W,
   valueColumnMinSpacingFraction: 48 / W,

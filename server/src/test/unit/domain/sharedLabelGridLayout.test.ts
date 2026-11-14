@@ -7,6 +7,7 @@ import {
   nutrientBodyExtents,
   prepareRowBandSlicesForOcr,
   rowBandSlicesBetweenRules,
+  splitOversizedRowBandSlices,
 } from '../../../domain/sharedLabelGridLayout.js';
 
 test('rowBandSlicesBetweenRules splits body at rule lines', () => {
@@ -23,7 +24,7 @@ test('consolidateRowBandRuleYs merges double horizontal rules', () => {
   assert.deepEqual(ys, [100, 140, 180]);
 });
 
-test('mergeSmallRowBandSlices merges thin bands', () => {
+test('mergeSmallRowBandSlices merges only hairline slivers', () => {
   const merged = mergeSmallRowBandSlices(
     [
       { rowIndex: 0, top: 10, height: 12 },
@@ -32,8 +33,24 @@ test('mergeSmallRowBandSlices merges thin bands', () => {
     ],
     28,
   );
-  assert.equal(merged.length, 1);
-  assert.equal(merged[0]!.height, 66);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0]!.height, 26);
+  assert.equal(merged[1]!.height, 40);
+});
+
+test('splitOversizedRowBandSlices subdivides tall bands at interior rules', () => {
+  const rules = [120, 170, 220];
+  const slices = [{ rowIndex: 0, top: 100, height: 130 }];
+  const out = splitOversizedRowBandSlices(slices, rules, 50, 1.22, 19);
+  assert.ok(out.length >= 2);
+  assert.ok(out.every((s) => s.height <= 70));
+});
+
+test('splitOversizedRowBandSlices subdivides by pitch when no interior rules', () => {
+  const slices = [{ rowIndex: 0, top: 214, height: 119 }];
+  const out = splitOversizedRowBandSlices(slices, [333], 44, 1.22, 17);
+  assert.equal(out.length, 3);
+  assert.equal(out.reduce((n, s) => n + s.height, 0), 119);
 });
 
 test('prepareRowBandSlicesForOcr keeps one band per rule gap (hairline merge only)', () => {
