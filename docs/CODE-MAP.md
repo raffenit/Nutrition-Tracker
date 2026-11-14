@@ -30,6 +30,8 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | --- | --- | --- |
 | Upload + merge into draft | `server/src/routes/foodRoutes.ts` | `receiveUpload`, `applySlotMergedNutrients`, `extractUploadText` |
 | OCR orchestration | `server/src/integrations/extractText.ts` | `extractImageLabel`, `extractPdfText` |
+| OCR orchestration (internals — grep first) | same file + `varietyPackGridPipeline.ts` | `collectOcrCandidateTexts`, `ocrAndStitchVarietyPack`, `ocrAndStitchSharedLabelPlan`, `ocrSharedLabelGridColumns`, `ocrAndStitchColumnStrips` |
+| Wide-table column cap | `server/src/domain/columnStripDetectParams.ts` | `OCR_IMPORT_MAX_PRODUCT_COLUMNS`, `DEFAULT_COLUMN_STRIP_DETECT_PARAMS` |
 | Layout routing (wide table / candidate pick) | `server/src/domain/labelLayout.ts`, `server/src/integrations/imageLayoutHint.ts` | `inferLabelLayoutFromText`, `pickImportTextCandidateIndex`, `inferLabelLayoutHint` |
 | Import job progress (server phases) | `server/src/import/importJobProgress.ts`, `web/src/lib/runImportWithProgress.ts` | `reportImportJobStep`, `GET /api/import-jobs/:id`, `createImportProgressRunner` |
 | Variety-pack column strips (12b part B) | `server/src/integrations/labelColumnStrips.ts` | `detectColumnStrips`, `extractColumnStripBuffers`, `shouldRunColumnStripOcr` |

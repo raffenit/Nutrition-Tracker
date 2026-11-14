@@ -8,7 +8,7 @@
 
 TypeScript only: API in `server/` (Node 22), UI in `web/` (React 19 + Vite). Household data stays in `data/` and is not committed.
 
-Default server release: **`./deploy.sh`** (`CADDY_STYLE` in `.env`). Tests: **`npm test`** runs **server typecheck (both tsconfigs)**, **server `node --test`**, and **web `tsc --noEmit`** — all required; see [docs/testing-standards.md](./docs/testing-standards.md). Log: `local/test-last-run.log`. Server test layout: [server/src/test/README.md](./server/src/test/README.md). Windows hosts: WSL2 — [docs/SETUP-WINDOWS-WSL.md](./docs/SETUP-WINDOWS-WSL.md).
+Default server release: **`./deploy.sh`** (`CADDY_STYLE` in `.env`). Tests: **`npm run test:quick`** after edits; **`npm test`** is the full pre-deploy gate — see [docs/testing-standards.md](./docs/testing-standards.md). Logs: `local/test-last-run-quick.log`, `local/test-last-run.log`. Server test layout: [server/src/test/README.md](./server/src/test/README.md). Windows hosts: WSL2 — [docs/SETUP-WINDOWS-WSL.md](./docs/SETUP-WINDOWS-WSL.md).
 
 ## Finding code (no line numbers)
 

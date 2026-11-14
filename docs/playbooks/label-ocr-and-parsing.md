@@ -17,16 +17,30 @@
 ```text
 POST /api/uploads  (foodRoutes.ts → receiveUpload)
   → extractUploadText → extractImageLabel (extractText.ts)
-       → inferLabelLayoutHint (imageLayoutHint.ts) → OCR profile
-       → buildOcrImageVariants (ocrPreprocess.ts)
-       → EasyOCR subset + Tesseract subset (parallel)
-       → inferLabelLayoutFromText + pickImportTextCandidateIndex (labelLayout.ts)
-       → optional wideTableRetry pass when landscape + no multi-column parse
-       → `GET /api/import-jobs/:id` polled while upload/URL import runs (`importJobProgress.ts`); response includes `debugLog` (Tesseract traces, column-strip steps)
+       → resolveLabelProcessingImage (focus crop) / inferLabelLayoutHint
+       → if widePanel: runVarietyPackGridPipeline (geometry preflight in debugLog)
+       → if shared_rail plan: ocrAndStitchSharedLabelPlan → row-band or body-column OCR
+       → else if column strips: ocrAndStitchColumnStrips / ocrAndStitchVarietyPack
+       → else full-page: collectOcrCandidateTexts → stitch / slot merge paths
+       → optional split-single, wideTableRetry
+       → `GET /api/import-jobs/:id` polled while upload/URL import runs (`importJobProgress.ts`); response includes `debugLog`
        → mergeSlotReadingsAcrossCandidates (labelSlotExtract.ts)
   → buildNutritionImport (nutritionImport.ts) + applySlotMergedNutrients (foodRoutes.ts)
   → JSON to FoodPage.tsx → user review
 ```
+
+On failure, `readExtractedText` logs `readExtractedText:image|pdf` to `debugLog` and stderr; hint/EasyOCR fallbacks log `inferLabelLayoutHint`, `inferDepthOfFieldHint`, `easyocr subprocess`.
+
+## Symptom → debugLog prefix
+
+| debugLog substring | Function / area |
+| --- | --- |
+| `geometry preflight:` | `runVarietyPackGridPipeline` |
+| `shared-label grid` | `ocrSharedLabelGridColumns` |
+| `column-strip` / `stitch` | `ocrAndStitchColumnStrips` |
+| `readExtractedText:` | `foodRoutes.ts` boundary (uncaught pipeline error) |
+| `inferLabelLayoutHint:` / `inferDepthOfFieldHint:` | geometry fallback (safe defaults) |
+| `easyocr subprocess:` | Python EasyOCR failure |
 
 PDF path uses `extractPdfText` then the same import builder (no slot merge from OCR variants).
 
