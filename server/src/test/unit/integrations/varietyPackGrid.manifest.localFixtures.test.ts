@@ -4,13 +4,18 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import type { TestImageManifest } from '../../../domain/testImageManifest.types.js';
+import { OCR_IMPORT_MAX_PRODUCT_COLUMNS } from '../../../domain/columnStripDetectParams.js';
+import {
+  totalNutrientRowsFromGroundTruth,
+  type TestImageManifest,
+} from '../../../domain/testImageManifest.types.js';
 import { detectSplitSingleLabel } from '../../../integrations/splitSingleLabel.js';
 import { inferLabelLayoutHint } from '../../../integrations/imageLayoutHint.js';
 import {
   detectSharedLabelValueGrid,
   runVarietyPackGridPipeline,
 } from '../../../integrations/varietyPackGridPipeline.js';
+import { useRowBandSliceOcrForPlan } from '../../../integrations/sharedLabelValueGrid.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const imageDir = path.join(repoRoot, 'local', 'test-images');
@@ -26,6 +31,15 @@ test(
     const failures: string[] = [];
 
     for (const fx of manifest.fixtures) {
+      if (!fx.nutrientRows) {
+        failures.push(`${fx.file}: missing nutrientRows ground truth`);
+        continue;
+      }
+      const { mainSectionRows, secondarySectionRows } = fx.nutrientRows;
+      if (mainSectionRows < 1 || secondarySectionRows < 0) {
+        failures.push(`${fx.file}: invalid nutrientRows (${mainSectionRows} main, ${secondarySectionRows} secondary)`);
+      }
+
       const imagePath = path.join(imageDir, fx.file);
       if (!existsSync(imagePath)) {
         failures.push(`${fx.file}: missing file`);
@@ -34,7 +48,7 @@ test(
       const bytes = await readFile(imagePath);
       const hint = await inferLabelLayoutHint(bytes);
       const pipelineOpts = {
-        maxColumns: 14,
+        maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS,
         layoutHint: {
           singleSubjectInFocus: hint.singleSubjectInFocus,
           sharpPeakCount: hint.sharpPeakCount,
@@ -71,6 +85,25 @@ test(
         failures.push(
           `${fx.file}: expected >= ${vp.minValueColumns} value columns, got ${plan?.valueColumns.length ?? 0}`,
         );
+      }
+      if (fx.layout === 'shared_rail' && plan && fx.nutrientRows) {
+        const wantRows = totalNutrientRowsFromGroundTruth(fx.nutrientRows);
+        const gotSlices = plan.rowBandSlices.length;
+        if (gotSlices < wantRows - 1 || gotSlices > wantRows + 1) {
+          failures.push(
+            `${fx.file}: rowBandSlices ${gotSlices} not within ±1 of manifest nutrient rows ${wantRows}`,
+          );
+        }
+        if (!useRowBandSliceOcrForPlan(plan)) {
+          failures.push(`${fx.file}: expected row-band OCR gate open (rowOcr=true)`);
+        }
+        const step4 = pipeline.steps[4].data;
+        const ruleCount = step4?.rowBandYs?.length ?? 0;
+        if (ruleCount > 0 && ruleCount < fx.nutrientRows.mainSectionRows) {
+          failures.push(
+            `${fx.file}: step 4 rowBandYs ${ruleCount} < main section rows ${fx.nutrientRows.mainSectionRows}`,
+          );
+        }
       }
       if (fx.splitSingleLabel?.expectDetect && !split) {
         failures.push(`${fx.file}: expected detectSplitSingleLabel`);

@@ -6,6 +6,11 @@
       "description": "Variety pack, shared_rail layout (one nutrient rail + N value columns).",
       "layout": "shared_rail",
       "valueColumnCount": 10,
+      "nutrientRows": {
+        "mainSectionRows": 10,
+        "secondarySectionRows": 4,
+        "notes": "Count main vs secondary blocks on the shared label rail."
+      },
       "varietyPackPipeline": {
         "expectRun": true,
         "expectLastOkStep": 4,
@@ -17,6 +22,11 @@
       "file": "split-halves.jpg",
       "layout": "split_single",
       "valueColumnCount": null,
+      "nutrientRows": {
+        "mainSectionRows": 12,
+        "secondarySectionRows": 5,
+        "notes": "Single panel after horizontal stitch (example counts)."
+      },
       "varietyPackPipeline": {
         "expectRun": true,
         "expectSharedRailPlan": false,
@@ -30,6 +40,11 @@
       "file": "single-panel.jpg",
       "layout": "single",
       "valueColumnCount": null,
+      "nutrientRows": {
+        "mainSectionRows": 10,
+        "secondarySectionRows": 12,
+        "notes": "Example single panel; some labels use dot leaders instead of a grid."
+      },
       "varietyPackPipeline": {
         "expectRun": false,
         "expectFailStep": 1,
