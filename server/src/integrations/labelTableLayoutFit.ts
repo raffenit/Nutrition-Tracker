@@ -5,7 +5,7 @@ import {
   type LabelTableLayoutParams,
 } from '../domain/labelTableLayoutParams.js';
 import type { VarietyPackLabelLayout } from '../domain/varietyPackGridPipeline.js';
-import type { ColumnStripDetectParams } from '../domain/columnStripDetectParams.js';
+import { OCR_IMPORT_MAX_PRODUCT_COLUMNS, type ColumnStripDetectParams } from '../domain/columnStripDetectParams.js';
 import { DEFAULT_SPLIT_SINGLE_LABEL_PARAMS } from '../domain/splitSingleLabelParams.js';
 import { classifyBandLuminanceInScanBand } from './bandLuminanceCluster.js';
 import {
@@ -127,7 +127,7 @@ export function scoreLayoutHypotheses(
 export function columnSegmentsForLayout(
   layout: VarietyPackLabelLayout | 'single',
   witnesses: ColumnGeometryWitnesses,
-  maxColumns: number = 14,
+  maxColumns: number = OCR_IMPORT_MAX_PRODUCT_COLUMNS,
 ): ColumnSegment[] {
   if (layout === 'split_single') {
     return fitSplitSingleColumns(witnesses) ?? [];

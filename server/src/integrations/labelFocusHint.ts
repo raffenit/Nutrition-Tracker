@@ -9,6 +9,7 @@ import {
   MULTI_COLUMN_FOCUS_MIN_PEAKS,
   SINGLE_SUBJECT_FOCUS_MAX_WIDTH_FRACTION,
 } from '../domain/labelFocusParams.js';
+import { appendImportJobDebug } from '../import/importJobProgress.js';
 import { bandToAnalysisSize } from './imageAnalysisResample.js';
 
 export type FocusRegion = {
@@ -110,7 +111,9 @@ export async function inferDepthOfFieldHint(bytes: Buffer): Promise<DepthOfField
         : null;
 
     return { sharpFocusWidthFraction, singleSubjectInFocus, sharpPeakCount, focusRegion };
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    appendImportJobDebug(`inferDepthOfFieldHint: fallback (${reason})`);
     return fallback;
   }
 }

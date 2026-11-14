@@ -1,3 +1,4 @@
+import { OCR_IMPORT_MAX_PRODUCT_COLUMNS } from '../domain/columnStripDetectParams.js';
 import type { BandLuminanceRoles } from '../domain/bandLuminanceRoles.js';
 import {
   DEFAULT_RULED_TABLE_GRID_PARAMS,
@@ -38,7 +39,7 @@ export function categoriesFromRuledGrid(
   height: number,
   scanStartX: number,
   params: Partial<RuledTableGridParams> = {},
-  maxColumns: number = 14,
+  maxColumns: number = OCR_IMPORT_MAX_PRODUCT_COLUMNS,
   options?: { requireHorizontalRules?: boolean },
 ): RuledGridCategorySegment[] {
   const p = { ...DEFAULT_RULED_TABLE_GRID_PARAMS, ...params };
@@ -149,7 +150,7 @@ export function valueColumnsFromRuledGrid(
   height: number,
   valueStartX: number,
   params: Partial<RuledTableGridParams> = {},
-  maxColumns: number = 14,
+  maxColumns: number = OCR_IMPORT_MAX_PRODUCT_COLUMNS,
 ): RuledGridSegment[] {
   return categoriesFromRuledGrid(pixels, width, height, valueStartX, params, maxColumns, {
     requireHorizontalRules: true,

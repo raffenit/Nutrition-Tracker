@@ -5,7 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import sharp from 'sharp';
-import { DEFAULT_COLUMN_STRIP_DETECT_PARAMS } from '../../../domain/columnStripDetectParams.js';
+import {
+  DEFAULT_COLUMN_STRIP_DETECT_PARAMS,
+  OCR_IMPORT_MAX_PRODUCT_COLUMNS,
+} from '../../../domain/columnStripDetectParams.js';
 import { detectSharedLabelValueGrid } from '../../../integrations/varietyPackGridPipeline.js';
 import {
   profileInkAsymmetryForLayoutScores,
@@ -86,7 +89,7 @@ test(
   { skip: !existsSync(sharedLabelMultiValueFixture) },
   async () => {
     const bytes = await readFile(sharedLabelMultiValueFixture);
-    const plan = await detectSharedLabelValueGrid(bytes, { maxColumns: 14 });
+    const plan = await detectSharedLabelValueGrid(bytes, { maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS });
     assert.ok(plan, 'expected shared label + value grid');
     assert.ok(plan!.valueColumns.length >= 4, 'expected multiple value columns');
     assert.ok(plan!.labelColumn.width < (await sharp(bytes).rotate().metadata()).width! * 0.35);

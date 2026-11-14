@@ -17,6 +17,7 @@ import {
   getImportJobForUser,
   parseImportJobId,
   reportImportJobStep,
+  appendImportJobDebug,
   runWithImportJob,
 } from '../import/importJobProgress.js';
 import { extractImageLabel } from '../integrations/extractText.js';
@@ -469,7 +470,11 @@ async function readExtractedText(
       pageTexts: null,
       varietyPackExpectedColumns,
     };
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const stage = kind === 'pdf' ? 'readExtractedText:pdf' : 'readExtractedText:image';
+    appendImportJobDebug(`${stage}: failed (${reason})`);
+    console.error(`[${stage}]`, error);
     return {
       text: '',
       warning: 'The file is saved, and the text could not be read. Enter the nutrition facts yourself.',

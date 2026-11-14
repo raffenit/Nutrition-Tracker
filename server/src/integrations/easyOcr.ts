@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { appendImportJobDebug } from '../import/importJobProgress.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -77,7 +78,9 @@ async function runEasyOcrOnImage(
     });
     const text = stdout.trim();
     return text || null;
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    appendImportJobDebug(`easyocr subprocess: failed (${reason})`);
     return null;
   } finally {
     await unlink(imagePath).catch(() => undefined);
