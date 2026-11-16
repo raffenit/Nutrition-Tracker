@@ -22,6 +22,8 @@ POST /api/uploads  (foodRoutes.ts → receiveUpload)
        → if shared_rail plan: ocrAndStitchSharedLabelPlan → row-band or body-column OCR
        → else if column strips: ocrAndStitchColumnStrips / ocrAndStitchVarietyPack
        → else full-page: collectOcrCandidateTexts → stitch / slot merge paths
+            (portrait single: 1 orientation, Tess first; if assessCoreMacroReadiness is contested →
+             EasyOCR on stacked crops of only the contested rows; full-page Easy only if still unsettled / missing)
        → optional split-single, wideTableRetry
        → `GET /api/import-jobs/:id` polled while upload/URL import runs (`importJobProgress.ts`); response includes `debugLog`
        → mergeSlotReadingsAcrossCandidates (labelSlotExtract.ts)
@@ -41,6 +43,7 @@ On failure, `readExtractedText` logs `readExtractedText:image|pdf` to `debugLog`
 | `readExtractedText:` | `foodRoutes.ts` boundary (uncaught pipeline error) |
 | `inferLabelLayoutHint:` / `inferDepthOfFieldHint:` | geometry fallback (safe defaults) |
 | `easyocr subprocess:` | Python EasyOCR failure |
+| `ocr progressive:` / `ocr stage:` | portrait-single Easy gate (`assessCoreMacroReadiness`) / `OcrPipelineTimer` |
 
 PDF path uses `extractPdfText` then the same import builder (no slot merge from OCR variants).
 
@@ -64,6 +67,30 @@ PDF path uses `extractPdfText` then the same import builder (no slot merge from 
 | `server/src/test/unit/domain/labelLayout.test.ts` | Wide-table candidate pick, retry gate |
 
 Run: repo root `npm test`.
+
+## Reporting local OCR runs (agents + humans)
+
+When summarizing `run-local-test-images-ocr.mjs` or manifest fixtures, use a **status column** on each row:
+
+| Symbol | Meaning |
+| --- | --- |
+| **✓** | Matches manifest / goal (geometry, path, or semantic bar stated in manifest) |
+| **~** | Partially OK — runnable but weak (e.g. parsed≥2 products but macros wrong, or noisy single-label) |
+| **✗** | Clear fail vs manifest or goal |
+
+Example (Costco shared_rail):
+
+```text
+| Check              | Status | Detail                          |
+|--------------------|--------|---------------------------------|
+| Row-band path      | ✓      | batched row-band, not body-col  |
+| rowSlices vs manifest | ✓   | 15 vs 14±1                      |
+| value columns      | ✓      | 10                              |
+| table parse cols   | ~      | 9                               |
+| macro calories     | ✗      | mostly 1–18; stitch misaligned  |
+```
+
+Do not use bare “OK/MISMATCH” without symbols when the summary is tabular.
 
 ## Rules
 

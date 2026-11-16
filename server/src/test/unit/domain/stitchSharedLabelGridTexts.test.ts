@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { parseMultiProductLabelTable } from '../../../domain/parseMultiProductLabelTable.js';
 import {
   diagnoseSharedLabelGridStitch,
+  stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
 } from '../../../domain/stitchSharedLabelGridTexts.js';
 
@@ -16,6 +17,77 @@ Protein
 `;
 
 const HEADER = 'Crunchy Wafer    Cocoa Bar    Peanut Mix';
+
+test('stitchSharedLabelGridFromRowBandSlices aligns per-column row bands', () => {
+  const labelSlices = [
+    'Nutrition Facts',
+    '% Daily Value*',
+    'Calories',
+    'Total Fat',
+    'Sodium',
+  ];
+  const valueSlices = [
+    ['SNICKERS', '% Daily Value*', '90', '5g', '120mg'],
+    ['TWIX', '% Daily Value*', '110', '6g', '140mg'],
+  ];
+  const stitched = stitchSharedLabelGridFromRowBandSlices(labelSlices, valueSlices, 'Snack A    Snack B');
+  assert.ok(stitched);
+  const cols = parseMultiProductLabelTable(stitched!);
+  assert.equal(cols?.length, 2);
+  assert.equal(cols![0]!.nutrients.calories, 90);
+  assert.equal(cols![1]!.nutrients.calories, 110);
+  const lineStitch = stitchSharedLabelGridTexts(
+    labelSlices.join('\n'),
+    valueSlices.map((col) => col.join('\n')),
+    'Snack A    Snack B',
+  );
+  assert.ok(lineStitch);
+  const lineCols = parseMultiProductLabelTable(lineStitch!);
+  assert.equal(lineCols?.[0]!.nutrients.calories, 90);
+});
+
+test('stitchSharedLabelGridFromRowBandSlices keeps % Daily Value row when label slice is empty', () => {
+  const labelSlices = ['', 'Calories', 'Total Fat'];
+  const valueSlices = [
+    ['% Daily Value*', '90', '5g'],
+    ['% Daily Value*', '110', '6g'],
+  ];
+  const stitched = stitchSharedLabelGridFromRowBandSlices(labelSlices, valueSlices, 'Snack A    Snack B');
+  assert.ok(stitched);
+  assert.match(stitched!, /% Daily Value/i);
+  assert.match(stitched!, /Snack A {4}Snack B/);
+});
+
+test('stitchSharedLabelGridFromRowBandSlices maps value slices when counts differ', () => {
+  const labelSlices = ['Amount per serving', 'Calories', 'Total Fat', 'Sodium', 'Protein'];
+  const valueSlices = [
+    ['90', '5g', '120mg', '3g'],
+    ['110', '6g', '140mg', '4g'],
+  ];
+  const stitched = stitchSharedLabelGridFromRowBandSlices(labelSlices, valueSlices);
+  assert.ok(stitched);
+  const cols = parseMultiProductLabelTable(stitched!);
+  assert.equal(cols?.[0]!.nutrients.calories, 90);
+  assert.equal(cols?.[1]!.nutrients.calories, 110);
+});
+
+test('stitch uses display calories from per-column header OCR', () => {
+  const stitched = stitchSharedLabelGridTexts(
+    'Nutrition Facts\nCalories\nTotal Fat',
+    [
+      'SNICKERS\n% Daily Value*\n2 Packs (28g)\n45g',
+      'TWIX\n% Daily Value*\n1 Bar (17g)\n35g',
+    ],
+    '',
+    {
+      headerColumnTexts: ['KIT KAT®\nVaries\n170', 'SNICKERS®\nVaries\n250'],
+    },
+  );
+  assert.ok(stitched);
+  const cols = parseMultiProductLabelTable(stitched!);
+  assert.equal(cols?.[0]!.nutrients.calories, 170);
+  assert.equal(cols?.[1]!.nutrients.calories, 250);
+});
 
 test('stitchSharedLabelGridTexts builds table from label + value columns', () => {
   const stitched = stitchSharedLabelGridTexts(

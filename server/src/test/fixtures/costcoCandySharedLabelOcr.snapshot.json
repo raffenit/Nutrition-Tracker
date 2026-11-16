@@ -1,32 +1,31 @@
 {
   "sourceImage": "costco-candy.jpg",
-  "capturedAt": "2026-11-13T05:04:54.750Z",
+  "capturedAt": "2026-11-15T01:55:33.244Z",
   "geometry": {
     "lastOkStep": 4,
     "valueColumnCount": 10,
-    "rowBandOcr": false,
-    "rowBandSliceCount": 7,
-    "rowPitchPx": 50
+    "rowBandOcr": true,
+    "rowBandSliceCount": 17,
+    "rowPitchPx": 44
   },
-  "labelColumnText": "x » a= ¥ a F\n0? 3 b> A a\na oe Ph\nRe BN Servos\nre i Serving si:\n“Von, a 5\n. 3 A [Amount per se\nyal [Calories\n4 3 F iE i\nA BN pew\ni Ei \"| Saturated Fat\n; ) i Trans Fat\nN 4 Cholesterol\n; RN, \"Sodium\nNd (3 Total Carbohyd\nIS Sl J\n",
-  "headerBandText": "§ - & ig he\ngo Fe. — V4 & - fi 0\n— i al a 2 Zz E . bE ; :\n= REI td . A gt ee 2 a -\n",
+  "labelColumnText": "= Nutrition Facts\nA Servings per cv 2iner\nServing si\n2 AEST Saud\n5 [Amount per serving\n|\" (Calories\nAl | ———————————————\nTEE\n\\  savratedFt\nBN ransPt\n; Cholesterol\n| Sodium\nTotal Carbohydrate\nDietary Fiber\nTotal Sugars\nIncludes Added Sugars\nProtein\nEERRST. a Oh a\nTeno n ODE yr)\na serving of food contributes ~~ Calcium\nto a daily diet. 2,000 calories Iron\na day is used for general mp\nnutrition advice Potassium\n",
+  "headerBandText": "CE ——— ER ————— A ————MGS\nKIT KAT® SNICKERS® M&M'S® Peanut , 1s peanut | 3 MUSKETEERS® | BUTTERFINGER® | ALMOND Joy*\nWafer Bar Fun Size Bar Chocolate Candies NE Me rim I MILKCHEES or Cup bl. —— i A\n— — ————— | —————— ————————— - 3 ry\nVaries Varies Varies Verkade TT Varies IEEE Varies Varies Varies Varies\n2 Packs (28g) 1Bar (17g) 1Pack (18g) ~(189) |  2Packs (27g) 1Bar (17g) | 2 Pieces (31) 2 Bars (30g) 2Bars(37g) | 2Pieces (34g)\neen | ese | ee | V8) | ETE AL et PE —TEy err\n",
   "valueColumnTexts": [
-    "TC a\na A tne. mre.\n ————\non Facts |\ncainer\nry (ESET al\nving\nCr CT ———\nHeel ew A\n",
-    "A = i\nIYPES AN!\nEn\nKIT KAT® SN\nWafer Bar Fu\nEemeR TERE s=m=——\nVaries\n2 Packs (28g)\nERIE). | Ea\nee — SS Fea\n% Daily Value* | %Da\nTo % [4\n45g 23% 159\n- at\n<5mg 0% | Omg\n15mg 1% | 40mg\n19g 7% | 10g\n",
-    ". —\nee. SEE\ner  ——\n=\nICKERS® M&M'S® Pe;\n1 Size Bar Chocolate Ca\n= 1 Lats aa ——\nVaries Va\n1Bar (17g) 1 Pack (\nSFT EE | eas\ne— = _ ___\nily Value* % Daily Valu\n5% | 5g\n8% | 2g\net HR\n0% | Omg\n2% | 10mg\n4% | Nig\n",
-    "~\n\ni A—e—\nES WILL VARY A IH\n— Re\nnut TWIx®\nndies Fun Size Bar C\na TENE e— F\nries Varies\n18g) ar (16g)\n|e eam | |\n| oss |\ne* % Daily Value*\n\n6% | 35g 4%\n10% | 2g 10%\n\n0g\n\n0% | Omg 0%\n\n0% | 30mg 1%\n\n4% | Nig 4%\n",
-    "3 A G RIAY A } f L L HN\n\nM&M'S® Milk MILK\nhocolate Candies Fun $\namie = CIE | E—\n\nVaries\n\n2 Packs (27g) 1\nSERENE | TEE\nEm mesEs——— a em —\n% Daily Value* % Daily\n5 6% | 30\n3a 15% | 2g\n0g 0g\nOmg 0% | Omg\n20mg 1% | 25mg\n19g 7% | 129\n",
-    "a N L \\ E eS i\n© a—\nWA | RE\n— | e——\nVaries var!\nBar (17g) | 2 Pieces (3\n6\n— | 5% Daily Value\n4% | 9g I\n10% | 3g I\n\n0g\n0% | <5mg (\n1% | 100mg 4\n4% | 18g ,\n",
-    "yd\n\nRY a\nle —\n\nMUSKETEERS®\nud : Fun Size Bar\n— A ——\nes Varies\n1g) 2 Bars (30g)\nI Ew $a\nad ESE. J\n| % Daily Vaiue*\n2% | 49 5%\n% | 2.59 13%\n— LT\n% | Omg 0% |\n% | 55mg 2% | |\n%| 289 gx:\n",
-    "—\nBUTTERFINGER® | AL\n— C5\nVaries\n2Bars (37g) | 2P\nia SVEN EES\n170)\n% Daily Value* _ | % Dai\nLE Ey.\nsg w% |g\n0g 0g\nOmg 0% omg\n10mg 5% | 45mg\n5g 9% [20g\n",
-    "| [iar xr wa\n\n(NGREDIENT\n\ncom} ARTUACIAL F\n\nSNICKERS®\n\nMOND JOY* INGREDIENT\n\nandy Bar ij FLAVOR. CON\n\nem MAM'S® PE\n\nVaries NGREDIENT\njeces (34g) olL,\n\na fain\n\nTWIX® FUN §\n\nINGREDIENT:\n\n170 [=o\n\nCONTAINS: M\n\nES SA MEM'S® MIL\n\nly Value® = BN nGReDiENT:\n\n12% COLORS (INCL\n\n35% || xy ware\n\n———————— INGREDIENTS\n\nee [ cocorrown\n\n0% Bb Resse's Pen\n\n— TT TT ——— INGREDIENTS\n\n2% CONTAINS: PE\n\n7% 3 MUSKETEERS\n",
-    "FER BAR\n\n3: SUGAR, WHEAT FLOUR, COCOA BUTTER\nFUN SIZE BAR\n\nS: MILK CHOCOLATE (SUGAR, COCOA BUY\nTAINS: PEANUTS, MILK, EGGS, AND SOX\nANUT CHOCOLATE CANDIES\n\nS$: MILK CHOCOLATE (SUGAR, CHOCOLAT\nRUP, DEXTRIN, COLORS (INCLUDES BLUE\nK, AND SOY. MAY CONTAIN: TREE NUTS.\n{ZE BAR\n\n5: MILK CHOCOLATE (SUGAR, COCOA BU\nE, RIBOFLAVIN, FOLIC ACID), SUGAR, PAL\nILK, SOY AND WHEAT MAY CONTAIN: F\nK CHOCOLATE CANDIES\n\n3: MILK CHOCOLATE (SUGAR, CHOCOU\nUDES BLLIE 1 LAKE, YELLOW 6, RED 40\nNUTS.\n\nFUN SIZE BAR\n\nx MILK CHOCOLATE (SUGAR, COCOA B\nER PROCESSED WITH ALKALL BARLEY\nJUT BUTTER CUP\n\n: MILK CHOCOLATE (SUGAR, COCOA Bi\nANUTS, MILK, SOY\n\nIS® FUN SIZE BAR\n"
+    "% Daily Value*\n19 9%\n4.59 23%\nOg\n\n<5mg 0%\n15mg 1%\n19g %\n<lg 0%\n15g\n\n14g 28%\nig\nsir ir\nOmcg 0%\n20mg 0%\n0.6mg 4%\n55ma 2%\n",
+    "FERRE,\n% Daily Value®\n4g 5%\n1.5¢ 8%\nA\nOmg 0%\n40mg 2%\n10g 4%\nBR\n9 aay\n8g 16%\nig\n\nET TE\nOmcg 0%\nOmg 0%\n\nOmg 0%\n\nOmg 0%\n",
+    "FE.\n% Daily Value®\n5g 6%\n29 10%\n0g\nOmg 0%\n10mg 0%\nNg 4%\n<Ig 3%\n39\n8g 16%\n29\nLTE\nOmcg 0%\nOmg 0%\n04mg 2%\nOma 0%\n",
+    "3.59 4%\n20 10%\n0g\nOmg 0%\n30mg 1%\nlig 4%\n0g 0%\n| PEA\n1g 14%\n<1g\nesi]\nOmcg 0%\nOmg 0%\nOmg 0%\nOmg 0%\n",
+    "Ib\n% Dally value® |\n5g 6%\n\n3g 15% |\n0g\nOmg 0%\n\n20mg 1% |\n19g % |\n<Ig 3% |\n17g\n16g 32%\n\nIg\nTONNE |\nOmcg 0%\n\n30mg 2% |\n04mg 2% |\nOmg 0% |\n",
+    "Led\n\n% Daily value” |\nTY\n29 10%\n0g |\nOmg 0% |\n25mg 1%\n129 4% | 1\n0g 0% | 1\n10g i\n9g 18% | 1\n<Ig :\nEE | |\nOmcg 0% | (\nOmg 0% | :\nOmg 0% |\nOma 0% | 1\n",
+    "————\n% Daily Value®\n9g 12%\n\n3g 15%\n\n0g\n\n<dmg 0%\n00mg 4%\n\n8g 7% |\ng a% |\n6g\n5 30% |\nig |\nI | |\nmcg 0% |\n0mg 0% | (\n).9mg 6% | C\noma 2% | ¢\n",
+    "TETRIS. WE\n% Daily Value*\n4g 5%\n2.59 13%\nEE —\nLl\nomy 0%\n55mg 2%\n89 8% |\nDe 0%\n20g\n\nEE ——— |\n20g 20% |\na —— )\n<Ig\nFo |\nImcg 0% |\n—3 0%\nImg 0% | :\n——— -\nmg 0% |\nma 0% | &\n",
+    "% Daily Value®\n79 9%\nSee on\nBE en\nTR\n259 9%\n<Ig 3%\n159\n\n14g 28%\n3g\nERSTE TT)\nmeg ___ 0%\n20mg 0%\n— Sy §\nOma saz |\n",
+    "2 ily Value®\n9g 12%\n79 35%\nER\nOmg 0%\n45mg 2%\n20g T%\n1g 4%\n14g 28%\n1g\n\nLIF RSShaes\nOmcg 0%\n10mg 0%\n.—.. SREY\n"
   ],
   "ocrScores": {
-    "label": 5.5,
-    "header": 0,
+    "label": 8,
+    "header": 1,
     "values": [
-      0,
       2,
       2,
       2,
@@ -34,8 +33,9 @@
       2,
       2,
       2,
-      1,
-      0
+      2,
+      2,
+      2
     ]
   }
 }

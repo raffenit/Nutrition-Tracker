@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { extractImageLabel } from '../dist/integrations/extractText.js';
 import { inferLabelLayoutHint } from '../dist/integrations/imageLayoutHint.js';
 import { buildNutritionImportWithPanels } from '../dist/domain/nutritionImport.js';
+import { applySlotMergedNutrients } from '../dist/domain/nutrients.js';
 import { parseMultiProductLabelTable } from '../dist/domain/parseMultiProductLabelTable.js';
 import { inferLabelLayoutFromText } from '../dist/domain/labelLayout.js';
 import { parseNutritionLabel } from '../dist/domain/parseLabel.js';
@@ -30,8 +31,28 @@ import {
   startImportJobConsoleWatch,
   stopImportJobConsoleWatch,
 } from '../dist/import/importJobCliProgress.js';
+import { loadGlareGroundTruthForImage } from '../dist/domain/sharedLabelGlareGroundTruth.js';
+import { loadLabelNutrientGroundTruthForImage } from '../dist/domain/labelNutrientGroundTruth.js';
+import {
+  compareLabelProductsToGroundTruth,
+  ocrPerformanceReportTitle,
+  renderGroundTruthCompareHtml,
+  resolveParsedProductsFromOcrText,
+  inferNutrientRowSpecs,
+} from '../dist/domain/labelNutrientGroundTruthCompare.js';
+import {
+  evaluateNutrientGroundTruthRegression,
+  formatGroundTruthScoreLine,
+  groundTruthPercentOk,
+} from '../dist/domain/labelNutrientGroundTruthRegression.js';
+import { groundTruthCompareHtmlDirWorkspace } from '../dist/domain/groundTruthComparePaths.js';
+import {
+  writeGroundTruthCompareHtmlFiles,
+  writeGroundTruthCompareIndex,
+} from '../dist/domain/writeGroundTruthCompareHtml.js';
 
 const streamImportProgress = process.env.IMPORT_JOB_CLI_PROGRESS !== '0';
+const groundTruthStrict = process.env.GROUND_TRUTH_STRICT === '1';
 const verboseImportDebug = process.env.IMPORT_JOB_VERBOSE_DEBUG === '1';
 const cliImageFilter = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 
@@ -41,6 +62,7 @@ const manifestPath = path.join(imageDir, 'manifest.json');
 const dataDir = path.join(repoRoot, 'data');
 const tessCache = path.join(dataDir, 'tesseract-cache');
 const easyocrModelDir = path.join(dataDir, 'easyocr-models');
+const groundTruthFixturesDir = path.join(repoRoot, 'server/src/test/fixtures');
 
 /** @type {Map<string, object>} */
 let fixtureByFile = new Map();
@@ -88,6 +110,16 @@ function parseStitchMetrics(debug) {
 function countPlaceholderPanels(panels) {
   return panels.filter((p) => p.warning?.includes('manual') || p.preview?.includes('needs manual')).length;
 }
+
+const manifestRegressionDefaults = {
+  'costco-candy.jpg': { minCalorieColumnsMatch: 3 },
+  'protein-shake.jpg': { requireFieldsOk: ['calories'] },
+  'ice-cream.jpg': { trackOnly: true },
+};
+
+const nutrientRegressionFailures = [];
+/** @type {import('../dist/domain/writeGroundTruthCompareHtml.js').OcrPerformanceReportIndexEntry[]} */
+const compareHtmlFiles = [];
 
 for (const name of names) {
   const bytes = await readFile(path.join(imageDir, name));
@@ -173,6 +205,21 @@ for (const name of names) {
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`OCR elapsed: ${elapsed}s, primary text length: ${result.text.length}`);
+  const perfSpec = fx?.ocrPerformanceRegression;
+  if (perfSpec?.trackMaxSeconds > 0) {
+    const over = Number(elapsed) > perfSpec.trackMaxSeconds;
+    const trackOnly = perfSpec.trackOnly !== false;
+    console.log(
+      `OCR runtime budget: ${elapsed}s / ${perfSpec.trackMaxSeconds}s ${over ? 'OVER' : 'OK'}${trackOnly ? ' (trackOnly)' : ''}`,
+    );
+    if (over && !trackOnly) process.exitCode = 1;
+  }
+  if (result.pipelineStages?.length) {
+    const lines = result.pipelineStages.map(
+      (s) => `${s.label} ${(s.durationMs / 1000).toFixed(1)}s${s.detail ? ` (${s.detail})` : ''}`,
+    );
+    console.log(`OCR stages: ${lines.join(' · ')}`);
+  }
 
   const layout = inferLabelLayoutFromText([result.text]);
   console.log(
@@ -183,14 +230,101 @@ for (const name of names) {
   const parsedColCount = tableCols?.length ?? 0;
   console.log(`multi-product parse: columns=${parsedColCount}`);
 
+  const caloriesGt =
+    fx?.caloriesKcalPerValueColumn ??
+    (await loadGlareGroundTruthForImage(name, groundTruthFixturesDir))?.caloriesKcalPerValueColumn;
+  if (caloriesGt?.length && tableCols?.length) {
+    const lines = [];
+    let matchCount = 0;
+    for (let i = 0; i < caloriesGt.length; i += 1) {
+      const expected = caloriesGt[i];
+      const got = tableCols[i]?.nutrients?.calories;
+      const ok =
+        expected != null &&
+        got != null &&
+        typeof got === 'number' &&
+        Math.abs(got - expected) <= Math.max(2, Math.round(expected * 0.05));
+      if (ok) matchCount += 1;
+      lines.push(`  v${i + 1} expect=${expected} got=${got ?? '—'} ${ok ? 'OK' : 'MISS'}`);
+    }
+    console.log(`calories vs ground truth (${matchCount}/${caloriesGt.length} within tolerance):`);
+    for (const line of lines) console.log(line);
+  }
+
+  const nutrientGt = await loadLabelNutrientGroundTruthForImage(name, groundTruthFixturesDir);
+  if (nutrientGt?.products.length) {
+    const parsedProducts = resolveParsedProductsFromOcrText(
+      result.text,
+      nutrientGt.layout,
+      result.slotMergedNutrients,
+    );
+    const rowSpecs = nutrientGt.compareFields?.length
+      ? inferNutrientRowSpecs(nutrientGt.products, nutrientGt.compareFields)
+      : undefined;
+    const nutrientCompare = compareLabelProductsToGroundTruth({
+      layout: nutrientGt.layout,
+      groundTruth: nutrientGt.products,
+      parsed: parsedProducts,
+      rowSpecs,
+    });
+    const { summary } = nutrientCompare;
+    console.log(
+      `nutrients vs ground truth (${summary.layout}): ${summary.ok} ok, ${summary.off} off, ${summary.unusable} unusable (calories ok on ${summary.matchedColumnCount}/${summary.columnCount} cols)`,
+    );
+    const runtimeSeconds = Number(elapsed);
+    const html = renderGroundTruthCompareHtml({
+      title: ocrPerformanceReportTitle(name),
+      sourceImage: name,
+      dataSourceNote: `Live extractImageLabel (fixture ${nutrientGt.fixtureBasename})`,
+      compare: nutrientCompare,
+      runtimeSeconds,
+      generatedAtIso: new Date().toISOString(),
+      pipelineStages: result.pipelineStages,
+    });
+    const htmlBase = name.replace(/\.[a-z]+$/i, '') + '.html';
+    await writeGroundTruthCompareHtmlFiles(repoRoot, name, html);
+    compareHtmlFiles.push({
+      fileName: htmlBase,
+      runtimeSeconds,
+      percentOk: groundTruthPercentOk(summary),
+    });
+    const workspaceDir = groundTruthCompareHtmlDirWorkspace(repoRoot);
+    console.log(`OCR performance report: ${path.join(workspaceDir, htmlBase)} (${runtimeSeconds.toFixed(1)}s)`);
+    console.log(`  (mirror: local/diagnostics/ground-truth-compare/${htmlBase})`);
+
+    const regressionSpec =
+      fx?.nutrientGroundTruthRegression ?? manifestRegressionDefaults[name] ?? { trackOnly: true };
+    const regression = evaluateNutrientGroundTruthRegression({
+      compare: nutrientCompare,
+      spec: regressionSpec,
+    });
+    console.log(
+      formatGroundTruthScoreLine({
+        imageBasename: name,
+        summary: nutrientCompare.summary,
+        spec: regressionSpec,
+        strictResult: regressionSpec.trackOnly ? undefined : regression,
+      }),
+    );
+    if (groundTruthStrict && !regressionSpec.trackOnly && !regression.pass) {
+      nutrientRegressionFailures.push(name);
+    }
+  }
+
   const built = buildNutritionImportWithPanels(result.text, 'image', null, null, {
     varietyPackExpectedColumns: result.varietyPackExpectedColumns,
   });
+  const varietyPackPanels =
+    (result.varietyPackExpectedColumns ?? 0) >= 2 && built.labelPanels.length > 0;
+  if (result.slotMergedNutrients && !varietyPackPanels) {
+    applySlotMergedNutrients(built.draft.nutrients, result.slotMergedNutrients);
+  }
   const placeholders = countPlaceholderPanels(built.labelPanels);
   const parsedPanels = built.labelPanels.length - placeholders;
 
+  const draftN = built.draft.nutrients;
   console.log(
-    `import: panels=${built.labelPanels.length} (parsed=${parsedPanels} placeholder=${placeholders}) expectedCols=${result.varietyPackExpectedColumns ?? '—'} draft.calories=${built.draft.nutrients.calories ?? '—'}`,
+    `import: panels=${built.labelPanels.length} (parsed=${parsedPanels} placeholder=${placeholders}) expectedCols=${result.varietyPackExpectedColumns ?? '—'} draft cal=${draftN.calories} fat=${draftN.fat}g sod=${draftN.sodium}mg prot=${draftN.protein}g`,
   );
   if (built.warning) console.log(`import warning: ${built.warning}`);
 
@@ -232,4 +366,15 @@ for (const name of names) {
 
   const preview = result.text.replace(/\s+/g, ' ').trim();
   console.log(`text preview (${Math.min(400, preview.length)} chars): ${preview.slice(0, 400)}${preview.length > 400 ? '…' : ''}`);
+}
+
+if (compareHtmlFiles.length > 0) {
+  await writeGroundTruthCompareIndex(repoRoot, compareHtmlFiles);
+  const workspaceIndex = path.join(groundTruthCompareHtmlDirWorkspace(repoRoot), 'index.html');
+  console.log(`\nOCR Performance Reports index (open in browser): ${workspaceIndex}`);
+}
+
+if (nutrientRegressionFailures.length > 0) {
+  console.error(`\nGROUND_TRUTH_STRICT=1 failures: ${nutrientRegressionFailures.join(', ')}`);
+  process.exit(1);
 }

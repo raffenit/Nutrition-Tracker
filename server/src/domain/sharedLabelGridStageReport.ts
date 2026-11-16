@@ -83,10 +83,12 @@ export function countSharedLabelCalorieColumns(
 const SERVING_OR_PRODUCT =
   /\b(?:serving|pack|bar|piece|pieces|varies|oz\)|g\)|candies|chocolate)\b/i;
 
-function looksLikeCalorieAmount(cell: string): boolean {
+export function looksLikePlausibleCalorieCell(cell: string): boolean {
   const t = cell.trim();
   if (!t) return false;
   if (SERVING_OR_PRODUCT.test(t)) return false;
+  if (/%/.test(t)) return false;
+  if (/\b(?:g|mg|mcg)\b/i.test(t)) return false;
   if (/^varies$/i.test(t)) return true;
   return /^\d{2,4}\b/.test(t) || /^\d+\s*kcal/i.test(t);
 }
@@ -198,7 +200,7 @@ function pickMacroImportBlocker(input: {
   }
 
   const caloriesCells = caloriesRowCellsFromStitched(input.stitched) ?? [];
-  const caloriesNumeric = caloriesCells.filter((c) => looksLikeCalorieAmount(c)).length;
+  const caloriesNumeric = caloriesCells.filter((c) => looksLikePlausibleCalorieCell(c)).length;
   if (caloriesCells.length >= 2 && caloriesNumeric < 2) {
     return {
       stage: 'parse_macros',
@@ -273,7 +275,7 @@ export function listSharedLabelGridStageIssues(
   }
   if (report.macroColumnCount < 1 && report.stitched) {
     const cells = caloriesRowCellsFromStitched(report.stitched) ?? [];
-    const numeric = cells.filter((c) => looksLikeCalorieAmount(c)).length;
+    const numeric = cells.filter((c) => looksLikePlausibleCalorieCell(c)).length;
     if (cells.length > 0 && numeric < 2) {
       issues.push({
         stage: 'parse_macros',
@@ -291,4 +293,57 @@ export function listSharedLabelGridStageIssues(
     }
   }
   return issues;
+}
+
+export type SharedLabelRowBandRetryReason =
+  | 'no_macro_columns'
+  | 'calories_row_cells_not_numeric'
+  | 'no_columns_with_calories';
+
+export type SharedLabelRowBandOcrRetryAssessment = {
+  shouldRetryBodyColumn: boolean;
+  reason: SharedLabelRowBandRetryReason | null;
+  caloriesNumericColumnCount: number;
+};
+
+/**
+ * Whether row-band OCR output is safe to keep, or body-column OCR should be retried.
+ * Uses stitched table quality (calories row), not {@link countSharedLabelMacroColumns} alone —
+ * junk fat/calorie digits from misaligned bands must not block fallback.
+ */
+export function assessSharedLabelRowBandOcrRetry(
+  stitched: string | null,
+  parsed: ReturnType<typeof parseMultiProductLabelTable>,
+): SharedLabelRowBandOcrRetryAssessment {
+  const macroColumnCount = countSharedLabelMacroColumns(parsed);
+  const calorieColumnCount = countSharedLabelCalorieColumns(parsed);
+  const parsedColumnCount = parsed?.length ?? 0;
+  const caloriesCells = stitched ? (caloriesRowCellsFromStitched(stitched) ?? []) : [];
+  const caloriesNumeric = caloriesCells.filter((c) => looksLikePlausibleCalorieCell(c)).length;
+
+  if (macroColumnCount < 1) {
+    return {
+      shouldRetryBodyColumn: true,
+      reason: 'no_macro_columns',
+      caloriesNumericColumnCount: caloriesNumeric,
+    };
+  }
+
+  if (stitched && caloriesCells.length >= 2 && caloriesNumeric < 2) {
+    return {
+      shouldRetryBodyColumn: true,
+      reason: 'calories_row_cells_not_numeric',
+      caloriesNumericColumnCount: caloriesNumeric,
+    };
+  }
+
+  if (parsedColumnCount >= 2 && calorieColumnCount < 1 && caloriesNumeric < 2) {
+    return {
+      shouldRetryBodyColumn: true,
+      reason: 'no_columns_with_calories',
+      caloriesNumericColumnCount: caloriesNumeric,
+    };
+  }
+
+  return { shouldRetryBodyColumn: false, reason: null, caloriesNumericColumnCount: caloriesNumeric };
 }

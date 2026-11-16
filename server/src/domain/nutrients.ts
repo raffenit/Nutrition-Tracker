@@ -23,6 +23,38 @@ export function emptyNutrients(): Nutrients {
   return { calories: 0, protein: 0, fiber: 0, fat: 0, carbs: 0, sodium: 0, extras: [] };
 }
 
+/** Fill zero/missing core fields and extras from a second parse (e.g. per-slot OCR merge). */
+export function fillNutrientGaps(target: Nutrients, source: Nutrients | null | undefined): void {
+  if (!source) return;
+  if (target.calories <= 0 && source.calories > 0) target.calories = source.calories;
+  if (target.fat <= 0 && source.fat > 0) target.fat = source.fat;
+  if (target.carbs <= 0 && source.carbs > 0) target.carbs = source.carbs;
+  if (target.fiber <= 0 && source.fiber > 0) target.fiber = source.fiber;
+  if (target.protein <= 0 && source.protein > 0) target.protein = source.protein;
+  if (target.sodium <= 0 && source.sodium > 0) target.sodium = source.sodium;
+  for (const extra of source.extras) {
+    if (target.extras.some((row) => row.key === extra.key)) continue;
+    if (extra.amount > 0) target.extras.push({ ...extra });
+  }
+}
+
+/** Same merge as image import (`foodRoutes`): slot OCR wins over primary parse when it has a positive reading. */
+export function applySlotMergedNutrients(target: Nutrients, merged: Nutrients | null | undefined): void {
+  if (!merged) return;
+  if (merged.calories > 0) target.calories = merged.calories;
+  if (merged.fat > 0) target.fat = merged.fat;
+  if (merged.carbs > 0) target.carbs = merged.carbs;
+  if (merged.fiber > 0) target.fiber = merged.fiber;
+  if (merged.protein > 0) target.protein = merged.protein;
+  if (merged.sodium > 0) target.sodium = merged.sodium;
+  for (const extra of merged.extras) {
+    if (extra.amount <= 0) continue;
+    const index = target.extras.findIndex((row) => row.key === extra.key);
+    if (index >= 0) target.extras[index] = { ...extra };
+    else target.extras.push({ ...extra });
+  }
+}
+
 export function scaleNutrients(nutrients: Nutrients, factor: number): Nutrients {
   return {
     calories: nutrients.calories * factor,

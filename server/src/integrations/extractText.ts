@@ -15,23 +15,41 @@ import {
 } from '../domain/columnStripOcrParams.js';
 import { OCR_IMPORT_MAX_PRODUCT_COLUMNS } from '../domain/columnStripDetectParams.js';
 import { separateSharedLabelValueTexts } from '../domain/sharedLabelColumnSeparation.js';
-import { countSharedLabelMacroColumns } from '../domain/sharedLabelGridStageReport.js';
+import {
+  assessSharedLabelRowBandOcrRetry,
+  countSharedLabelMacroColumns,
+} from '../domain/sharedLabelGridStageReport.js';
 import { parseMultiProductLabelTable } from '../domain/parseMultiProductLabelTable.js';
 import { scoreLabelExtraction } from '../domain/labelSlots.js';
 import { stitchColumnStripOcrTexts } from '../domain/stitchColumnStripTexts.js';
 import {
   diagnoseSharedLabelGridStitch,
   formatSharedLabelStitchFailure,
+  stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
+  type SharedLabelStitchOptions,
 } from '../domain/stitchSharedLabelGridTexts.js';
 import { stitchSplitLabelHalves } from '../domain/stitchSplitLabelHalves.js';
 import {
   mergeSlotReadingsAcrossCandidates,
 } from '../domain/labelSlotExtract.js';
+import { assessCoreMacroReadiness, type CoreMacroReadiness } from '../domain/labelOcrMacroReadiness.js';
+import { findSlotRowLine, rowCropRect } from '../domain/labelRowReread.js';
+import type { LabelSlotKey } from '../domain/labelSlotExtract.js';
+import type { PipelineStageTiming } from '../domain/ocrPipelineStages.js';
+import {
+  isPortraitSingleOcrHint,
+  PORTRAIT_SINGLE_EASY_TIEBREAK_CAP,
+  PORTRAIT_SINGLE_EASY_VARIANT_CAP,
+  PORTRAIT_SINGLE_TESS_VARIANT_CAP,
+  portraitSingleOcrEnabled,
+} from '../domain/portraitSingleOcrParams.js';
 import type { Nutrients } from '../types.js';
+import { OcrPipelineTimer } from './ocrPipelineTimer.js';
 import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
 import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
 import { inferLabelLayoutHint, resolveLabelProcessingImage } from './imageLayoutHint.js';
+import { resolveLabelOcrSources } from './labelOcrSources.js';
 import {
   detectColumnStrips,
   extractColumnStripBuffers,
@@ -42,7 +60,9 @@ import {
   extractSharedLabelGridBuffers,
   rowBandMinExtractSize,
   useRowBandSliceOcrForPlan,
+  type SharedLabelValueGridPlan,
 } from './sharedLabelValueGrid.js';
+import type { SharedLabelRowBandSlice } from '../domain/sharedLabelGridLayout.js';
 import type { ColumnStripRegion } from './labelColumnStrips.js';
 import {
   formatVarietyPackStepValidation,
@@ -54,6 +74,7 @@ import {
   buildColumnStripOcrVariants,
   buildRowBandOcrVariants,
   buildOcrImageVariants,
+  buildStackedRowCrops,
   easyOcrVariantSubset,
   tesseractVariantSubset,
   type BuildOcrVariantOptions,
@@ -62,6 +83,7 @@ import {
   openTesseractWorker,
   recognizeImagesOnWorker,
   recognizeTesseractBatch,
+  type TesseractLineBox,
   resetTesseractRunCounter,
 } from './tesseractOcr.js';
 
@@ -91,6 +113,8 @@ export type ImageLabelExtraction = {
   slotMergedNutrients: Nutrients | null;
   /** Value columns from variety-pack geometry when column-strip OCR ran. */
   varietyPackExpectedColumns?: number;
+  /** Wall-clock stage breakdown for this extract (all layout classes). */
+  pipelineStages?: PipelineStageTiming[];
 };
 
 type StitchedColumnOcrResult = {
@@ -114,10 +138,17 @@ export async function extractImageLabel(
   options?: { easyocrModelDir?: string },
 ): Promise<ImageLabelExtraction> {
   resetTesseractRunCounter();
+  const timer = new OcrPipelineTimer();
   reportImportJobStep('Preprocess', 'Preparing image for OCR…', 'Auto-rotate, upscale, and layout hints.');
   const resolved = await resolveLabelProcessingImage(bytes);
-  const ocrBytes = resolved.bytes;
-  const activeHint = resolved.hint;
+  timer.lap(
+    'preprocess',
+    resolved.focusCropApplied ? 'in-focus crop' : `${resolved.hintBeforeFocus?.width ?? '—'}×${resolved.hintBeforeFocus?.height ?? '—'}px`,
+  );
+  const sources = await resolveLabelOcrSources(resolved, cachePath);
+  const geometryBytes = sources.geometryBytes;
+  const pageOcrBytes = sources.pageOcrBytes;
+  const activeHint = sources.hint;
   if (resolved.focusCropApplied) {
     appendImportJobDebug(
       `focus: label processing on in-focus crop ${activeHint.width}×${activeHint.height}px (${Math.round((resolved.hintBeforeFocus?.sharpFocusWidthFraction ?? 1) * 100)}% sharp, ${resolved.hintBeforeFocus?.sharpPeakCount ?? 0} peaks)`,
@@ -129,7 +160,7 @@ export async function extractImageLabel(
 
   let varietyPackPreflight: VarietyPackPipelineRunResult | null = null;
   if (activeHint.widePanel) {
-    varietyPackPreflight = await runVarietyPackGridPipeline(ocrBytes, {
+    varietyPackPreflight = await runVarietyPackGridPipeline(geometryBytes, {
       maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS,
       layoutHint: {
         singleSubjectInFocus: activeHint.singleSubjectInFocus,
@@ -139,6 +170,7 @@ export async function extractImageLabel(
     for (const step of [1, 2, 3, 4] as const) {
       appendImportJobDebug(`geometry preflight: ${formatVarietyPackStepValidation(varietyPackPreflight.steps[step].validation)}`);
     }
+    timer.lap('geometry', `steps OK through ${varietyPackPreflight.lastOkStep}`);
   }
   const geometryStep4Ok = varietyPackPreflight?.lastOkStep === 4;
   const sharedRailPlan = varietyPackPreflight?.plan ?? null;
@@ -152,6 +184,7 @@ export async function extractImageLabel(
     appendImportJobDebug(
       `geometry: shared-rail plan (${sharedRailPlan!.valueColumns.length} value cols) — skip full-page OCR`,
     );
+    timer.lap('ocr_full_page', 'skipped — shared label table');
     layout = {
       kind: 'multi_column_table',
       bestCandidateIndex: 0,
@@ -161,24 +194,26 @@ export async function extractImageLabel(
   } else {
     reportImportJobStep('OCR', 'Reading the Nutrition Facts panel…', 'Neural OCR and Tesseract on preprocessed variants.');
     candidates = await collectOcrCandidateTexts(
-      ocrBytes,
+      pageOcrBytes,
       cachePath,
       options?.easyocrModelDir,
       activeHint,
       profiles[0]!,
       'full',
+      { timer, fullPageLapId: 'ocr_full_page' },
     );
     layout = inferLabelLayoutFromText(candidates);
     if (shouldRetryWideTableOcr(activeHint, layout) && !geometryStep4Ok) {
       reportImportJobStep('OCR', 'Trying alternate layout passes…', 'Wide label — extra OCR profile.');
       profiles.push('wideTableRetry');
       const retryCandidates = await collectOcrCandidateTexts(
-        ocrBytes,
+        pageOcrBytes,
         cachePath,
         options?.easyocrModelDir,
         activeHint,
         'wideTableRetry',
         'full',
+        { timer, fullPageLapId: 'ocr_wide_retry' },
       );
       candidates = mergeCandidateLists(candidates, retryCandidates);
       layout = inferLabelLayoutFromText(candidates);
@@ -188,8 +223,9 @@ export async function extractImageLabel(
   }
 
   if (activeHint.singleSubjectInFocus && layout.kind === 'single') {
-    const splitLabel = await ocrSplitSingleLabel(ocrBytes, cachePath, options?.easyocrModelDir, activeHint);
+    const splitLabel = await ocrSplitSingleLabel(geometryBytes, cachePath, options?.easyocrModelDir, activeHint);
     if (splitLabel) {
+      timer.lap('ocr_split_single', `${splitLabel.length} chars`);
       candidates = mergeCandidateLists([splitLabel], candidates);
       layout = inferLabelLayoutFromText(candidates);
     }
@@ -199,16 +235,18 @@ export async function extractImageLabel(
   let structuredTableCandidateIndex: number | undefined;
   const runStructuredOcr = skipFullPageForSharedRail || shouldRunColumnStripOcr(activeHint, layout);
   if (runStructuredOcr) {
+    const structuredStageId = skipFullPageForSharedRail ? 'ocr_shared_rail' : 'ocr_column_strips';
     const stitched = varietyPackPreflight
       ? await ocrStitchedFromVarietyPackPipeline(
-          ocrBytes,
+          geometryBytes,
           varietyPackPreflight,
           cachePath,
           options?.easyocrModelDir,
           activeHint,
         )
-      : await ocrAndStitchColumnStrips(ocrBytes, cachePath, options?.easyocrModelDir, activeHint);
+      : await ocrAndStitchColumnStrips(geometryBytes, cachePath, options?.easyocrModelDir, activeHint);
     if (stitched) {
+      timer.lap(structuredStageId, `${stitched.expectedColumns} product column(s)`);
       structuredTableCandidateIndex = 0;
       candidates = mergeCandidateLists([stitched.text], candidates);
       varietyPackExpectedColumns = stitched.expectedColumns;
@@ -228,13 +266,15 @@ export async function extractImageLabel(
 
   reportImportJobStep('Parse', 'Matching label rows…', 'Selecting the best OCR candidate and merging nutrients.');
   const slotMergedNutrients = mergeSlotReadingsAcrossCandidates(candidates);
+  timer.lap('parse_select', layout.kind);
   const textIdx = pickImportTextCandidateIndex(candidates, layout, {
     varietyPackExpectedColumns,
     structuredTableCandidateIndex,
   });
   const text = candidates[textIdx] ?? candidates[0] ?? '';
   reportImportJobStep('Draft', 'Building your draft…', 'Combining structured import fields.');
-  return { text, slotMergedNutrients, varietyPackExpectedColumns };
+  const pipelineStages = timer.finish('total', layout.kind);
+  return { text, slotMergedNutrients, varietyPackExpectedColumns, pipelineStages };
 }
 
 /** Legacy: single string (primary candidate after slot merge scoring). */
@@ -269,6 +309,9 @@ type CollectOcrOptions = {
   tessWorker?: Worker;
   /** Default: skip on columnStrip unless EASYOCR_COLUMN_STRIPS=1 */
   allowEasyOcr?: boolean;
+  timer?: OcrPipelineTimer;
+  /** Aggregate lap for full-page passes (initial vs wide retry). */
+  fullPageLapId?: 'ocr_full_page' | 'ocr_wide_retry';
 };
 
 async function collectTesseractCandidateTexts(
@@ -299,6 +342,40 @@ function easyOcrAllowedForMode(mode: 'full' | 'columnStrip' | 'rowBand', allowEa
   return true;
 }
 
+const SUBROW_SLOTS: Record<string, LabelSlotKey[]> = {
+  'carbs<sugar+fiber': ['carbs', 'sugar', 'fiber'],
+  'fat<saturated_fat': ['fat', 'saturated_fat'],
+};
+
+/** EasyOCR on a stack of only the contested rows (cropped from the Tess images where each row was found). */
+async function rereadContestedRows(
+  readiness: CoreMacroReadiness,
+  images: Buffer[],
+  linesPerRun: TesseractLineBox[][],
+  psmCount: number,
+  modelDir: string,
+): Promise<string[]> {
+  const slots = new Set<LabelSlotKey>(readiness.contested);
+  for (const rule of readiness.inconsistent) for (const slot of SUBROW_SLOTS[rule] ?? []) slots.add(slot);
+  const rows: Array<{ image: Buffer; rect: { left: number; top: number; width: number; height: number } }> = [];
+  for (const slot of slots) {
+    for (let run = 0; run < linesPerRun.length; run += 1) {
+      const line = findSlotRowLine(linesPerRun[run] ?? [], slot);
+      const image = images[Math.floor(run / Math.max(1, psmCount))];
+      if (!line || !image) continue;
+      const meta = await sharp(image).metadata();
+      const rect = rowCropRect(line.bbox, meta.width ?? 0, meta.height ?? 0);
+      if (!rect) continue;
+      rows.push({ image, rect });
+      break;
+    }
+  }
+  appendImportJobDebug(`ocr progressive: row re-read ${[...slots].join(', ')} — ${rows.length} row crop(s)`);
+  if (rows.length === 0) return [];
+  const stacked = await buildStackedRowCrops(rows);
+  return stacked ? extractEasyOcrTextsFromVariants([stacked], modelDir) : [];
+}
+
 async function collectOcrCandidateTexts(
   bytes: Buffer,
   cachePath: string,
@@ -308,9 +385,13 @@ async function collectOcrCandidateTexts(
   mode: 'full' | 'columnStrip' | 'rowBand',
   options?: CollectOcrOptions,
 ): Promise<string[]> {
+  const portraitSingle = mode === 'full' && portraitSingleOcrEnabled() && isPortraitSingleOcrHint(hint);
+  const portraitPanel = !hint.widePanel && hint.height > 0 && hint.height / Math.max(hint.width, 1) > 1.1;
   const variantOptions: BuildOcrVariantOptions = {
     profile,
     preserveFullWidthFocus: hint.widePanel || profile !== 'default',
+    skipFocusCrops: (portraitPanel || portraitSingle) && mode === 'full',
+    portraitSingle,
   };
   const variants =
     mode === 'rowBand'
@@ -319,35 +400,89 @@ async function collectOcrCandidateTexts(
         ? await buildColumnStripOcrVariants(bytes)
         : await buildOcrImageVariants(bytes, variantOptions);
 
-  appendImportJobDebug(`ocr ${mode}: ${variants.length} variant(s) for profile ${profile}`);
+  appendImportJobDebug(
+    `ocr ${mode}: ${variants.length} variant(s) for profile ${profile}${portraitSingle ? ' portrait-single' : ''}`,
+  );
+  const timer = options?.timer;
+  const fullPageLapId = options?.fullPageLapId;
+  const passStartedAt = Date.now();
+  timer?.lap('ocr_preprocess', `${variants.length} image(s), ${profile}`);
 
   const stripLike = mode === 'columnStrip' || mode === 'rowBand';
   const cap = stripLike ? { tess: 0, easy: 1 } : variantCapBoost(profile);
-  const forEasyOcr =
-    modelDir && easyOcrAllowedForMode(mode, options?.allowEasyOcr)
-      ? easyOcrVariantSubset(variants, cap.easy)
-      : [];
   const tessExtra =
     mode === 'rowBand' ? 1 : mode === 'columnStrip' ? columnStripTesseractVariantCount() : cap.tess;
-  const forTesseract = tesseractVariantSubset(variants, tessExtra);
-
-  const [easyTexts, tessTexts] = await Promise.all([
-    forEasyOcr.length > 0 ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir!) : Promise.resolve([]),
+  const forTesseract = portraitSingle
+    ? variants.slice(0, PORTRAIT_SINGLE_TESS_VARIANT_CAP)
+    : tesseractVariantSubset(variants, tessExtra);
+  const easyAllowed = Boolean(modelDir) && easyOcrAllowedForMode(mode, options?.allowEasyOcr);
+  const runTesseract = (): Promise<string[]> =>
     forTesseract.length > 0
-      ? collectTesseractCandidateTexts(
-          forTesseract,
-          cachePath,
-          `${mode}-${profile}`,
-          options?.tessWorker,
-        )
-      : Promise.resolve([]),
-  ]);
+      ? collectTesseractCandidateTexts(forTesseract, cachePath, `${mode}-${profile}`, options?.tessWorker)
+      : Promise.resolve([]);
 
   const seen = new Set<string>();
   const out: string[] = [];
-  mergeUniqueCandidates(seen, out, easyTexts);
-  mergeUniqueCandidates(seen, out, tessTexts);
+
+  if (!portraitSingle) {
+    const forEasyOcr = easyAllowed ? easyOcrVariantSubset(variants, cap.easy) : [];
+    const [easyTexts, tessTexts] = await Promise.all([
+      forEasyOcr.length > 0 ? extractEasyOcrTextsFromVariants(forEasyOcr, modelDir!) : Promise.resolve([]),
+      runTesseract(),
+    ]);
+    timer?.lap('ocr_engines', `Tess ${forTesseract.length} ∥ Easy ${forEasyOcr.length} image(s)`);
+    mergeUniqueCandidates(seen, out, easyTexts);
+    mergeUniqueCandidates(seen, out, tessTexts);
+  } else {
+    // Phase A: Tesseract (with line boxes). Phase B: Easy on contested rows only. Phase C: full-page Easy.
+    const psmModes = tesseractPsmModes();
+    const label = `${mode}-${profile}`;
+    const batch =
+      forTesseract.length === 0
+        ? { texts: [] as string[], lines: [] as TesseractLineBox[][] }
+        : options?.tessWorker
+          ? await recognizeImagesOnWorker(options.tessWorker, forTesseract, psmModes, label, { withLines: true })
+          : await recognizeTesseractBatch(forTesseract, cachePath, psmModes, label, { withLines: true });
+    mergeUniqueCandidates(seen, out, batch.texts);
+    timer?.lap('ocr_tesseract', `${forTesseract.length} image(s)`);
+    if (easyAllowed) {
+      let readiness = assessCoreMacroReadiness(out);
+      const diverse = out.filter((t) => t.trim()).length;
+      let easyCount = 0;
+      if (readiness.settled && diverse >= 2) {
+        appendImportJobDebug(`ocr progressive: skip Easy — core macros settled across ${diverse} Tess candidates`);
+      } else if (readiness.missing.length > 0 || diverse < 2) {
+        easyCount = PORTRAIT_SINGLE_EASY_VARIANT_CAP;
+        appendImportJobDebug(
+          `ocr progressive: Easy ×${easyCount} — missing ${readiness.missing.join(', ') || '—'} (${diverse} Tess candidates)`,
+        );
+      } else {
+        const rowTexts = await rereadContestedRows(readiness, forTesseract, batch.lines ?? [], psmModes.length, modelDir!);
+        timer?.lap('ocr_row_reread', `${rowTexts.length} row text(s)`);
+        mergeUniqueCandidates(seen, out, rowTexts);
+        readiness = assessCoreMacroReadiness(out);
+        if (readiness.settled) {
+          appendImportJobDebug('ocr progressive: contested rows settled by row re-read — skip full-page Easy');
+        } else {
+          easyCount = PORTRAIT_SINGLE_EASY_TIEBREAK_CAP;
+          appendImportJobDebug(
+            `ocr progressive: Easy ×${easyCount} tie-break — contested ${readiness.contested.join(', ') || '—'}; inconsistent ${readiness.inconsistent.join(', ') || '—'}`,
+          );
+        }
+      }
+      const forEasyOcr = easyOcrVariantSubset(variants).slice(0, easyCount);
+      if (forEasyOcr.length > 0) {
+        mergeUniqueCandidates(seen, out, await extractEasyOcrTextsFromVariants(forEasyOcr, modelDir!));
+        timer?.lap('ocr_easy', `${forEasyOcr.length} image(s)`);
+      }
+    }
+  }
+
   if (out.length === 0) out.push('');
+
+  if (timer && fullPageLapId && mode === 'full') {
+    timer.lap(fullPageLapId, `${((Date.now() - passStartedAt) / 1000).toFixed(1)}s total pass`);
+  }
   return out;
 }
 
@@ -506,8 +641,13 @@ async function ocrStitchedFromColumnStripPlan(
 type SharedLabelColumnTexts = {
   labelText: string;
   headerText: string;
+  headerColumnTexts: string[];
   valueTexts: string[];
   usedRowBand: boolean;
+  rowBandSliceTexts?: {
+    labelSlices: string[];
+    valueSlices: string[][];
+  };
 };
 
 async function ocrSharedLabelGridColumns(
@@ -545,20 +685,35 @@ async function ocrSharedLabelGridColumns(
   const imageMeta = await sharp(bytes).rotate().metadata();
   const fullImageWidth = imageMeta.width ?? 0;
 
+  const rowSurfacesForColumn = (
+    sliceList: SharedLabelRowBandSlice[] | undefined,
+    kind: string,
+    index?: number,
+  ): SharedLabelRowBandSlice[] => {
+    if (sliceList && sliceList.length > 0) return sliceList;
+    if (plan.rowSurfaceMode === 'shared' && plan.rowBandSlices.length > 0) return plan.rowBandSlices;
+    appendImportJobDebug(
+      `shared-label grid: missing row surfaces for ${kind}${index === undefined ? '' : ` ${index + 1}`}`,
+    );
+    return plan.rowBandSlices;
+  };
+
   const ocrColumnByRowBandsWithWorker = async (
     worker: Awaited<ReturnType<typeof openTesseractWorker>>,
     column: Pick<ColumnStripRegion, 'left' | 'width'>,
     fallbackPng: Buffer,
+    rowBandSlices: SharedLabelValueGridPlan['rowBandSlices'],
     label: string,
     psmModes: PSM[],
-  ): Promise<string> => {
+  ): Promise<{ text: string; sliceTexts: string[] }> => {
     const minSize = rowBandMinExtractSize(plan, column.width, fullImageWidth);
     appendImportJobDebug(
-      `${label} row-band: min extract ${minSize.minWidthPx}×${minSize.minHeightPx}px (column ${column.width}px)`,
+      `${label} row-band: min extract ${minSize.minWidthPx}×${minSize.minHeightPx}px (column ${column.width}px, ${rowBandSlices.length} slices)`,
     );
-    const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, plan.rowBandSlices, minSize);
+    const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, rowBandSlices, minSize);
     if (slicePngs.length === 0) {
-      return ocrStripText(fallbackPng, `${label} body`);
+      const text = await ocrStripText(fallbackPng, `${label} body`);
+      return { text, sliceTexts: [] };
     }
     for (let sliceIndex = 0; sliceIndex < slicePngs.length; sliceIndex += 1) {
       const sliceMeta = await sharp(slicePngs[sliceIndex]).metadata();
@@ -570,29 +725,35 @@ async function ocrSharedLabelGridColumns(
     }
     const images = await preprocessRowBandSlices(slicePngs);
     const { texts } = await recognizeImagesOnWorker(worker, images, psmModes, `${label}-rows`);
-    return texts
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join('\n');
+    const sliceTexts = texts.map((line) => line.trim());
+    const text = sliceTexts.filter(Boolean).join('\n');
+    return { text, sliceTexts };
   };
 
   let labelText: string;
   let headerText: string;
+  const headerColumnTexts: string[] = [];
   const valueTexts: string[] = [];
-
+  let rowBandSliceTexts: SharedLabelColumnTexts['rowBandSliceTexts'];
   if (rowBandOcr) {
     const worker = await openTesseractWorker(cachePath, 'shared-label-grid');
     try {
+      const labelRowSlices = rowSurfacesForColumn(plan.labelRowBandSlices, 'label');
+      const valueSliceCounts = plan.valueRowBandSlicesPerColumn.map((s) => s.length).join(',');
       appendImportJobDebug(
-        `shared-label grid: batched row-band OCR (${plan.rowBandSlices.length} slices × ${1 + plan.valueColumns.length} columns, one worker)`,
+        `shared-label grid: row surfaces mode=${plan.rowSurfaceMode}, label ${labelRowSlices.length} rows, values [${valueSliceCounts}], one worker`,
       );
-      labelText = await ocrColumnByRowBandsWithWorker(
+      const labelBand = await ocrColumnByRowBandsWithWorker(
         worker,
         plan.labelColumn,
         crops.labelColumn,
+        labelRowSlices,
         'label',
         tesseractRowBandLabelPsmModes(),
       );
+      labelText = labelBand.text;
+      const labelSlices = labelBand.sliceTexts;
+      const valueSlices: string[][] = [];
       appendImportJobDebug(`shared-label grid: label OCR ${labelText.trim().length} chars`);
       const headerPrep = await buildRowBandOcrVariants(crops.headerBand);
       const headerImages = [headerPrep[0] ?? crops.headerBand];
@@ -606,18 +767,37 @@ async function ocrSharedLabelGridColumns(
       );
       headerText = headerTexts.map((line) => line.trim()).filter(Boolean).join('\n');
       appendImportJobDebug(`shared-label grid: header OCR ${headerText.trim().length} chars`);
+      appendImportJobDebug(
+        `shared-label grid: reading header stacks (${plan.valueColumns.length} product columns)`,
+      );
+      for (let index = 0; index < plan.valueColumns.length; index += 1) {
+        const headerColText = await ocrStripText(
+          crops.headerColumns[index]!,
+          `header column ${index + 1}`,
+          'columnStrip',
+        );
+        headerColumnTexts.push(headerColText);
+        appendImportJobDebug(
+          `shared-label grid: header column ${index + 1}/${plan.valueColumns.length} OCR ${headerColText.trim().length} chars`,
+        );
+      }
       for (let index = 0; index < plan.valueColumns.length; index += 1) {
         const col = plan.valueColumns[index]!;
         appendImportJobDebug(`shared-label grid value ${index + 1}/${plan.valueColumns.length}`);
-        valueTexts.push(
-          await ocrColumnByRowBandsWithWorker(
-            worker,
-            col,
-            crops.valueColumns[index]!,
-            `value ${index + 1}`,
-            tesseractRowBandValuePsmModes(),
-          ),
+        const valueRowSlices = rowSurfacesForColumn(plan.valueRowBandSlicesPerColumn[index], 'value', index);
+        const band = await ocrColumnByRowBandsWithWorker(
+          worker,
+          col,
+          crops.valueColumns[index]!,
+          valueRowSlices,
+          `value ${index + 1}`,
+          tesseractRowBandValuePsmModes(),
         );
+        valueTexts.push(band.text);
+        valueSlices.push(band.sliceTexts);
+      }
+      if (labelSlices.length > 0 && valueSlices.length >= 2) {
+        rowBandSliceTexts = { labelSlices, valueSlices };
       }
     } finally {
       await worker.terminate();
@@ -645,6 +825,16 @@ async function ocrSharedLabelGridColumns(
       appendImportJobDebug(`shared-label grid: label OCR ${labelText.trim().length} chars`);
       headerText = await ocrBodyColumn(crops.headerBand, 'header');
       appendImportJobDebug(`shared-label grid: header OCR ${headerText.trim().length} chars`);
+      appendImportJobDebug(
+        `shared-label grid: reading header stacks (${plan.valueColumns.length} product columns)`,
+      );
+      for (let index = 0; index < plan.valueColumns.length; index += 1) {
+        const headerColText = await ocrBodyColumn(crops.headerColumns[index]!, `header column ${index + 1}`);
+        headerColumnTexts.push(headerColText);
+        appendImportJobDebug(
+          `shared-label grid: header column ${index + 1}/${plan.valueColumns.length} OCR ${headerColText.trim().length} chars`,
+        );
+      }
       for (let index = 0; index < plan.valueColumns.length; index += 1) {
         appendImportJobDebug(`shared-label grid value ${index + 1}/${plan.valueColumns.length}`);
         valueTexts.push(await ocrBodyColumn(crops.valueColumns[index]!, `value ${index + 1} body`));
@@ -654,7 +844,15 @@ async function ocrSharedLabelGridColumns(
     }
   }
 
-  return { labelText, headerText, valueTexts, usedRowBand: rowBandOcr };
+  return { labelText, headerText, headerColumnTexts, valueTexts, usedRowBand: rowBandOcr, rowBandSliceTexts };
+}
+
+function stitchOptionsFromColumns(
+  headerColumnTexts: string[],
+  valueColumnTexts?: string[],
+): SharedLabelStitchOptions | undefined {
+  if (headerColumnTexts.length === 0 && !valueColumnTexts?.length) return undefined;
+  return { headerColumnTexts, valueColumnTexts };
 }
 
 async function ocrAndStitchSharedLabelPlan(
@@ -681,7 +879,7 @@ async function ocrAndStitchSharedLabelPlan(
   const crops = await extractSharedLabelGridBuffers(bytes, plan);
   const rowBandOcr = useRowBandSliceOcrForPlan(plan);
   appendImportJobDebug(
-    `shared-label grid: body ${plan.nutrientBodyHeight}px @ y=${plan.nutrientBodyTop}, row slices=${plan.rowBandSlices.length}, rowPitch=${plan.rowPitchPx}px, rowOcr=${rowBandOcr}`,
+    `shared-label grid: body ${plan.nutrientBodyHeight}px @ y=${plan.nutrientBodyTop}, labelSlices=${plan.labelRowBandSlices?.length ?? plan.rowBandSlices.length}, consensus=${plan.rowBandSlices.length}, rowPitch=${plan.rowPitchPx}px, rowOcr=${rowBandOcr}`,
   );
 
   let columnTexts = await ocrSharedLabelGridColumns(
@@ -693,7 +891,8 @@ async function ocrAndStitchSharedLabelPlan(
     hint,
     rowBandOcr,
   );
-  let { labelText, headerText, valueTexts } = columnTexts;
+  let { labelText, headerText, headerColumnTexts, valueTexts } = columnTexts;
+  const stitchOpts = stitchOptionsFromColumns(headerColumnTexts, valueTexts);
   const separated = separateSharedLabelValueTexts(labelText, valueTexts);
   if (separated.droppedIndexes.length > 0) {
     appendImportJobDebug(
@@ -708,17 +907,39 @@ async function ocrAndStitchSharedLabelPlan(
     }
   }
 
-  let stitched = stitchSharedLabelGridTexts(labelText, valueTexts, headerText);
+  const stitchFromRowBands =
+    columnTexts.usedRowBand && columnTexts.rowBandSliceTexts != null
+      ? stitchSharedLabelGridFromRowBandSlices(
+          columnTexts.rowBandSliceTexts.labelSlices,
+          columnTexts.rowBandSliceTexts.valueSlices,
+          headerText,
+          stitchOpts,
+        )
+      : null;
+  let stitched =
+    stitchFromRowBands ?? stitchSharedLabelGridTexts(labelText, valueTexts, headerText, stitchOpts);
+  if (stitchFromRowBands) {
+    appendImportJobDebug('shared-label grid: stitch used row-band slice alignment');
+  }
   let parsed = stitched ? parseMultiProductLabelTable(stitched) : null;
   let macroCount = countSharedLabelMacroColumns(parsed);
 
-  if (columnTexts.usedRowBand && macroCount < 1) {
+  const rowBandRetry = assessSharedLabelRowBandOcrRetry(stitched, parsed);
+  if (columnTexts.usedRowBand && rowBandRetry.shouldRetryBodyColumn) {
+    const retryDetail =
+      rowBandRetry.reason === 'calories_row_cells_not_numeric'
+        ? 'Calories row does not look like kcal amounts.'
+        : rowBandRetry.reason === 'no_columns_with_calories'
+          ? 'Parsed columns but no plausible calorie values.'
+          : 'Row-band pass did not yield enough macros.';
+    reportImportJobStep('OCR', 'Retrying with full-column OCR…', retryDetail);
     appendImportJobDebug(
-      'shared-label grid: row-band yielded no macro columns — fallback to body-column OCR',
+      `shared-label grid: row-band weak macros (${rowBandRetry.reason ?? 'unknown'}, plausibleCalories=${rowBandRetry.caloriesNumericColumnCount}) — fallback to body-column OCR`,
     );
     columnTexts = await ocrSharedLabelGridColumns(bytes, plan, crops, cachePath, modelDir, hint, false);
     labelText = columnTexts.labelText;
     headerText = columnTexts.headerText;
+    headerColumnTexts = columnTexts.headerColumnTexts;
     const separatedFallback = separateSharedLabelValueTexts(labelText, columnTexts.valueTexts);
     if (separatedFallback.droppedIndexes.length > 0) {
       appendImportJobDebug(
@@ -726,7 +947,12 @@ async function ocrAndStitchSharedLabelPlan(
       );
     }
     valueTexts = separatedFallback.valueColumnTexts;
-    stitched = stitchSharedLabelGridTexts(labelText, valueTexts, headerText);
+    stitched = stitchSharedLabelGridTexts(
+      labelText,
+      valueTexts,
+      headerText,
+      stitchOptionsFromColumns(headerColumnTexts, valueTexts),
+    );
     parsed = stitched ? parseMultiProductLabelTable(stitched) : null;
     macroCount = countSharedLabelMacroColumns(parsed);
     appendImportJobDebug(`shared-label grid: body-column fallback macroColumns=${macroCount}`);

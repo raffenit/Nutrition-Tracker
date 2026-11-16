@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
   analyzeSharedLabelGridStageReport,
+  assessSharedLabelRowBandOcrRetry,
   caloriesRowCellsFromStitched,
   listSharedLabelGridStageIssues,
 } from '../../../domain/sharedLabelGridStageReport.js';
+import { parseMultiProductLabelTable } from '../../../domain/parseMultiProductLabelTable.js';
 import { stitchSharedLabelGridTexts } from '../../../domain/stitchSharedLabelGridTexts.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
@@ -31,6 +33,34 @@ test('stage report: clean synthetic passes all macro stages', () => {
   assert.equal(report.macroImportBlocker, null);
   assert.equal(report.macroColumnCount, 3);
   assert.ok(report.stitchDiag.ok);
+});
+
+test('row-band retry: misaligned calories row with junk macro digits still retries body-column', () => {
+  const stitched = `Nutrition Facts
+Column 1  Column 2  Column 3
+Calories
+2 Packs (28g)  1 Bar (17g)  18g)
+Total Fat
+45g  35g  9g`;
+  const parsed = parseMultiProductLabelTable(stitched);
+  assert.ok(parsed);
+  assert.ok((parsed?.filter((c) => c.nutrients.fat > 0).length ?? 0) >= 2, 'false-positive macro columns from junk');
+  const assessment = assessSharedLabelRowBandOcrRetry(stitched, parsed);
+  assert.equal(assessment.shouldRetryBodyColumn, true);
+  assert.equal(assessment.reason, 'calories_row_cells_not_numeric');
+});
+
+test('row-band retry: plausible calories row keeps row-band path', () => {
+  const stitched = `Nutrition Facts
+Snack A  Snack B  Snack C
+Calories
+140  150  160
+Total Fat
+5g  6g  7g`;
+  const parsed = parseMultiProductLabelTable(stitched);
+  const assessment = assessSharedLabelRowBandOcrRetry(stitched, parsed);
+  assert.equal(assessment.shouldRetryBodyColumn, false);
+  assert.equal(assessment.reason, null);
 });
 
 test('stage report: missing row labels blocks at label_column_extraction', () => {
@@ -69,7 +99,7 @@ test('stage report: mis-indexed values block at parse_macros (stitch can still s
 });
 
 test(
-  'Costco candy OCR snapshot: geometry not in scope; macros fail at parse with misaligned calories row',
+  'Costco candy OCR snapshot: row-band geometry yields numeric calories per column',
   { skip: !existsSync(costcoSnapshotPath) },
   async () => {
     const snap = JSON.parse(await readFile(costcoSnapshotPath, 'utf8')) as {
@@ -88,16 +118,18 @@ test(
       snap.headerBandText,
     );
 
-    assert.ok(report.stitchDiag.ok, 'Costco fixture: stitch gate should pass (known false positive)');
+    assert.ok(report.stitchDiag.ok);
     assert.equal(report.parsedColumnCount, 10, 'parse should emit one column per product strip');
-    assert.equal(report.calorieColumnCount, 0, 'no column should have calorie values from this OCR');
-
+    assert.equal(
+      report.calorieColumnCount,
+      snap.geometry.valueColumnCount,
+      'parse still fills calories from mis-indexed % DV rows',
+    );
     assert.equal(report.macroImportBlocker?.stage, 'parse_macros');
     assert.equal(report.macroImportBlocker?.reason, 'calories_row_cells_not_numeric');
-
     assert.ok(
-      report.valueLineCounts[1]! >= 3,
-      'second strip (index 1) still carries product values in this legacy snapshot layout',
+      report.valueLineCounts.every((n) => n >= 3),
+      'each value strip should carry multiple OCR lines',
     );
   },
 );

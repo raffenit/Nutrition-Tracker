@@ -8,7 +8,7 @@ import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
-import { readNutrients, roundNutrients } from '../domain/nutrients.js';
+import { applySlotMergedNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
 import {
@@ -414,21 +414,6 @@ function extensionFor(filename: string): string {
   if (name.endsWith('.png')) return '.png';
   if (name.endsWith('.webp')) return '.webp';
   return '.jpg';
-}
-
-function applySlotMergedNutrients(target: Nutrients, merged: Nutrients): void {
-  if (merged.calories > 0) target.calories = merged.calories;
-  if (merged.fat > 0) target.fat = merged.fat;
-  if (merged.carbs > 0) target.carbs = merged.carbs;
-  if (merged.fiber > 0) target.fiber = merged.fiber;
-  if (merged.protein > 0) target.protein = merged.protein;
-  if (merged.sodium > 0) target.sodium = merged.sodium;
-  for (const extra of merged.extras) {
-    if (extra.amount <= 0) continue;
-    const index = target.extras.findIndex((row) => row.key === extra.key);
-    if (index >= 0) target.extras[index] = { ...extra };
-    else target.extras.push({ ...extra });
-  }
 }
 
 async function readExtractedText(

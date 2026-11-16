@@ -9,13 +9,19 @@
       "nutrientRows": {
         "mainSectionRows": 10,
         "secondarySectionRows": 4,
-        "notes": "Count main vs secondary blocks on the shared label rail."
+        "notes": "Count main vs secondary blocks on the shared label rail. Optional fixture field caloriesKcalPerValueColumn (0-based) enables OCR regression in run-local-test-images-ocr.mjs; see server/src/test/fixtures/costcoCandyGlareGroundTruth.json for Costco."
       },
       "varietyPackPipeline": {
         "expectRun": true,
         "expectLastOkStep": 4,
         "expectSharedRailPlan": true,
         "minValueColumns": 10
+      },
+      "panelShapeGate": {
+        "expectPortraitCropEligible": false,
+        "expectInkEnvelopeShapeOk": false,
+        "expectGatedPanelCrop": false,
+        "expectInkEnvelopeRejectSubstrings": ["horizontal_rules", "first_rule"]
       }
     },
     {
@@ -34,6 +40,12 @@
       },
       "splitSingleLabel": {
         "expectDetect": true
+      },
+      "panelShapeGate": {
+        "expectPortraitCropEligible": false,
+        "expectInkEnvelopeShapeOk": false,
+        "expectGatedPanelCrop": false,
+        "expectInkEnvelopeRejectSubstrings": ["horizontal_rules", "no_first_rule"]
       }
     },
     {
@@ -49,6 +61,16 @@
         "expectRun": false,
         "expectFailStep": 1,
         "expectFailCode": "band_unavailable"
+      },
+      "panelShapeGate": {
+        "expectPortraitCropEligible": true,
+        "expectInkEnvelopeShapeOk": true,
+        "expectGatedPanelCrop": true,
+        "expectGatedStrategy": "ink_envelope"
+      },
+      "ocrPerformanceRegression": {
+        "trackMaxSeconds": 45,
+        "trackOnly": true
       }
     }
   ]

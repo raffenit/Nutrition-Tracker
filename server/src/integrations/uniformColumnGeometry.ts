@@ -31,6 +31,85 @@ export function columnWidthCv(widths: number[]): number {
   return Math.sqrt(variance) / mean;
 }
 
+/** True when a value-region strip looks like a uniform ruled product column (not e.g. ingredients text). */
+export function isUniformRuledProductColumn(
+  segment: { x0: number; x1: number; horizontalRuleCount?: number },
+  nominalWidth: number,
+  referenceWidths: number[],
+  params: UniformColumnGeometryParams,
+): boolean {
+  const width = segment.x1 - segment.x0;
+  const rules = segment.horizontalRuleCount ?? 0;
+  if (width < 2 || nominalWidth <= 0) return false;
+  if (rules < params.minHorizontalRulesPerColumn) return false;
+  if (width > nominalWidth * params.maxWideToNominalRatio) return false;
+  const ref = referenceWidths.filter((w) => w > 0);
+  if (ref.length >= 2) {
+    const med = medianPositiveWidth(ref);
+    if (med > 0 && width > med * params.maxWideToNominalRatio) return false;
+  }
+  return true;
+}
+
+/**
+ * Drop trailing value strips on the right that are unruled or much wider than sibling product columns
+ * (e.g. ingredients / allergen copy outside the nutrition grid).
+ */
+export function trimTrailingIrregularValueColumns(
+  segments: RuledGridSegment[],
+  ruledMeta: Array<{ horizontalRuleCount: number }>,
+  params: Partial<UniformColumnGeometryParams> = {},
+): { segments: RuledGridSegment[]; ruledMeta: Array<{ horizontalRuleCount: number }> } {
+  const p = { ...DEFAULT_UNIFORM_COLUMN_GEOMETRY_PARAMS, ...params };
+  if (segments.length < 2) return { segments, ruledMeta };
+  let trimmedSegs = [...segments];
+  let trimmedMeta = [...ruledMeta];
+  const withRules = trimmedSegs.map((s, i) => ({
+    ...s,
+    horizontalRuleCount: trimmedMeta[i]?.horizontalRuleCount ?? 0,
+  }));
+  const nominal = nominalUniformColumnWidth(withRules, p.minHorizontalRulesPerColumn) ?? 0;
+
+  while (trimmedSegs.length > 2) {
+    const lastIdx = trimmedSegs.length - 1;
+    const last = trimmedSegs[lastIdx]!;
+    const lastMeta = {
+      ...last,
+      horizontalRuleCount: trimmedMeta[lastIdx]?.horizontalRuleCount ?? 0,
+    };
+    const refSegments = trimmedSegs.slice(0, -1).map((s, i) => ({
+      ...s,
+      horizontalRuleCount: trimmedMeta[i]?.horizontalRuleCount ?? 0,
+    }));
+    const refWidths = refSegments
+      .filter((s) => s.horizontalRuleCount >= p.minHorizontalRulesPerColumn)
+      .map((s) => s.x1 - s.x0);
+    const widthRef = refWidths.length >= 2 ? refWidths : refSegments.map((s) => s.x1 - s.x0);
+    const width = last.x1 - last.x0;
+    const med = medianPositiveWidth(widthRef);
+    const unruled = lastMeta.horizontalRuleCount < p.minHorizontalRulesPerColumn;
+    const tooWide =
+      nominal > 0
+        ? width > nominal * p.maxWideToNominalRatio
+        : med > 0 && width > med * p.maxWideToNominalRatio;
+    const shapeOutlier =
+      med > 0 &&
+      widthRef.length >= 3 &&
+      width > med * p.maxWideToNominalRatio &&
+      lastMeta.horizontalRuleCount < Math.max(2, p.minHorizontalRulesPerColumn - 1);
+    const irregularTrailing = unruled && (tooWide || shapeOutlier);
+    const notProduct = nominal > 0 && !isUniformRuledProductColumn(lastMeta, nominal, widthRef, p);
+
+    if (irregularTrailing || (unruled && notProduct)) {
+      trimmedSegs = trimmedSegs.slice(0, -1);
+      trimmedMeta = trimmedMeta.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return { segments: trimmedSegs, ruledMeta: trimmedMeta };
+}
+
 export function nominalUniformColumnWidth(
   segments: Array<{ x0: number; x1: number; horizontalRuleCount?: number }>,
   minRules: number,
@@ -107,11 +186,22 @@ export function refineUniformProductColumns(
   const p = { ...DEFAULT_UNIFORM_COLUMN_GEOMETRY_PARAMS, ...params };
   if (segments.length === 0) return segments;
 
+  const withRulesBeforeTrim = segments.map((s, i) => ({
+    ...s,
+    horizontalRuleCount: ruledMeta[i]?.horizontalRuleCount ?? 0,
+  }));
+  const nominalBefore = nominalUniformColumnWidth(withRulesBeforeTrim, p.minHorizontalRulesPerColumn);
+
+  const trimmed = trimTrailingIrregularValueColumns(segments, ruledMeta, p);
+  segments = trimmed.segments;
+  ruledMeta = trimmed.ruledMeta;
+  if (segments.length === 0) return segments;
+
   const withRules = segments.map((s, i) => ({
     ...s,
     horizontalRuleCount: ruledMeta[i]?.horizontalRuleCount ?? 0,
   }));
-  const nominal = nominalUniformColumnWidth(withRules, p.minHorizontalRulesPerColumn);
+  const nominal = nominalUniformColumnWidth(withRules, p.minHorizontalRulesPerColumn) ?? nominalBefore;
   if (nominal === null || nominal <= 0) return segments;
 
   let current: RuledGridSegment[] = [];
@@ -147,20 +237,65 @@ export function refineUniformProductColumns(
     valueEndX,
   );
   const fromNominal = Math.round(valueW / nominal);
-  const targetCount = Math.min(
-    maxColumns,
-    Math.max(current.length, Math.min(fromGutters, fromNominal)),
+  let edgeExtra = trailingEdgeExtraUniformColumns(
+    withRulesBeforeTrim,
+    valueEndX,
+    nominal ?? 0,
+    p.minHorizontalRulesPerColumn,
   );
+  if (fromGutters >= Math.max(2, Math.round(valueW / Math.max(1, nominal ?? 1)) - 1)) {
+    edgeExtra = 0;
+  }
+  const gutterTarget = Math.min(maxColumns, fromGutters + edgeExtra);
+  const countCandidates = [
+    current.length,
+    gutterTarget,
+    fromGutters,
+  ].filter((n) => n >= 2 && n <= maxColumns);
+  if (fromNominal >= 2 && fromNominal <= gutterTarget + 1) {
+    countCandidates.push(fromNominal);
+  }
+  const uniqueCounts = [...new Set(countCandidates)].sort((a, b) => a - b);
 
-  if (targetCount > current.length && targetCount <= maxColumns && cv > p.maxWidthCv * 0.5) {
-    const colW = valueW / targetCount;
-    const snapped = snapEqualWidthGrid(valueStartX, valueEndX, colW);
-    const snapCv = columnWidthCv(snapped.map((s) => s.x1 - s.x0));
-    if (snapped.length >= 2 && snapCv <= p.maxWidthCv) current = snapped;
+  if (gutterTarget >= 2 && gutterTarget <= maxColumns) {
+    const forced = fitEqualWidthColumnGrid(valueStartX, valueEndX, gutterTarget);
+    const forcedCv = columnWidthCv(forced.map((s) => s.x1 - s.x0));
+    if (forced.length === gutterTarget && forcedCv <= p.maxWidthCv * 2.5) {
+      return forced;
+    }
   }
 
-  cv = columnWidthCv(current.map((s) => s.x1 - s.x0));
-  if (cv > p.maxWidthCv && fromGutters >= 2 && fromGutters <= maxColumns) {
+  let bestSnap: RuledGridSegment[] | null = null;
+  let bestSnapCv = Number.POSITIVE_INFINITY;
+  let bestCount = 0;
+  for (const n of uniqueCounts) {
+    const snapped = fitEqualWidthColumnGrid(valueStartX, valueEndX, n);
+    const snapCv = columnWidthCv(snapped.map((s) => s.x1 - s.x0));
+    if (snapped.length !== n || snapCv > p.maxWidthCv) continue;
+    if (
+      !bestSnap ||
+      snapCv < bestSnapCv - 1e-6 ||
+      (snapCv <= bestSnapCv * 1.02 && n > bestCount) ||
+      (n === gutterTarget && snapCv <= p.maxWidthCv)
+    ) {
+      bestSnap = snapped;
+      bestSnapCv = snapCv;
+      bestCount = n;
+    }
+  }
+  if (bestSnap) {
+    current = bestSnap;
+    cv = bestSnapCv;
+  }
+  if (gutterTarget >= 2 && gutterTarget <= maxColumns) {
+    const forced = fitEqualWidthColumnGrid(valueStartX, valueEndX, gutterTarget);
+    const forcedCv = columnWidthCv(forced.map((s) => s.x1 - s.x0));
+    const cvCap = edgeExtra > 0 ? p.maxWidthCv * 2 : p.maxWidthCv;
+    if (forced.length === gutterTarget && forcedCv <= cvCap) {
+      current = forced;
+    }
+  }
+  if (cv > p.maxWidthCv && fromGutters >= 2 && fromGutters <= maxColumns && current.length !== gutterTarget) {
     const colW = valueW / fromGutters;
     const snapped = snapEqualWidthGrid(valueStartX, valueEndX, colW);
     const snapCv = columnWidthCv(snapped.map((s) => s.x1 - s.x0));
@@ -171,6 +306,27 @@ export function refineUniformProductColumns(
 
   if (current.length > maxColumns) current = current.slice(0, maxColumns);
   return current;
+}
+
+/**
+ * When the last ruled segment spans to the scan edge but is wider than nominal (weak rules),
+ * uniform grids often hide one more product column than gutter detection counted.
+ */
+function trailingEdgeExtraUniformColumns(
+  segments: Array<{ x0: number; x1: number; horizontalRuleCount?: number }>,
+  valueEndX: number,
+  nominal: number,
+  minRules: number,
+): number {
+  if (segments.length === 0 || nominal <= 0) return 0;
+  const last = segments[segments.length - 1]!;
+  if (last.x1 < valueEndX - 2) return 0;
+  const width = last.x1 - last.x0;
+  const rules = last.horizontalRuleCount ?? 0;
+  if (width < nominal * 1.35) return 0;
+  const slots = Math.max(1, Math.round(width / nominal));
+  if (rules >= minRules && slots <= 1) return 0;
+  return Math.min(2, Math.max(0, slots - 1));
 }
 
 export type EqualWidthPair = {

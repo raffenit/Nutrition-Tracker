@@ -10,6 +10,7 @@ import {
   fitUniformValueColumns,
   countInteriorVerticalGutters,
   interiorVerticalGutterPenalty,
+  splitColumnSegmentsAtLocalVerticalGutters,
   pickLeadingLayoutHypothesis,
   pickVarietyPackSubtype,
   scoreLayoutHypotheses,
@@ -20,6 +21,7 @@ import {
   paintPerColumnLabelGrid,
   paintSharedLabelGrid,
 } from '../../fixtures/syntheticVarietyPackGrids.js';
+import { brightVerticalGutterCentersAbs } from '../../../integrations/ruledTableGridDetect.js';
 
 async function twoHalvesGrey(width: number, height: number): Promise<{ pixels: Uint8Array; w: number; h: number }> {
   const pixels = new Uint8Array(width * height);
@@ -58,6 +60,56 @@ test('layout hypothesis picks split_single when focus hint and equal-half fit al
   const wr = segments![1]!.x1 - segments![1]!.x0;
   const ratio = wl < wr ? wl / wr : wr / wl;
   assert.ok(ratio > 0.85, `expected equal halves, ratio=${ratio}`);
+});
+
+test('splitColumnSegmentsAtLocalVerticalGutters splits wide span at local vertical gutter', async () => {
+  const width = 400;
+  const height = 120;
+  const pixels = new Uint8Array(width * height).fill(220);
+  const colW = 38;
+  const x0 = 328;
+  const gutterX = 367;
+  const x1 = 385;
+  for (let y = 20; y < height - 20; y += 1) {
+    for (let x = x0; x < gutterX; x += 1) {
+      pixels[y * width + x] = 40;
+    }
+    for (let x = gutterX + 2; x < x1; x += 1) {
+      pixels[y * width + x] = 40;
+    }
+    for (let y2 = y; y2 <= y + 1; y2 += 1) {
+      for (let x = gutterX - 1; x <= gutterX + 1; x += 1) pixels[y2 * width + x] = 235;
+    }
+  }
+  const dockedOnly = splitColumnSegmentsAtLocalVerticalGutters(
+    pixels,
+    width,
+    height,
+    [{ x0, x1, horizontalRuleCount: 8 }],
+    8,
+    1.12,
+  );
+  assert.equal(dockedOnly.length, 1);
+  assert.equal(dockedOnly[0]!.x0, x0);
+  assert.equal(dockedOnly[0]!.x1, gutterX);
+  const out = splitColumnSegmentsAtLocalVerticalGutters(
+    pixels,
+    width,
+    height,
+    [
+      { x0, x1, horizontalRuleCount: 8 },
+      { x0: gutterX, x1: gutterX + 56, horizontalRuleCount: 8 },
+    ],
+    8,
+    1.12,
+  );
+  assert.equal(out.length, 2);
+  assert.equal(out[0]!.x1, out[1]!.x0);
+  assert.equal(out[0]!.x0, x0);
+  assert.equal(out[0]!.x1, gutterX);
+  assert.equal(out[1]!.x1, gutterX + 56);
+  const gutters = brightVerticalGutterCentersAbs(pixels, width, height, x0, gutterX + 56);
+  assert.equal(countInteriorVerticalGutters(gutters, out), 0);
 });
 
 test('interior vertical gutter penalty hits gutters inside wide column segments', () => {

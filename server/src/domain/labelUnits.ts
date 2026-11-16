@@ -7,6 +7,12 @@ import {
   parseFuzzyMassUnit,
 } from './ocrConfusables.js';
 import { sliceForLabelAnchor } from './labelBoundaries.js';
+import {
+  inferNutrientsFromGluedBlobs,
+  parseGluedAmountTail,
+  parseGluedNutrientBlob,
+  parseSodiumIngTail,
+} from './gluedLabelAmount.js';
 import { embeddedCanonicalForSlot, findVariantLabelAnchors, type VariantLabelSlot } from './labelVariants.js';
 import { emptyNutrients } from './nutrients.js';
 
@@ -77,7 +83,22 @@ export function inferNutrientsFromUnits(raw: string): Nutrients {
     if (kcal) nutrients.calories = Number(kcal[1]);
   }
 
+  mergeGluedBlobNutrients(nutrients, inferNutrientsFromGluedBlobs(raw));
+
   return nutrients;
+}
+
+function mergeGluedBlobNutrients(target: Nutrients, source: Nutrients): void {
+  if (target.calories <= 0 && source.calories > 0) target.calories = source.calories;
+  if (target.fat <= 0 && source.fat > 0) target.fat = source.fat;
+  if (target.carbs <= 0 && source.carbs > 0) target.carbs = source.carbs;
+  if (target.fiber <= 0 && source.fiber > 0) target.fiber = source.fiber;
+  if (target.protein <= 0 && source.protein > 0) target.protein = source.protein;
+  if (target.sodium <= 0 && source.sodium > 0) target.sodium = source.sodium;
+  for (const extra of source.extras) {
+    if (target.extras.some((row) => row.key === extra.key)) continue;
+    if (extra.amount > 0) target.extras.push({ ...extra });
+  }
 }
 
 function assignCaloriesFromVariants(text: string, nutrients: Nutrients): void {
@@ -192,6 +213,7 @@ type UnitSlot =
   | 'protein'
   | 'fiber'
   | 'total_carb'
+  | 'total_fat'
   | 'sugars';
 
 function assignByVariantLabelWindow(
@@ -216,7 +238,13 @@ function assignByVariantLabelWindow(
 function assignTotalFatFromUnits(text: string, nutrients: Nutrients): void {
   if (nutrients.fat > 0) return;
 
-  const patterns = [/\bt[a-z]{3,7}l\s+fat/gi, /\btotal\s*fat\b/gi, /\bfat\b/gi, /(?<![a-z])fat(?=\d)/gi];
+  const patterns = [
+    /\btotal\s*fat(?=\d)/gi,
+    /\bt[a-z]{3,7}l\s+fat/gi,
+    /\btotal\s*fat\b/gi,
+    /\bfat\b/gi,
+    /(?<![a-z])fat(?=\d)/gi,
+  ];
   for (const pattern of patterns) {
     for (const match of text.matchAll(pattern)) {
       const index = match.index ?? 0;
@@ -237,13 +265,18 @@ function assignTotalFatFromUnits(text: string, nutrients: Nutrients): void {
   }
 }
 
-/** `Fat2.Sg`, `fat 2.59` — fat label glued to digits/units on one-line OCR. */
+/** `Fat2.Sg`, `TotalFat2dd` — delegates to glued-label parser. */
 function readGluedFatGramAmount(slice: string): number | null {
   const region = labelAmountRegion(slice);
-  const gluedDot = region.match(/\bfat(\d+)\.([A-Za-z]{1,3})/i);
-  if (gluedDot) {
-    const expanded = expandOcrDecimalBeforeGram(gluedDot[1] ?? '', gluedDot[2] ?? '');
-    if (expanded != null && expanded > 0 && expanded <= 100) return expanded;
+  const blob = region.match(/^[A-Za-z][A-Za-z0-9_]*/)?.[0];
+  if (blob) {
+    const glued = parseGluedNutrientBlob(blob);
+    if (glued?.slot === 'total_fat') return glued.amount;
+  }
+  const afterFat = region.match(/\bfat(.*)$/i)?.[1];
+  if (afterFat) {
+    const tail = parseGluedAmountTail(afterFat, 'total_fat');
+    if (tail) return tail.amount;
   }
   const gluedDigits = region.match(/\bfat(\d+(?:\.\d+)?)([9gq6])(?:\s|\d|%|$)/i);
   if (gluedDigits) {
@@ -264,18 +297,36 @@ export function readSodiumFromMacroGap(raw: string): number | null {
   if (carbIdx < 0) return null;
 
   const transIdx = flat.search(/\btrans\s+fat\b/i);
-  const start = transIdx >= 0 ? transIdx : flat.search(/nutrition\s+facts/i);
+  const fuzzyTrans = flat.search(/\btans\w{2,12}\b/i);
+  const cholIdx = flat.search(/\bcholesterol\b/i);
+  const start =
+    transIdx >= 0 ? transIdx : fuzzyTrans >= 0 ? fuzzyTrans : cholIdx >= 0 ? cholIdx : flat.search(/nutrition\s+facts/i);
   const window = flat.slice(start >= 0 ? start : 0, carbIdx);
 
   const labeled = window.match(
-    /\bs[oei]?d[iu]?[a-z]{0,8}m\b[^0-9]{0,16}(\d{2,4})\s*(?:mg|m[a-z]{1,4}|Ng)\b/i,
+    /\bs[oei]?d[iu]?[a-z0-9]{2,14}\b[^0-9]{0,20}(\d{2,4})\s*(?:mg|m[a-z]{1,4}|Ng|ing)\b/i,
   );
   if (labeled) {
     const amount = Number(labeled[1]);
     if (amount >= 40 && amount <= 9999) return amount;
   }
 
+  const digitIng = readSodiumDigitIngGlue(window);
+  if (digitIng != null) return digitIng;
+
   return readGarbledSodiumMgInGap(window);
+}
+
+/** Delegates to {@link parseGluedNutrientBlob} / {@link parseSodiumIngTail} (macro-gap only). */
+export function readSodiumDigitIngGlue(window: string): number | null {
+  if (!/\bsod/i.test(window)) return null;
+  const sodBlob = window.match(/\bs[oei]?d[a-z0-9]{2,16}\b/i)?.[0];
+  if (sodBlob) {
+    const glued = parseGluedNutrientBlob(sodBlob);
+    if (glued?.slot === 'sodium') return glued.amount;
+  }
+  const tail = window.match(/(\d{1,3})ing\b/i)?.[0];
+  return tail ? parseSodiumIngTail(tail) : null;
 }
 
 /** Bracketed `[3gzzor5 "%` or glued `E3gzo5 5%` in the trans-fat → carbohydrate gap. */
@@ -436,6 +487,7 @@ function readAmountWithEmbeddedLabel(slice: string, expected: 'g' | 'mg', slot?:
 }
 
 function slotValueFilled(nutrients: Nutrients, slot: UnitSlot): boolean {
+  if (slot === 'total_fat') return nutrients.fat > 0;
   if (slot === 'sodium') return nutrients.sodium > 0;
   if (slot === 'protein') return nutrients.protein > 0;
   if (slot === 'fiber') return nutrients.fiber > 0;
@@ -446,7 +498,8 @@ function slotValueFilled(nutrients: Nutrients, slot: UnitSlot): boolean {
 }
 
 function applyUnitSlot(nutrients: Nutrients, slot: UnitSlot, amount: number): void {
-  if (slot === 'sodium') nutrients.sodium = amount;
+  if (slot === 'total_fat') nutrients.fat = amount;
+  else if (slot === 'sodium') nutrients.sodium = amount;
   else if (slot === 'protein') nutrients.protein = amount;
   else if (slot === 'fiber') nutrients.fiber = amount;
   else if (slot === 'total_carb') nutrients.carbs = amount;

@@ -55,6 +55,8 @@ Implementation: `server/src/integrations/labelColumnStrips.ts`.
 
 Gutter detection classifies band pixels into **background** and **ink** by histogram mass (works for dark-on-light and light-on-dark labels). Sparse extreme peaks are **glare**. Gutter thresholds use polarity-aware contrast, not raw max brightness.
 
+**Same signal end-to-end:** horizontal rule scans and row-surface warp use the same `classifyBandLuminance` / `glareCap` and per-column body glare masks (`columnBodyGlareMask`)—see workspace **pipeline signal consistency** (`.devin/rules/pipeline-signal-consistency.md`).
+
 ## Uniform column geometry (`uniformColumnGeometryParams.ts`)
 
 Variety-pack **value** columns and split-single **halves** are equal width. Refine merges with `refineUniformProductColumns`; split layout uses `detectEqualWidthColumnPair`.

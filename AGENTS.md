@@ -30,4 +30,6 @@ Do not restart production infrastructure (Caddy) or this container until the pen
 
 ## Parsing and imports
 
-Prefer **universal layout algorithms** over hardcoded strings or one-off fixes for a single label photo. Classify by **layout pattern** (single Nutrition Facts block, repeated headings, multi-column macro table), not by brand, retailer, or photo filename.
+Prefer **universal layout algorithms** over hardcoded strings or one-off fixes for a single label photo.
+
+**Shared-rail row grid debugging:** After substantive row-band / ruled-table changes, run `server/scripts/visualize-shared-label-row-regions.mjs` on the fixture (see [docs/variety-pack-grid-pipeline.md](./docs/variety-pack-grid-pipeline.md) § Row-band visualization) and confirm with the user via `preview.html` — the overlay matches OCR crop geometry. Classify by **layout pattern** (single Nutrition Facts block, repeated headings, multi-column macro table), not by brand, retailer, or photo filename.

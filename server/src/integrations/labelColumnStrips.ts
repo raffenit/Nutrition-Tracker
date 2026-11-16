@@ -6,6 +6,7 @@ import {
   type ColumnStripDetectParams,
 } from '../domain/columnStripDetectParams.js';
 import { WIDE_PANEL_MIN_ASPECT } from '../domain/labelLayout.js';
+import { expandImageBandToInkEnvelope, inkRowEnvelopeInGreyBand } from '../domain/wideBandGridEnvelope.js';
 import { DEFAULT_RULED_TABLE_GRID_PARAMS } from '../domain/ruledTableGridParams.js';
 import type { BandLuminanceRoles } from '../domain/bandLuminanceRoles.js';
 import {
@@ -141,7 +142,7 @@ export async function prepareWideBandAnalysis(
   const clampedHeight = Math.min(bandH, Math.max(1, fullHeight - bandTop));
   const band = { left: 0, top: bandTop, width: bandW, height: clampedHeight };
 
-  const { analysisW, analysisH } = bandToAnalysisSize(
+  let { analysisW, analysisH } = bandToAnalysisSize(
     bandW,
     bandH,
     params.analysisWidth,
@@ -149,21 +150,74 @@ export async function prepareWideBandAnalysis(
     params.minAnalysisHeightFraction,
   );
 
+  let extractBand = band;
   let analysisPipeline = source
     .clone()
-    .extract({ left: band.left, top: band.top, width: band.width, height: band.height })
+    .extract({
+      left: extractBand.left,
+      top: extractBand.top,
+      width: extractBand.width,
+      height: extractBand.height,
+    })
     .resize({ width: analysisW, height: analysisH, fit: 'fill' })
     .greyscale();
-  analysisPipeline = applyBandContrast(analysisPipeline, params);
-  const { data } = await analysisPipeline.raw().toBuffer({ resolveWithObject: true });
+  let ruledGridPixels: Uint8Array | undefined;
+  if (purpose === 'detection') {
+    const rawCapture = await analysisPipeline.clone().raw().toBuffer({ resolveWithObject: true });
+    ruledGridPixels = new Uint8Array(rawCapture.data);
+  }
+  analysisPipeline = applyBandContrast(analysisPipeline, params, purpose);
+  let { data } = await analysisPipeline.raw().toBuffer({ resolveWithObject: true });
+  let pixels = new Uint8Array(data);
+
+  if (purpose === 'detection') {
+    const envelope = inkRowEnvelopeInGreyBand(pixels, analysisW, analysisH);
+    if (envelope) {
+      const expanded = expandImageBandToInkEnvelope(
+        extractBand,
+        fullHeight,
+        envelope,
+        analysisH,
+        params,
+      );
+      if (expanded.top !== extractBand.top || expanded.height !== extractBand.height) {
+        extractBand = expanded;
+        const { analysisW: nextW, analysisH: nextH } = bandToAnalysisSize(
+          extractBand.width,
+          extractBand.height,
+          params.analysisWidth,
+          params.minAnalysisWidthFraction,
+          params.minAnalysisHeightFraction,
+        );
+        analysisW = nextW;
+        analysisH = nextH;
+        analysisPipeline = source
+          .clone()
+          .extract({
+            left: extractBand.left,
+            top: extractBand.top,
+            width: extractBand.width,
+            height: extractBand.height,
+          })
+          .resize({ width: analysisW, height: analysisH, fit: 'fill' })
+          .greyscale();
+        const rawCapture = await analysisPipeline.clone().raw().toBuffer({ resolveWithObject: true });
+        ruledGridPixels = new Uint8Array(rawCapture.data);
+        analysisPipeline = applyBandContrast(analysisPipeline, params, purpose);
+        ({ data } = await analysisPipeline.raw().toBuffer({ resolveWithObject: true }));
+        pixels = new Uint8Array(data);
+      }
+    }
+  }
 
   return {
-    band,
+    band: extractBand,
     fullWidth,
     fullHeight,
     analysisW,
     analysisH,
-    pixels: new Uint8Array(data),
+    pixels,
+    ...(ruledGridPixels !== undefined ? { ruledGridPixels } : {}),
   };
 }
 
@@ -211,6 +265,13 @@ type Segment = { x0: number; x1: number };
 
 export type WideBandPurpose = 'detection' | 'ocr';
 
+export type InkGridCropMeta = {
+  /** Label/value split in cropped analysis x (0 = left ink edge of crop). */
+  labelBoundaryX: number;
+  /** Right edge of the ruled nutrient table in cropped analysis x (excludes packaging margin). */
+  tableRightAnalysisX: number;
+};
+
 export type WideBandAnalysis = {
   band: { left: number; top: number; width: number; height: number };
   fullWidth: number;
@@ -218,6 +279,10 @@ export type WideBandAnalysis = {
   analysisW: number;
   analysisH: number;
   pixels: Uint8Array;
+  /** Greyscale band before contrast stretch (preserves thin ruled lines at low analysis height). */
+  ruledGridPixels?: Uint8Array;
+  /** Horizontal margins removed; all ruled ink lies in [0, analysisW]. */
+  inkGridCropped?: InkGridCropMeta;
 };
 
 function verticalExtentForOcrCrops(
@@ -478,11 +543,19 @@ function countSegmentsForGutters(profileLength: number, gutterCenters: number[],
   return count;
 }
 
-function applyBandContrast(pipeline: Sharp, params: ColumnStripDetectParams): Sharp {
+function applyBandContrast(
+  pipeline: Sharp,
+  params: ColumnStripDetectParams,
+  _purpose: WideBandPurpose = 'detection',
+): Sharp {
   if (params.profileContrastSlope === 1 && params.profileContrastIntercept === 0) {
     return pipeline;
   }
   return pipeline.linear(params.profileContrastSlope, params.profileContrastIntercept).normalize();
+}
+
+export function ruledGridBandPixels(band: WideBandAnalysis): Uint8Array {
+  return band.ruledGridPixels ?? band.pixels;
 }
 
 function enhanceGreyBand(pixels: Uint8Array, params: ColumnStripDetectParams): Uint8Array {

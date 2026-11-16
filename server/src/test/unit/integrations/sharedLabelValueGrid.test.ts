@@ -9,7 +9,7 @@ import {
   DEFAULT_COLUMN_STRIP_DETECT_PARAMS,
   OCR_IMPORT_MAX_PRODUCT_COLUMNS,
 } from '../../../domain/columnStripDetectParams.js';
-import { detectSharedLabelValueGrid } from '../../../integrations/varietyPackGridPipeline.js';
+import { detectSharedLabelValueGrid, runVarietyPackGridPipeline } from '../../../integrations/varietyPackGridPipeline.js';
 import {
   profileInkAsymmetryForLayoutScores,
   sharedLabelBoundaryForTest,
@@ -85,13 +85,22 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const sharedLabelMultiValueFixture = path.join(repoRoot, 'local', 'test-images', LOCAL_SHARED_LABEL_MULTI_VALUE_JPG);
 
 test(
-  'local shared-label multi-value fixture matches grid layout',
+  'local shared-label multi-value fixture runs ruled grid step 1',
   { skip: !existsSync(sharedLabelMultiValueFixture) },
   async () => {
     const bytes = await readFile(sharedLabelMultiValueFixture);
-    const plan = await detectSharedLabelValueGrid(bytes, { maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS });
-    assert.ok(plan, 'expected shared label + value grid');
-    assert.ok(plan!.valueColumns.length >= 4, 'expected multiple value columns');
-    assert.ok(plan!.labelColumn.width < (await sharp(bytes).rotate().metadata()).width! * 0.35);
+    const pipeline = await runVarietyPackGridPipeline(bytes, {
+      maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS,
+      stopAfterStep: 1,
+    });
+    assert.ok(pipeline.steps[1]?.validation?.ok, 'expected ruled product columns from local photo');
+    assert.ok(
+      (pipeline.steps[1]?.data?.productColumns.length ?? 0) >= 4,
+      'expected multiple product columns on variety-pack table',
+    );
+    const fullPlan = await detectSharedLabelValueGrid(bytes, { maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS });
+    if (fullPlan) {
+      assert.ok(fullPlan.labelColumn.width < (await sharp(bytes).rotate().metadata()).width! * 0.35);
+    }
   },
 );

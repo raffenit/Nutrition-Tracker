@@ -145,6 +145,98 @@ export function columnSegmentsForLayout(
   return [];
 }
 
+/**
+ * Split or dock wide ruled stacks when a vertical gutter falls inside the span (not on the edge).
+ * Scans gutters locally per stack so fan columns pick up ruled lines missed by full-band detection.
+ * When the right piece would be too narrow, docks x1 to the gutter and snaps the following stack's x0.
+ */
+export function splitColumnSegmentsAtLocalVerticalGutters(
+  pixels: Uint8Array,
+  analysisW: number,
+  analysisH: number,
+  segments: ColumnSegment[],
+  minPieceWidth: number,
+  wideToMedianRatio = 1.12,
+  layoutParams: Partial<LabelTableLayoutParams> = {},
+): ColumnSegment[] {
+  const p = { ...DEFAULT_LABEL_TABLE_LAYOUT_PARAMS, ...layoutParams };
+  const widths = segments.map((s) => s.x1 - s.x0).filter((w) => w > 0);
+  const median = medianPositiveWidth(widths);
+  if (median <= 0) return segments.map((s) => ({ ...s }));
+  const wideMin = Math.round(median * wideToMedianRatio);
+  const work = segments.map((s) => ({ ...s }));
+
+  for (let i = 0; i < work.length; i += 1) {
+    const seg = work[i]!;
+    const w = seg.x1 - seg.x0;
+    if (w < wideMin) {
+      const localGuttersEarly = brightVerticalGutterCentersAbs(
+        pixels,
+        analysisW,
+        analysisH,
+        seg.x0,
+        seg.x1,
+      );
+      const insetEarly = Math.max(2, Math.round(w * p.interiorGutterInsetFraction));
+      const hasInterior = localGuttersEarly.some(
+        (g) => g > seg.x0 + insetEarly && g < seg.x1 - insetEarly,
+      );
+      if (!hasInterior || w < median) {
+        continue;
+      }
+    }
+    const localGutters = brightVerticalGutterCentersAbs(pixels, analysisW, analysisH, seg.x0, seg.x1);
+    const inset = Math.max(2, Math.round(w * p.interiorGutterInsetFraction));
+    const interior = localGutters
+      .filter((g) => g > seg.x0 + inset && g < seg.x1 - inset)
+      .sort((a, b) => a - b);
+    if (interior.length === 0) {
+      continue;
+    }
+    const typicalW =
+      medianPositiveWidth(
+        work.map((s) => s.x1 - s.x0).filter((colW) => colW > 0 && colW <= wideMin),
+      ) || median;
+    const splitPick = interior.reduce(
+      (best, g) => {
+        const leftW = g - seg.x0;
+        if (leftW < minPieceWidth || g >= seg.x1 - minPieceWidth) return best;
+        const dist = Math.abs(leftW - typicalW);
+        return dist < best.dist ? { g, dist } : best;
+      },
+      { g: interior[0]!, dist: Number.POSITIVE_INFINITY },
+    );
+    const splitX = splitPick.g;
+    if (splitX <= seg.x0 + 1 || splitX >= seg.x1 - 1) {
+      continue;
+    }
+    const left: ColumnSegment = {
+      x0: seg.x0,
+      x1: splitX,
+      horizontalRuleCount: seg.horizontalRuleCount,
+    };
+    const right: ColumnSegment = {
+      x0: splitX,
+      x1: seg.x1,
+      horizontalRuleCount: seg.horizontalRuleCount,
+    };
+    const minRight = Math.max(minPieceWidth, Math.round(median * 0.55));
+    if (left.x1 - left.x0 >= minPieceWidth && right.x1 - right.x0 >= minRight) {
+      work[i] = left;
+      work.splice(i + 1, 0, right);
+      continue;
+    }
+    if (left.x1 - left.x0 >= minPieceWidth) {
+      work[i] = { ...seg, x1: splitX };
+      const next = work[i + 1];
+      if (next !== undefined && next.x0 > splitX && next.x0 < seg.x1) {
+        work[i + 1] = { ...next, x0: splitX };
+      }
+    }
+  }
+  return work;
+}
+
 export function countInteriorVerticalGutters(
   gutterCenters: number[],
   segments: ColumnSegment[],

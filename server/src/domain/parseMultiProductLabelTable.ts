@@ -10,8 +10,8 @@ export type MultiProductColumn = {
   preview: string;
 };
 
-const TABLE_END = /^(ingredients|distributed by|contains:|% daily value)/i;
-const SKIP_LINE = /^(serving size|servings per|amount per serving|daily value|\*)\b/i;
+const TABLE_END = /^(ingredients|distributed by|contains:)/i;
+const SKIP_LINE = /^(serving size|servings per|amount per serving|daily value|\*|%?\s*daily\s*value)/i;
 const NUTRIENT_ROW =
   /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|includes.+added sugars|protein)\b/i;
 

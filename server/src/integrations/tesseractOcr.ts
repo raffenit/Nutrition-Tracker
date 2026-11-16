@@ -1,9 +1,21 @@
 import Tesseract, { type PSM, type Worker } from 'tesseract.js';
 import { appendImportJobDebug } from '../import/importJobProgress.js';
 
+export type TesseractLineBox = {
+  text: string;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+};
+
 export type TesseractBatchResult = {
   texts: string[];
   logLines: string[];
+  /** Per run (image × PSM, same order as `texts`) when `withLines` is requested. */
+  lines?: TesseractLineBox[][];
+};
+
+export type TesseractRecognizeOptions = {
+  /** Also return line text + bbox (for contested-row re-read). */
+  withLines?: boolean;
 };
 
 const STDERR_PATTERNS =
@@ -52,9 +64,12 @@ export async function recognizeImagesOnWorker(
   images: Buffer[],
   psmModes: PSM[],
   label: string,
+  options?: TesseractRecognizeOptions,
 ): Promise<TesseractBatchResult> {
   const logLines: string[] = [];
   const texts: string[] = [];
+  const lines: TesseractLineBox[][] = [];
+  const withLines = options?.withLines === true;
   const totalRuns = images.length * psmModes.length;
   let runInBatch = 0;
 
@@ -68,7 +83,18 @@ export async function recognizeImagesOnWorker(
 
       await worker.setParameters({ tessedit_pageseg_mode: psm });
       const { result, stderr } = await withStderrCapture(async () => {
-        const recognition = await worker.recognize(images[imageIndex]!);
+        const recognition = withLines
+          ? await worker.recognize(images[imageIndex]!, {}, { text: true, blocks: true })
+          : await worker.recognize(images[imageIndex]!);
+        if (withLines) {
+          lines.push(
+            (recognition.data.blocks ?? []).flatMap((block) =>
+              block.paragraphs.flatMap((paragraph) =>
+                paragraph.lines.map((line) => ({ text: line.text, bbox: { ...line.bbox } })),
+              ),
+            ),
+          );
+        }
         return recognition.data.text ?? '';
       });
       texts.push(result);
@@ -88,7 +114,7 @@ export async function recognizeImagesOnWorker(
   }
 
   pushDebug(logLines);
-  return { texts, logLines };
+  return withLines ? { texts, logLines, lines } : { texts, logLines };
 }
 
 /** Run Tesseract on one or more PNG buffers; capture logger, errorHandler, and process stderr. */
@@ -97,10 +123,11 @@ export async function recognizeTesseractBatch(
   cachePath: string,
   psmModes: PSM[],
   label: string,
+  options?: TesseractRecognizeOptions,
 ): Promise<TesseractBatchResult> {
   const worker = await openTesseractWorker(cachePath, label);
   try {
-    return await recognizeImagesOnWorker(worker, images, psmModes, label);
+    return await recognizeImagesOnWorker(worker, images, psmModes, label, options);
   } finally {
     await worker.terminate();
   }

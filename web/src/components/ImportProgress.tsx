@@ -12,6 +12,10 @@ export type ImportProgressState = {
   detail?: string;
   steps?: ImportProgressStep[];
   elapsedSec?: number;
+  /** Recent humanized pipeline activity from the server (OCR routing, columns, stitch). */
+  activity?: string[];
+  /** Timed OCR pipeline stages when the server reports them. */
+  pipelineStages?: Array<{ id: string; label: string; durationMs: number; detail?: string }>;
 };
 
 type ImportProgressProps = {
@@ -19,7 +23,7 @@ type ImportProgressProps = {
 };
 
 export function ImportProgress({ progress }: ImportProgressProps) {
-  const { phase, percent, message, detail, steps, elapsedSec } = progress;
+  const { phase, percent, message, detail, steps, elapsedSec, activity, pipelineStages } = progress;
   return (
     <div className="import-progress" aria-busy="true">
       <div className="import-progress-head">
@@ -31,6 +35,26 @@ export function ImportProgress({ progress }: ImportProgressProps) {
         )}
       </div>
       {detail && <p className="muted import-progress-detail">{detail}</p>}
+      {activity && activity.length > 0 && (
+        <ul className="import-progress-activity" aria-label="Current pipeline activity">
+          {activity.slice(-4).map((line, index) => (
+            <li key={`${index}-${line}`}>{line}</li>
+          ))}
+        </ul>
+      )}
+      {pipelineStages && pipelineStages.length > 0 && (
+        <ul className="import-progress-stages" aria-label="OCR stage timings">
+          {pipelineStages
+            .filter((s) => s.id !== 'total')
+            .slice(-8)
+            .map((stage) => (
+              <li key={stage.id}>
+                {stage.label}: {(stage.durationMs / 1000).toFixed(1)}s
+                {stage.detail ? ` (${stage.detail})` : ''}
+              </li>
+            ))}
+        </ul>
+      )}
       {steps && steps.length > 0 && (
         <ol className="import-progress-steps" aria-label="Import steps">
           {steps.map((step) => (

@@ -5,6 +5,7 @@ import {
   findEmbeddedCanonicalSpan,
   parseAmountWithFuzzyUnit,
 } from './ocrConfusables.js';
+import { parseGluedNutrientBlob } from './gluedLabelAmount.js';
 import { classifyVariantLabelLine, embeddedCanonicalForSlot, matchVariantLabelToken } from './labelVariants.js';
 import { parseServingsPerContainerVariant, parseServingSizeVariant } from './labelHeaderParse.js';
 import { estimateSaturatedFatFromOcrSlice } from './labelUnits.js';
@@ -24,6 +25,20 @@ export type LabelParse = {
   looksLikeLabel: boolean;
 };
 
+/** Regex / line scanners for whole-label text — always merged so columnar mis-pair cannot skip them. */
+function readDirectCoreMacros(compact: string, raw: string): Nutrients {
+  const nutrients = emptyNutrients();
+  nutrients.calories = readCalories(compact, raw) ?? 0;
+  nutrients.fat =
+    readAmount(compact, raw, ['total fat'], 'g') ?? readStandaloneFatGrams(raw) ?? readTotalFatGramsNoisy(raw) ?? 0;
+  nutrients.carbs =
+    readAmount(compact, raw, ['total carb\\.?', 'total carbohydrates?', 'carbohydrates?'], 'g') ?? 0;
+  nutrients.fiber = readAmount(compact, raw, ['dietary fiber', 'fiber'], 'g') ?? readFiberGramsNoisy(raw) ?? 0;
+  nutrients.protein = readAmount(compact, raw, ['protein'], 'g') ?? 0;
+  nutrients.sodium = readAmount(compact, raw, ['sodium'], 'mg') ?? readSodiumMgNoisy(raw) ?? 0;
+  return nutrients;
+}
+
 export function parseNutritionLabel(text: string): LabelParse {
   const raw = text.replace(/\r/g, '\n');
   const compact = normalizeCompact(raw);
@@ -32,25 +47,17 @@ export function parseNutritionLabel(text: string): LabelParse {
   const columnar = parseColumnarLabel(raw);
   const linePairs = nutrientsFromLabelLinePairs(raw);
 
-  if (columnar) {
-    mergeNutrients(nutrients, columnar);
-    mergeNutrients(nutrients, inline);
-    mergeNutrients(nutrients, linePairs ?? emptyNutrients());
-  } else {
-    nutrients.calories = readCalories(compact, raw) ?? 0;
-    nutrients.fat =
-      readAmount(compact, raw, ['total fat'], 'g') ?? readStandaloneFatGrams(raw) ?? readTotalFatGramsNoisy(raw) ?? 0;
-    nutrients.carbs = readAmount(compact, raw, ['total carb\\.?', 'total carbohydrates?', 'carbohydrates?'], 'g') ?? 0;
-    nutrients.fiber = readAmount(compact, raw, ['dietary fiber', 'fiber'], 'g') ?? readFiberGramsNoisy(raw) ?? 0;
-    nutrients.protein = readAmount(compact, raw, ['protein'], 'g') ?? 0;
-    nutrients.sodium = readAmount(compact, raw, ['sodium'], 'mg') ?? readSodiumMgNoisy(raw) ?? 0;
-
-    mergeNutrients(nutrients, inline);
-    mergeNutrients(nutrients, linePairs ?? emptyNutrients());
-    mergeNutrients(nutrients, columnar);
-  }
+  mergeNutrients(nutrients, readDirectCoreMacros(compact, raw));
+  if (columnar) mergeNutrients(nutrients, columnar);
+  mergeNutrients(nutrients, inline);
+  mergeNutrients(nutrients, linePairs ?? emptyNutrients());
 
   mergeNutrients(nutrients, inferNutrientsFromUnits(raw));
+
+  const caloriesFromLabel = readCalories(compact, raw);
+  if (caloriesFromLabel != null && caloriesFromLabel > nutrients.calories) {
+    nutrients.calories = caloriesFromLabel;
+  }
 
   addExtra(
     nutrients,
@@ -277,24 +284,27 @@ function matchInlineLine(line: string): { slot: LabelSlot; amount: number } | nu
   return matchVariantInlineLine(line);
 }
 
+function variantSlotToLabelSlot(slot: import('./labelVariants.js').VariantLabelSlot): LabelSlot | null {
+  if (slot === 'total_fat') return 'total_fat';
+  if (slot === 'saturated_fat') return 'saturated_fat';
+  if (slot === 'trans_fat') return 'trans_fat';
+  if (slot === 'total_carb') return 'total_carb';
+  if (slot === 'sugars') return 'sugars';
+  if (slot === 'calories') return 'calories';
+  if (slot === 'cholesterol') return 'cholesterol';
+  if (slot === 'sodium') return 'sodium';
+  if (slot === 'fiber') return 'fiber';
+  if (slot === 'protein') return 'protein';
+  return null;
+}
+
 function matchVariantInlineLine(line: string): { slot: LabelSlot; amount: number } | null {
   const trimmed = line.trim();
-  const gluedBlob = trimmed.match(/^([A-Za-z][A-Za-z0-9]{5,40})/);
-  if (gluedBlob) {
-    const blob = gluedBlob[1] ?? '';
-    const slot = matchVariantLabelToken(blob);
-    if (slot) {
-      const canonical = embeddedCanonicalForSlot(blob, slot);
-      const span = canonical ? findEmbeddedCanonicalSpan(blob, canonical) : null;
-      const parsed = span ? parseAmountWithFuzzyUnit(blob.slice(span.end)) : null;
-      if (parsed) {
-        if (slot === 'sodium' || slot === 'cholesterol') {
-          if (parsed.unit === 'mg') return { slot, amount: parsed.amount };
-        } else if (parsed.unit === 'g') {
-          return { slot, amount: parsed.amount };
-        }
-      }
-    }
+  const blob = trimmed.match(/^([A-Za-z][A-Za-z0-9_]{4,42})/)?.[1];
+  if (blob) {
+    const glued = parseGluedNutrientBlob(blob);
+    const labelSlot = glued ? variantSlotToLabelSlot(glued.slot) : null;
+    if (glued && labelSlot) return { slot: labelSlot, amount: glued.amount };
   }
 
   const labelFirst = trimmed.match(/^([A-Za-z][A-Za-z_]{0,22}[A-Za-z]|[A-Za-z]{3,22})\s*:?\s*(.+)$/);
@@ -416,6 +426,16 @@ function readCalories(compact: string, raw: string): number | null {
     const noisy = line.match(/\bcalories\b(?!\s+from\s+fat)[^\d]{0,24}(\d{2,4})\b/i);
     if (noisy) return Number(noisy[1]);
   }
+
+  if (/nutrition\s+facts|amount\s+per\s+serving|per\s+serving|serving\s+size|serving\s*:/i.test(compact)) {
+    const beforeFat = compact.split(/\b(?:total\s+fat|fat\d)/i)[0] ?? compact;
+    const slashEarly = beforeFat.match(/\b(\d{2,4})\/(\d{1,2})\b/);
+    if (slashEarly) {
+      const cal = caloriesFromSlashOcr(slashEarly[1] ?? '', slashEarly[2] ?? '');
+      if (cal >= 50 && cal <= 900) return cal;
+    }
+  }
+
   return lineAmount(raw, 'calories', '');
 }
 
@@ -459,6 +479,11 @@ function readSaturatedFatGramsNoisy(raw: string, totalFatG: number): number | nu
 function readTotalFatGramsNoisy(raw: string): number | null {
   for (const line of raw.split(/\n/).map((row) => row.trim()).filter(Boolean)) {
     if (/saturat|sq\w*at|trans\s+fat/i.test(line)) continue;
+    const blob = line.match(/^([A-Za-z][A-Za-z0-9_]{4,42})/)?.[1];
+    if (blob) {
+      const glued = parseGluedNutrientBlob(blob);
+      if (glued?.slot === 'total_fat') return glued.amount;
+    }
     const fuzzyTotal = line.match(/\bt[a-z]{3,7}l\s+fat[^0-9]{0,6}(\d+(?:\.\d+)?)/i);
     if (fuzzyTotal) {
       const tail = line.slice(fuzzyTotal.index ?? 0, (fuzzyTotal.index ?? 0) + 32);

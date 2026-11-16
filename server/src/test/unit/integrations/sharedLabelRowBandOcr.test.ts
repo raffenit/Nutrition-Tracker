@@ -10,10 +10,18 @@ function minimalPlan(overrides: Partial<SharedLabelValueGridPlan>): SharedLabelV
     labelColumn: { index: 0, left: 0, top: 50, width: 200, height: 300 },
     headerBand: { left: 200, top: 0, width: 800, height: 50 },
     valueColumns: [],
+    valueColumnAnalysisSegments: [],
     valueGridAnalysisX: 200,
     nutrientBodyTop: 50,
     nutrientBodyHeight: 300,
+    rowSurfaceMode: 'shared',
     rowBandSlices: [],
+    labelRowBandSlices: [],
+    valueRowBandSlicesPerColumn: [],
+    valueColumnGlareMasks: [],
+    headerConsensusRowBandSlices: [],
+    headerLabelRowBandSlices: [],
+    headerRowBandSlicesPerColumn: [],
     rowPitchPx: 40,
     ...overrides,
   };
@@ -23,6 +31,11 @@ test('useRowBandSliceOcrForPlan rejects slices much taller than row pitch', () =
   const plan = minimalPlan({
     rowPitchPx: 40,
     rowBandSlices: [
+      { rowIndex: 0, top: 50, height: 95 },
+      { rowIndex: 1, top: 145, height: 98 },
+      { rowIndex: 2, top: 243, height: 92 },
+    ],
+    labelRowBandSlices: [
       { rowIndex: 0, top: 50, height: 95 },
       { rowIndex: 1, top: 145, height: 98 },
       { rowIndex: 2, top: 243, height: 92 },
@@ -40,6 +53,14 @@ test('useRowBandSliceOcrForPlan accepts row-sized slices', () => {
       top: 50 + i * pitch,
       height: pitch,
     })),
+    labelRowBandSlices: Array.from({ length: 6 }, (_, i) => ({
+      rowIndex: i,
+      top: 50 + i * pitch,
+      height: pitch,
+    })),
   });
-  assert.equal(useRowBandSliceOcrForPlan(plan), plan.rowBandSlices.length >= DEFAULT_SHARED_LABEL_GRID_PARAMS.minRowBandSlicesForRowOcr);
+  assert.equal(
+    useRowBandSliceOcrForPlan(plan),
+    plan.labelRowBandSlices.length >= DEFAULT_SHARED_LABEL_GRID_PARAMS.minRowBandSlicesForRowOcr,
+  );
 });

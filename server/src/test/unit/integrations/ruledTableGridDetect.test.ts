@@ -108,6 +108,25 @@ test('ink-bounded vertical gutters ignore open bright margin past last column', 
   );
 });
 
+test('ruled categories extend through right edge when one pitch remains in scan', () => {
+  const width = 640;
+  const height = 200;
+  const pixels = new Uint8Array(width * height);
+  const labelStart = 80;
+  paintRuledColumns(pixels, width, height, labelStart / width, 8);
+  const segments = valueColumnsFromRuledGrid(
+    pixels,
+    width,
+    height,
+    labelStart,
+    { ...DEFAULT_RULED_TABLE_GRID_PARAMS, minHorizontalRulesPerColumn: 3 },
+    12,
+  );
+  assert.ok(segments.length >= 7, `expected near-full grid width, got ${segments.length} columns`);
+  const last = segments[segments.length - 1]!;
+  assert.ok(last.x1 >= width - 8, `last column should reach scan right edge, x1=${last.x1}`);
+});
+
 test('ruled categories match value column count on shared-value ruled synthetic', () => {
   const width = 1200;
   const height = 300;

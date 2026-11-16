@@ -194,10 +194,14 @@ function inFocusHorizontalBounds(
   }
   if (x0 < 0) return null;
   const margin = Math.max(1, Math.round(profile.length * marginFraction));
-  return {
-    x0: Math.max(0, x0 - margin),
-    x1: Math.min(profile.length - 1, x1 + margin),
-  };
+  const x0m = Math.max(0, x0 - margin);
+  const x1m = Math.min(profile.length - 1, x1 + margin);
+  // Keep label borders and outer column rules inside the crop when the sharp band nearly spans the frame.
+  const span = x1m - x0m + 1;
+  if (span / profile.length >= 0.78) {
+    return { x0: 0, x1: profile.length - 1 };
+  }
+  return { x0: x0m, x1: x1m };
 }
 
 function countSharpPeaks(profile: Float64Array, peakRatio: number): number {

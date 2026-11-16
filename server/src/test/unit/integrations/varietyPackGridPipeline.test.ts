@@ -11,7 +11,10 @@ import {
   runVarietyPackGridStep3,
   runVarietyPackGridStep4,
   runVarietyPackGridPipeline,
+  dropWideSparseBodyRuledProductStacks,
+  inkValueColumnsNeedRuledBounds,
 } from '../../../integrations/varietyPackGridPipeline.js';
+import { DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS } from '../../../domain/varietyPackGridPipelineParams.js';
 import { stitchColumnStripOcrTexts } from '../../../domain/stitchColumnStripTexts.js';
 import {
   DEFAULT_PER_COLUMN_LABEL_GRID,
@@ -36,7 +39,7 @@ test('variety pack pipeline steps gate sequentially on synthetic grid', async ()
   assert.equal(step3.validation.ok, true, step3.validation.message);
   assert.equal(step3.data!.layout, 'shared_rail');
 
-  const step4 = runVarietyPackGridStep4(ctx!, step3.data!);
+  const step4 = runVarietyPackGridStep4(ctx!, step2.data!, step3.data!);
   assert.equal(step4.validation.ok, true, step4.validation.message);
   assert.ok(step4.data!.rowBandYs.length >= 4);
 });
@@ -108,7 +111,7 @@ test('synthetic per-column variety pack classifies per_column_labels', async () 
   assert.equal(step3.data!.layout, 'per_column_labels');
   assert.equal(step3.data!.labelColumn, null);
 
-  const step4 = runVarietyPackGridStep4(ctx!, step3.data!);
+  const step4 = runVarietyPackGridStep4(ctx!, step2.data!, step3.data!);
   assert.equal(step4.validation.ok, true, step4.validation.message);
 });
 
@@ -134,7 +137,7 @@ test('buildPerColumnVarietyPackPlanFromPipeline maps ruled columns to strips', a
   assert.ok(stripPlan);
   assert.equal(stripPlan!.strips.length, step3.data!.valueColumns.length);
   const step2 = runVarietyPackGridStep2(ctx!, step1.data!);
-  const step4 = runVarietyPackGridStep4(ctx!, step3.data!);
+  const step4 = runVarietyPackGridStep4(ctx!, step2.data!, step3.data!);
   assert.equal(buildSharedLabelPlanFromPipeline(ctx!, step2.data!, step3.data!, step4.data!), null);
 });
 
@@ -159,6 +162,63 @@ test('step 3 routing: per-column synthetic commits before ink-rail short circuit
   assert.equal(step3.data!.layout, 'per_column_labels');
   assert.equal(step3.data!.labelColumn, null);
   assert.equal(step3.validation.metrics?.varietySubtype, 'per_column_labels');
+});
+
+test('dropWideSparseBodyRuledProductStacks keeps wide columns with a nutrient body table', () => {
+  const pipeline = DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS;
+  const w = 120;
+  const h = 160;
+  const pixels = new Uint8Array(w * h).fill(230);
+  const bodyTop = Math.round(h * pipeline.wideRuledSpanBodyRuleProbeTopFraction);
+  for (let y = bodyTop + 8; y < h - 8; y += 12) {
+    for (let x = 40; x < 98; x += 1) pixels[y * w + x] = 30;
+  }
+  const columns = [
+    { x0: 38, x1: 98, index: 0, horizontalRuleCount: 6 },
+    { x0: 10, x1: 30, index: 1, horizontalRuleCount: 18 },
+  ];
+  const kept = dropWideSparseBodyRuledProductStacks(columns, pipeline, pixels, w, h);
+  assert.equal(kept.length, 2);
+  assert.equal(kept[0]!.x0, 38);
+});
+
+test('dropWideSparseBodyRuledProductStacks keeps wide spans when label has no horizontal-rule signal', () => {
+  const pipeline = DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS;
+  const columns = [
+    { x0: 8, x1: 80, index: 0, horizontalRuleCount: 0 },
+    { x0: 90, x1: 118, index: 1, horizontalRuleCount: 0 },
+  ];
+  const kept = dropWideSparseBodyRuledProductStacks(columns, pipeline);
+  assert.equal(kept.length, 2);
+});
+
+test('dropWideSparseBodyRuledProductStacks drops wide empty ruled spans', () => {
+  const pipeline = DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS;
+  const columns = [
+    { x0: 90, x1: 128, index: 0, horizontalRuleCount: 18 },
+    { x0: 138, x1: 240, index: 1, horizontalRuleCount: 2 },
+    { x0: 250, x1: 288, index: 2, horizontalRuleCount: 18 },
+  ];
+  const kept = dropWideSparseBodyRuledProductStacks(columns, pipeline);
+  assert.equal(kept.length, 2);
+  assert.deepEqual(
+    kept.map((c) => c.x0),
+    [90, 250],
+  );
+});
+
+test('inkValueColumnsNeedRuledBounds detects interior gap between ink product columns', () => {
+  const ratio = DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS.valueColumnInkInteriorGapToMedianProductRatio;
+  const tight = [
+    { x0: 100, x1: 138 },
+    { x0: 138, x1: 176 },
+  ];
+  assert.equal(inkValueColumnsNeedRuledBounds(tight, ratio), false);
+  const gapped = [
+    { x0: 290, x1: 328 },
+    { x0: 385, x1: 425 },
+  ];
+  assert.equal(inkValueColumnsNeedRuledBounds(gapped, ratio), true);
 });
 
 test('per-column strip stitch parses as multi-product table', () => {

@@ -1,9 +1,26 @@
-import { nutrientBodyExtents } from '../domain/sharedLabelGridLayout.js';
-import { enforceValueColumnsDisjointFromLabel, productValueSegmentsRightOfLabel } from '../domain/sharedLabelColumnSeparation.js';
+import {
+  consolidateRowBandRuleYs,
+  mapAnalysisYToImageBand,
+  medianConsecutiveSpacing,
+  nutrientBodyExtents,
+  rowBandRuleMinSpacingPx,
+} from '../domain/sharedLabelGridLayout.js';
+import {
+  enforceValueColumnsDisjointFromLabel,
+  enforceValueColumnAnalysisBoundsMinWidthVsMedian,
+  imageValueColumnStripsFromAnalysisSegments,
+  snapValueColumnAnalysisBoundsX0ToBodyInk,
+  productValueSegmentsRightOfLabel,
+  valueColumnAnalysisBoundsFromSharedVerticalRules,
+  valueColumnAnalysisSegmentsAligned,
+} from '../domain/sharedLabelColumnSeparation.js';
+import { splitColumnSegmentsAtLocalVerticalGutters } from './labelTableLayoutFit.js';
 import {
   DEFAULT_SHARED_LABEL_GRID_PARAMS,
   type SharedLabelGridParams,
 } from '../domain/sharedLabelGridParams.js';
+import { cropWideBandAnalysisToNutritionGrid } from '../domain/cropWideBandAnalysisToNutritionGrid.js';
+import { classifyNutritionTableBandLuminance } from '../domain/nutritionTableInkBounds.js';
 import {
   DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS,
   type VarietyPackGridPipelineParams,
@@ -33,8 +50,21 @@ import {
   buildColumnInkProfileFromBand,
   detectColumnStrips,
   prepareWideBandAnalysis,
+  ruledGridBandPixels,
 } from './labelColumnStrips.js';
-import { categoriesFromRuledGrid, consensusBodyTopY, consensusRowBandYs } from './ruledTableGridDetect.js';
+import { buildPerColumnRowBandSlicePlan } from '../domain/sharedLabelRowRegions.js';
+import {
+  categoriesFromRuledGrid,
+  augmentBodyRowBandYsWithLabelRail,
+  augmentBodyRowBandYsWithTailAnchors,
+  consensusBodyRowBandYs,
+  maxBodyHorizontalRuleYAnalysis,
+  consensusBodyTopY,
+  consensusHeaderRowBandYs,
+  consensusRuleInkRuns,
+  horizontalRuleRowYsInColumn,
+  sectionDividerBoundaryYsFromRuns,
+} from './ruledTableGridDetect.js';
 import { DEFAULT_SPLIT_SINGLE_LABEL_PARAMS } from '../domain/splitSingleLabelParams.js';
 import { resolveLabelProcessingImage } from './imageLayoutHint.js';
 import {
@@ -42,6 +72,7 @@ import {
   detectEqualWidthColumnPair,
   firstColumnWideVsSiblings,
   medianPositiveWidth,
+  trimTrailingIrregularValueColumns,
   type EqualWidthPair,
 } from './uniformColumnGeometry.js';
 import { DEFAULT_LABEL_TABLE_LAYOUT_PARAMS } from '../domain/labelTableLayoutParams.js';
@@ -103,7 +134,9 @@ export async function prepareVarietyPackBandContext(
   const ocrBandAnalysis = await prepareWideBandAnalysis(labelBytes, stripParams, 'ocr');
   const ocrBand = ocrBandAnalysis?.band ?? bandAnalysis.band;
 
-  return { bandAnalysis, ocrBand, stripParams, shared, pipeline, maxColumns };
+  const croppedDetection = cropWideBandAnalysisToNutritionGrid(bandAnalysis, shared);
+
+  return { bandAnalysis: croppedDetection, ocrBand, stripParams, shared, pipeline, maxColumns };
 }
 
 /** Every product stack is ruled and there is no wide, low-rule left rail. */
@@ -135,25 +168,209 @@ function isPerColumnLabelLayout(step1: VarietyPackGridStep1, pipeline: VarietyPa
 
 type InkRailLayout = NonNullable<ReturnType<typeof sharedRailLayoutFromInkProfile>>;
 
+/** True when ink value columns leave an interior gap larger than typical product pitch (ruled bounds needed). */
+export function inkValueColumnsNeedRuledBounds(
+  columns: Array<{ x0: number; x1: number }>,
+  gapToMedianProductRatio: number,
+): boolean {
+  if (columns.length < 2 || gapToMedianProductRatio <= 0) return false;
+  const widths = columns.map((col) => col.x1 - col.x0).filter((w) => w > 0);
+  const medianW = medianPositiveWidth(widths);
+  if (medianW <= 0) return false;
+  const gapThreshold = Math.max(4, Math.round(medianW * gapToMedianProductRatio));
+  for (let i = 0; i < columns.length - 1; i += 1) {
+    const gap = columns[i + 1]!.x0 - columns[i]!.x1;
+    if (gap > gapThreshold) return true;
+  }
+  return false;
+}
+
+function bodyHorizontalRuleCountInColumn(
+  pixels: Uint8Array,
+  width: number,
+  height: number,
+  x0: number,
+  x1: number,
+  bodyTopY: number,
+): number {
+  return horizontalRuleRowYsInColumn(pixels, width, height, x0, x1).filter((y) => y >= bodyTopY).length;
+}
+
+/** True when this label demonstrably has horizontal rules (do not treat “zero rules” as empty gutter). */
+function productColumnsUseHorizontalRuleSignal(
+  columns: VarietyPackGridCategory[],
+  minBodyRules: number,
+  ruledPixels: Uint8Array | undefined,
+  analysisW: number | undefined,
+  analysisH: number | undefined,
+  bodyTopY: number,
+): boolean {
+  if (columns.some((col) => col.horizontalRuleCount >= minBodyRules)) return true;
+  if (ruledPixels === undefined || analysisW === undefined || analysisH === undefined) {
+    return columns.some((col) => col.horizontalRuleCount > 0);
+  }
+  let peak = 0;
+  for (const col of columns) {
+    peak = Math.max(
+      peak,
+      bodyHorizontalRuleCountInColumn(ruledPixels, analysisW, analysisH, col.x0, col.x1, bodyTopY),
+    );
+  }
+  return peak >= minBodyRules;
+}
+
+/**
+ * Drop wide product stacks with sparse nutrient-body horizontal rules (empty gutters between products).
+ * **Horizontal rules are optional:** if the label has none, stacks are kept and vertical/ink geometry stands alone.
+ */
+export function dropWideSparseBodyRuledProductStacks(
+  columns: VarietyPackGridCategory[],
+  pipeline: VarietyPackGridPipelineParams,
+  ruledPixels?: Uint8Array,
+  analysisW?: number,
+  analysisH?: number,
+): VarietyPackGridCategory[] {
+  const out = columns.map((col) => ({ ...col }));
+  const widths = out.map((col) => col.x1 - col.x0).filter((w) => w > 0);
+  const medianW = medianPositiveWidth(widths);
+  const wideRatio = pipeline.glareGutterWideToMedianRatio;
+  const minBodyRules = pipeline.wideRuledSpanMinBodyHorizontalRules;
+  const bodyTopY =
+    analysisH !== undefined
+      ? Math.round(analysisH * pipeline.wideRuledSpanBodyRuleProbeTopFraction)
+      : 0;
+  const rulesApply = productColumnsUseHorizontalRuleSignal(
+    out,
+    minBodyRules,
+    ruledPixels,
+    analysisW,
+    analysisH,
+    bodyTopY,
+  );
+  if (!rulesApply) return out;
+
+  for (let i = out.length - 1; i >= 0; i -= 1) {
+    const col = out[i]!;
+    const w = col.x1 - col.x0;
+    if (medianW <= 0 || w <= medianW * wideRatio) continue;
+    let bodyRules = 0;
+    let probedBody = false;
+    if (ruledPixels !== undefined && analysisW !== undefined && analysisH !== undefined) {
+      bodyRules = bodyHorizontalRuleCountInColumn(
+        ruledPixels,
+        analysisW,
+        analysisH,
+        col.x0,
+        col.x1,
+        bodyTopY,
+      );
+      probedBody = true;
+    }
+    if (!probedBody) {
+      bodyRules = col.horizontalRuleCount;
+    }
+    if (bodyRules === 0) continue;
+    if (bodyRules < minBodyRules) {
+      out.splice(i, 1);
+    }
+  }
+  return out;
+}
+
+function sharedRailStep3FromInkFromRuledProducts(
+  inkRail: InkRailLayout,
+  step1: VarietyPackGridStep1,
+  pipeline: VarietyPackGridPipelineParams,
+  ruledPixels?: Uint8Array,
+  analysisW?: number,
+  analysisH?: number,
+): InkRailLayout | null {
+  const labelRail = step1.categories[0];
+  if (!labelRail) return null;
+  const split = dropWideSparseBodyRuledProductStacks(
+    sharedRailProductValueColumns(step1.categories, labelRail),
+    pipeline,
+    ruledPixels,
+    analysisW,
+    analysisH,
+  );
+  const { segments: trimmed, ruledMeta: trimmedMeta } = trimTrailingIrregularValueColumns(
+    split.map((col) => ({ x0: col.x0, x1: col.x1 })),
+    split.map((col) => ({ horizontalRuleCount: col.horizontalRuleCount })),
+  );
+  const products = trimmed.map((seg, index) => ({
+    x0: seg.x0,
+    x1: seg.x1,
+    horizontalRuleCount: trimmedMeta[index]?.horizontalRuleCount ?? 0,
+    index: index + 1,
+  }));
+  if (products.length < pipeline.minProductColumns) return null;
+  const labelBoundaryX = Math.max(labelRail.x1, inkRail.labelBoundaryX);
+  return {
+    ...inkRail,
+    labelColumn: {
+      x0: labelRail.x0,
+      x1: labelBoundaryX,
+      index: 0,
+      horizontalRuleCount: labelRail.horizontalRuleCount,
+    },
+    labelBoundaryX,
+    valueColumns: products.map((col) => ({
+      x0: col.x0,
+      x1: col.x1,
+      index: col.index,
+      horizontalRuleCount: col.horizontalRuleCount,
+    })),
+  };
+}
+
+function resolveSharedRailInkForStep3(
+  inkRail: InkRailLayout,
+  step1: VarietyPackGridStep1,
+  shared: SharedLabelGridParams,
+  pipeline: VarietyPackGridPipelineParams,
+  ruledPixels?: Uint8Array,
+  analysisW?: number,
+  analysisH?: number,
+): InkRailLayout {
+  const labelRail = step1.categories[0];
+  if (!labelRail) return inkRail;
+  const ruledTarget = sharedRailProductValueColumns(step1.categories, labelRail).length;
+  void shared;
+  const inkUnderCounts = inkRail.valueColumns.length + 1 < ruledTarget;
+  const inkInteriorGap = inkValueColumnsNeedRuledBounds(
+    inkRail.valueColumns,
+    pipeline.valueColumnInkInteriorGapToMedianProductRatio,
+  );
+  if (inkUnderCounts || inkInteriorGap) {
+    return (
+      sharedRailStep3FromInkFromRuledProducts(inkRail, step1, pipeline, ruledPixels, analysisW, analysisH) ??
+      inkRail
+    );
+  }
+  return inkRail;
+}
+
 function sharedRailStep3FromInk(
   inkRail: InkRailLayout,
   varietySubtype?: 'shared_rail' | 'per_column_labels' | 'unknown',
 ): GatedStepResult<VarietyPackGridStep3> {
+  const rail = inkRail;
   return gated(
     stepValidation(3, true, 'ok', 'Shared label rail (ink boundary + value grid).', {
       layout: 'shared_rail',
-      labelBoundaryX: inkRail.labelBoundaryX,
-      inkAsymmetry: inkRail.inkAsymmetry,
-      valueColumnCount: inkRail.valueColumns.length,
+      labelBoundaryX: rail.labelBoundaryX,
+      inkAsymmetry: rail.inkAsymmetry,
+      valueColumnCount: rail.valueColumns.length,
       via: 'ink_profile',
       ...(varietySubtype !== undefined ? { varietySubtype } : {}),
     }),
     {
       layout: 'shared_rail',
-      labelColumn: inkRail.labelColumn,
-      valueColumns: inkRail.valueColumns,
-      labelBoundaryX: inkRail.labelBoundaryX,
-      inkAsymmetry: inkRail.inkAsymmetry,
+      labelColumn: rail.labelColumn,
+      valueColumns: rail.valueColumns,
+      labelBoundaryX: rail.labelBoundaryX,
+      inkAsymmetry: rail.inkAsymmetry,
     },
   );
 }
@@ -169,9 +386,10 @@ function toCategories(segments: Array<{ x0: number; x1: number; horizontalRuleCo
 
 export function runVarietyPackGridStep1(ctx: VarietyPackBandContext): GatedStepResult<VarietyPackGridStep1> {
   const { bandAnalysis, pipeline, maxColumns } = ctx;
-  const { pixels, analysisW, analysisH } = bandAnalysis;
+  const { analysisW, analysisH } = bandAnalysis;
+  const ruledPixels = ruledGridBandPixels(bandAnalysis);
 
-  const ruled = categoriesFromRuledGrid(pixels, analysisW, analysisH, 0, undefined, maxColumns + 1, {
+  const ruled = categoriesFromRuledGrid(ruledPixels, analysisW, analysisH, 0, undefined, maxColumns + 1, {
     requireHorizontalRules: false,
   });
   const method: VarietyPackGridStep1['detectionMethod'] = 'ruled';
@@ -225,9 +443,19 @@ export function runVarietyPackGridStep2(
   step1: VarietyPackGridStep1,
 ): GatedStepResult<VarietyPackGridStep2> {
   const { bandAnalysis, pipeline } = ctx;
-  const { pixels, analysisW, analysisH } = bandAnalysis;
+  const { analysisW, analysisH } = bandAnalysis;
+  const ruledPixels = ruledGridBandPixels(bandAnalysis);
 
-  const bodyTopY = consensusBodyTopY(pixels, analysisW, analysisH, step1.productColumns);
+  const maxJitter = Math.max(1, Math.round(analysisH * pipeline.rowConsensusMaxJitterFraction));
+  const bodyTopY = consensusBodyTopY(
+    ruledPixels,
+    analysisW,
+    analysisH,
+    step1.productColumns,
+    undefined,
+    2,
+    maxJitter,
+  );
   if (bodyTopY === null) {
     return gatedFail<VarietyPackGridStep2>(
       stepValidation(2, false, 'header_band_missing', 'Could not find ruled body start across product columns.'),
@@ -308,24 +536,62 @@ export function runVarietyPackGridStep3(
   const sharedScore = scores.find((s) => s.layout === 'shared_rail')?.score ?? 0;
   const perColScore = scores.find((s) => s.layout === 'per_column_labels')?.score ?? 0;
 
+  const inkGridMeta = bandAnalysis.inkGridCropped
+    ? {
+        labelBoundaryX: bandAnalysis.inkGridCropped.labelBoundaryX,
+        analysisW: bandAnalysis.analysisW,
+        tableRightAnalysisX: bandAnalysis.inkGridCropped.tableRightAnalysisX,
+      }
+    : undefined;
   const inkRailCandidate = sharedRailLayoutFromInkProfile(
-    bandAnalysis.pixels,
+    ruledGridBandPixels(bandAnalysis),
     bandAnalysis.analysisW,
     bandAnalysis.analysisH,
     profile,
     ctx.stripParams,
     ctx.shared,
     ctx.maxColumns,
+    {
+      inkGridCropped: inkGridMeta !== undefined,
+      inkGridCroppedMeta: inkGridMeta,
+      sharedRailWidthRatioMin: ctx.pipeline.sharedRailWidthRatioMin,
+    },
   );
   const inkRailOk =
     inkRailCandidate !== null && inkRailCandidate.valueColumns.length >= ctx.shared.minValueColumns;
   const inkValueCols = inkRailCandidate?.valueColumns.length ?? 0;
   const ruledProductCols = step1.productColumns.length;
   const inkTie = DEFAULT_LABEL_TABLE_LAYOUT_PARAMS.inkRailPreferScoreTieEpsilon;
+  const inkAsymmetryScore = inkRailCandidate
+    ? profileInkAsymmetryForLayoutScores(profile, inkRailCandidate.labelBoundaryX)
+    : undefined;
   const preferSharedRail =
     varietySubtype === 'shared_rail' ||
     (inkRailOk && inkValueCols >= ruledProductCols + 2) ||
     (inkRailOk && varietySubtype !== 'per_column_labels' && sharedScore >= perColScore - inkTie);
+  const ruledLabelRail =
+    (step1.categories[0]?.horizontalRuleCount ?? 0) < ctx.pipeline.minHorizontalRulesPerProductColumn;
+  const inkRailOverridesPerColumn =
+    inkRailOk &&
+    ruledLabelRail &&
+    isPerColumnLabelLayout(step1, ctx.pipeline) &&
+    varietySubtype === 'per_column_labels' &&
+    (inkAsymmetryScore ?? 0) >= shared.labelInkAsymmetryRatio;
+  if (inkRailOverridesPerColumn && inkRailCandidate) {
+    return sharedRailStep3FromInk(
+      resolveSharedRailInkForStep3(
+        inkRailCandidate,
+        step1,
+        ctx.shared,
+        ctx.pipeline,
+        ruledGridBandPixels(ctx.bandAnalysis),
+        ctx.bandAnalysis.analysisW,
+        ctx.bandAnalysis.analysisH,
+      ),
+      varietySubtype,
+    );
+  }
+
   if (isPerColumnLabelLayout(step1, ctx.pipeline) && varietySubtype === 'per_column_labels') {
     const productWidths = step1.productColumns.map((col) => col.x1 - col.x0);
     const labelEndX = 0;
@@ -349,7 +615,18 @@ export function runVarietyPackGridStep3(
   }
 
   if (preferSharedRail && inkRailCandidate) {
-    return sharedRailStep3FromInk(inkRailCandidate, varietySubtype);
+    return sharedRailStep3FromInk(
+      resolveSharedRailInkForStep3(
+        inkRailCandidate,
+        step1,
+        ctx.shared,
+        ctx.pipeline,
+        ruledGridBandPixels(ctx.bandAnalysis),
+        ctx.bandAnalysis.analysisW,
+        ctx.bandAnalysis.analysisH,
+      ),
+      varietySubtype,
+    );
   }
 
   const productWidths = step1.productColumns.map((col) => col.x1 - col.x0);
@@ -400,7 +677,17 @@ export function runVarietyPackGridStep3(
   }
 
   if (inkRailCandidate) {
-    return sharedRailStep3FromInk(inkRailCandidate);
+    return sharedRailStep3FromInk(
+      resolveSharedRailInkForStep3(
+        inkRailCandidate,
+        step1,
+        ctx.shared,
+        ctx.pipeline,
+        ruledGridBandPixels(ctx.bandAnalysis),
+        ctx.bandAnalysis.analysisW,
+        ctx.bandAnalysis.analysisH,
+      ),
+    );
   }
 
   return gatedFail<VarietyPackGridStep3>(stepValidation(3, false, 'label_layout_unknown', 'Could not classify label layout.'));
@@ -408,15 +695,26 @@ export function runVarietyPackGridStep3(
 
 export function runVarietyPackGridStep4(
   ctx: VarietyPackBandContext,
+  step2: VarietyPackGridStep2,
   step3: VarietyPackGridStep3,
 ): GatedStepResult<VarietyPackGridStep4> {
   const { bandAnalysis, pipeline } = ctx;
+  const ruledPixels = ruledGridBandPixels(bandAnalysis);
   const maxJitter = Math.max(1, Math.round(bandAnalysis.analysisH * pipeline.rowConsensusMaxJitterFraction));
-  const rowBandYs = consensusRowBandYs(
-    bandAnalysis.pixels,
+  const headerRowBandYs = consensusHeaderRowBandYs(
+    ruledPixels,
     bandAnalysis.analysisW,
     bandAnalysis.analysisH,
     step3.valueColumns,
+    step2.bodyTopY,
+    maxJitter,
+  );
+  const rowBandYs = consensusBodyRowBandYs(
+    ruledPixels,
+    bandAnalysis.analysisW,
+    bandAnalysis.analysisH,
+    step3.valueColumns,
+    step2.bodyTopY,
     maxJitter,
   );
 
@@ -431,8 +729,9 @@ export function runVarietyPackGridStep4(
   return gated(
     stepValidation(4, true, 'ok', 'Row band grid ready for value/label alignment.', {
       rowBandCount: rowBandYs.length,
+      headerRowBandCount: headerRowBandYs.length,
     }),
-    { rowBandYs, planReady: true },
+    { rowBandYs, headerRowBandYs, planReady: true },
   );
 }
 
@@ -467,67 +766,230 @@ export function buildSharedLabelPlanFromPipeline(
 
   const { bandAnalysis, ocrBand, stripParams } = ctx;
   const { band: detectionBand, fullWidth, analysisW, analysisH } = bandAnalysis;
+  const ruledPixels = ruledGridBandPixels(bandAnalysis);
   const shared = DEFAULT_SHARED_LABEL_GRID_PARAMS;
   const mapX = (analysisX: number) =>
     detectionBand.left + Math.round((analysisX / analysisW) * detectionBand.width);
 
   const labelRight = mapX(step3.labelBoundaryX);
-  const bodyLayout = nutrientBodyExtents(analysisH, step2.bodyTopY, step4.rowBandYs, ocrBand.top, ocrBand.height, shared);
+  const geometryBand = detectionBand;
+  const rowPitchAnalysis =
+    step4.rowBandYs.length >= 2 ? medianConsecutiveSpacing(step4.rowBandYs) : Math.max(4, Math.round(analysisH / 14));
+  const bodyTopBiasAnalysis = Math.round(
+    rowPitchAnalysis * shared.nutrientBodyBelowFirstRulePitchFraction,
+  );
+  const filteredBodyRules = step4.rowBandYs.filter(
+    (y) =>
+      !sectionDividerBoundaryYsFromRuns(
+        consensusRuleInkRuns(ruledPixels, analysisW, analysisH, step3.valueColumns, 4),
+        step2.bodyTopY + bodyTopBiasAnalysis,
+        {},
+        analysisH,
+      ).some((div) => Math.abs(div - y) <= 3),
+  );
+  const valueBodyRules =
+    filteredBodyRules.length >= 2 ? filteredBodyRules : step4.rowBandYs;
+  const maxJitter = Math.max(1, Math.round(analysisH * ctx.pipeline.rowConsensusMaxJitterFraction));
+  let bodyRowBandYsAnalysis = augmentBodyRowBandYsWithLabelRail(
+    ruledPixels,
+    analysisW,
+    analysisH,
+    step3.labelBoundaryX,
+    step2.bodyTopY + bodyTopBiasAnalysis,
+    valueBodyRules,
+    maxJitter,
+  );
+  const bodyTopAnalysis = step2.bodyTopY + bodyTopBiasAnalysis;
+  const bodyBottomGuess = Math.round(
+    analysisH * (1 - shared.bodyFooterMarginFraction * 0.85),
+  );
+  bodyRowBandYsAnalysis = augmentBodyRowBandYsWithTailAnchors(
+    ruledPixels,
+    analysisW,
+    analysisH,
+    step3.labelBoundaryX,
+    step3.valueColumns,
+    bodyTopAnalysis,
+    bodyBottomGuess,
+    bodyRowBandYsAnalysis,
+    maxJitter,
+  );
+  const meshDedupeGap = rowBandRuleMinSpacingPx(rowPitchAnalysis, shared);
+  bodyRowBandYsAnalysis = consolidateRowBandRuleYs(bodyRowBandYsAnalysis, meshDedupeGap);
+  const deepestRuleAnalysis = maxBodyHorizontalRuleYAnalysis(
+    ruledPixels,
+    analysisW,
+    analysisH,
+    step3.labelBoundaryX,
+    step3.valueColumns,
+    bodyTopAnalysis,
+  );
+  const deepestRuleImage =
+    deepestRuleAnalysis !== null
+      ? mapAnalysisYToImageBand(deepestRuleAnalysis, analysisH, geometryBand.top, geometryBand.height)
+      : undefined;
+  const bodyLayout = nutrientBodyExtents(
+    analysisH,
+    bodyTopAnalysis,
+    bodyRowBandYsAnalysis,
+    geometryBand.top,
+    geometryBand.height,
+    shared,
+    deepestRuleImage !== undefined ? { extendThroughRuleYImage: deepestRuleImage } : undefined,
+  );
 
   const nutrientBodyBottom = bodyLayout.top + bodyLayout.height;
   const labelColumn: ColumnStripRegion = {
     index: 0,
-    left: detectionBand.left,
-    top: ocrBand.top,
-    width: Math.max(1, labelRight - detectionBand.left),
-    height: Math.max(bodyLayout.height, nutrientBodyBottom - ocrBand.top),
+    left: geometryBand.left,
+    top: geometryBand.top,
+    width: Math.max(1, labelRight - geometryBand.left),
+    height: Math.max(bodyLayout.height, nutrientBodyBottom - geometryBand.top),
   };
 
   const bodyTopImageY = bodyLayout.top;
   const headerBand = {
     left: labelRight,
-    top: ocrBand.top,
-    width: Math.max(1, detectionBand.left + detectionBand.width - labelRight),
-    height: Math.max(8, bodyTopImageY - ocrBand.top),
+    top: geometryBand.top,
+    width: Math.max(1, geometryBand.left + geometryBand.width - labelRight),
+    height: Math.max(8, bodyTopImageY - geometryBand.top),
   };
 
   const minAnalysisWidth = Math.max(
     2,
     Math.round(analysisW * stripParams.minStripWidthFraction * 0.5),
   );
-  const productSegments = productValueSegmentsRightOfLabel(
+  let productSegments = productValueSegmentsRightOfLabel(
     step3.valueColumns,
     step3.labelBoundaryX,
     minAnalysisWidth,
   );
+  productSegments = splitColumnSegmentsAtLocalVerticalGutters(
+    bandAnalysis.pixels,
+    analysisW,
+    analysisH,
+    productSegments,
+    minAnalysisWidth,
+    1.15,
+  );
   if (productSegments.length < shared.minValueColumns) return null;
 
-  const minOutputWidth = Math.max(1, Math.round(fullWidth * stripParams.minOutputStripWidthFraction));
-  const valueColumns: ColumnStripRegion[] = productSegments.map((segment, index) => {
+  const valueColumnsBeforeDisjoint: ColumnStripRegion[] = productSegments.map((segment, index) => {
     const left = mapX(segment.x0);
     const right = mapX(segment.x1);
-    const width = Math.max(minOutputWidth, right - left);
     return {
       index,
       left,
       top: bodyLayout.top,
-      width,
+      width: Math.max(1, right - left),
       height: bodyLayout.height,
     };
   });
 
-  const valueColumnsDisjoint = enforceValueColumnsDisjointFromLabel(labelColumn, valueColumns);
+  const valueColumnsDisjoint = enforceValueColumnsDisjointFromLabel(labelColumn, valueColumnsBeforeDisjoint);
   if (valueColumnsDisjoint.length < shared.minValueColumns) return null;
 
+  let valueColumnAnalysisSegments =
+    productSegments.length === valueColumnsDisjoint.length
+      ? productSegments.map((s) => ({ x0: s.x0, x1: s.x1 }))
+      : valueColumnAnalysisSegmentsAligned(
+          productSegments,
+          valueColumnsBeforeDisjoint,
+          valueColumnsDisjoint,
+          labelColumn,
+          geometryBand,
+          analysisW,
+          step3.labelBoundaryX,
+        );
+  if (valueColumnAnalysisSegments.length !== valueColumnsDisjoint.length) {
+    throw new Error(
+      `value column geometry: ${valueColumnAnalysisSegments.length} analysis segments vs ${valueColumnsDisjoint.length} image strips`,
+    );
+  }
+
+  const ruledStackGutters = valueColumnAnalysisSegments.map((s) => ({ ...s }));
+  const valueColumnSharedVertical = valueColumnAnalysisBoundsFromSharedVerticalRules(
+    ruledStackGutters,
+    step3.labelBoundaryX,
+    analysisW,
+  );
+  const bodyBottomAnalysis = Math.min(
+    analysisH - 1,
+    bodyTopAnalysis +
+      Math.max(8, Math.round((bodyLayout.height / Math.max(1, geometryBand.height)) * analysisH)),
+  );
+  const tableLuminanceRoles = classifyNutritionTableBandLuminance(
+    bandAnalysis.pixels,
+    analysisW,
+    analysisH,
+    step3.labelBoundaryX,
+  );
+  const valueColumnSnapped = snapValueColumnAnalysisBoundsX0ToBodyInk(
+    bandAnalysis.pixels,
+    analysisW,
+    analysisH,
+    valueColumnSharedVertical,
+    bodyTopAnalysis,
+    bodyBottomAnalysis,
+    tableLuminanceRoles,
+    step3.labelBoundaryX,
+    shared,
+    analysisW,
+  );
+  const valueColumnInkMerged = valueColumnSharedVertical.map((rule, i) => {
+    if (i === 0) {
+      const ink = valueColumnSnapped[i] ?? rule;
+      const x0 = Math.max(rule.x0, Math.min(ink.x0, rule.x1 - 1));
+      return { x0, x1: rule.x1 };
+    }
+    return { x0: rule.x0, x1: rule.x1 };
+  });
+  const valueColumnGeometrySegments = enforceValueColumnAnalysisBoundsMinWidthVsMedian(
+    valueColumnInkMerged,
+    shared.valueColumnAnalysisBoundsMinToMedianWidthFraction,
+    step3.labelBoundaryX,
+    analysisW,
+    ruledStackGutters,
+  );
+  const valueColumns = imageValueColumnStripsFromAnalysisSegments(
+    valueColumnGeometrySegments,
+    mapX,
+    bodyLayout.top,
+    bodyLayout.height,
+  );
+
+  const perColumnRows = buildPerColumnRowBandSlicePlan({
+    pixels: ruledGridBandPixels(bandAnalysis),
+    analysisW,
+    analysisH,
+    imageBandTop: geometryBand.top,
+    imageBandHeight: geometryBand.height,
+    bodyTopImage: bodyLayout.top,
+    bodyBottomImage: bodyLayout.top + bodyLayout.height,
+    labelBoundaryAnalysisX: step3.labelBoundaryX,
+    valueColumnSegmentsAnalysis: valueColumnGeometrySegments,
+    consensusRowBandYsAnalysis: bodyLayout.rowBandYsAnalysis,
+    consensusHeaderRowBandYsAnalysis: step4.headerRowBandYs,
+  });
+
   return {
-    band: ocrBand,
+    band: geometryBand,
     labelColumn,
     headerBand,
-    valueColumns: valueColumnsDisjoint,
+    valueColumns,
+    valueColumnAnalysisSegments: valueColumnGeometrySegments,
     valueGridAnalysisX: step3.labelBoundaryX,
     nutrientBodyTop: bodyLayout.top,
     nutrientBodyHeight: bodyLayout.height,
-    rowBandSlices: bodyLayout.rowBandSlices,
+    rowSurfaceMode: perColumnRows.rowSurfaceMode,
+    rowBandSlices: perColumnRows.consensusRowBandSlices,
+    labelRowBandSlices: perColumnRows.labelRowBandSlices,
+    valueRowBandSlicesPerColumn: perColumnRows.valueRowBandSlicesPerColumn,
+    valueColumnGlareMasks: perColumnRows.valueColumnGlareMasks,
+    valueColumnWarpProbes: perColumnRows.valueColumnWarpProbes,
+    headerConsensusRowBandSlices: perColumnRows.headerConsensusRowBandSlices,
+    headerLabelRowBandSlices: perColumnRows.headerLabelRowBandSlices,
+    headerRowBandSlicesPerColumn: perColumnRows.headerRowBandSlicesPerColumn,
     rowPitchPx: bodyLayout.rowPitchPx,
   };
 }
@@ -656,7 +1118,7 @@ export async function runVarietyPackGridPipeline(
     };
   }
 
-  const step4 = runVarietyPackGridStep4(ctx, step3.data!);
+  const step4 = runVarietyPackGridStep4(ctx, step2.data!, step3.data!);
   const step4Ok = step4.validation.ok;
   const plan =
     step4Ok && step3.data!.layout === 'shared_rail'

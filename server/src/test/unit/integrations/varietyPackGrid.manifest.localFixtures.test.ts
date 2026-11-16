@@ -89,9 +89,10 @@ test(
       if (fx.layout === 'shared_rail' && plan && fx.nutrientRows) {
         const wantRows = totalNutrientRowsFromGroundTruth(fx.nutrientRows);
         const gotSlices = plan.rowBandSlices.length;
-        if (gotSlices < wantRows - 1 || gotSlices > wantRows + 1) {
+        const sliceTol = vp?.rowBandSliceCountTolerance ?? 1;
+        if (gotSlices < wantRows - sliceTol || gotSlices > wantRows + sliceTol) {
           failures.push(
-            `${fx.file}: rowBandSlices ${gotSlices} not within ±1 of manifest nutrient rows ${wantRows}`,
+            `${fx.file}: rowBandSlices ${gotSlices} not within ±${sliceTol} of manifest nutrient rows ${wantRows}`,
           );
         }
         if (!useRowBandSliceOcrForPlan(plan)) {

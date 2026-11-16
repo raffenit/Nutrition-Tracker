@@ -11,3 +11,7 @@ data/
 local/
 docs/local/
 .cursor/
+
+# Generated OCR Performance Reports and Tesseract language data downloaded at runtime
+server/diagnostics/
+server/*.traineddata

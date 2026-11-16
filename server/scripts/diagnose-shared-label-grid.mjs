@@ -111,8 +111,9 @@ for (let i = 0; i < crops.valueColumns.length; i += 1) {
   await writeFile(path.join(outDir, `value-${String(i + 1).padStart(2, '0')}.png`), crops.valueColumns[i]);
 }
 
-async function ocrColumnByRowBands(column, fallbackPng, name) {
-  const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, plan.rowBandSlices);
+async function ocrColumnByRowBands(column, fallbackPng, name, rowBandSlices) {
+  const slices = rowBandSlices?.length ? rowBandSlices : plan.rowBandSlices;
+  const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, slices);
   if (slicePngs.length === 0) {
     return ocrCrop(fallbackPng, `${name}-body`);
   }
@@ -127,14 +128,19 @@ async function ocrColumnByRowBands(column, fallbackPng, name) {
 
 const headerOcr = await ocrCrop(crops.headerBand, 'diag-header');
 const labelOcr = rowBandOcr
-  ? await ocrColumnByRowBands(plan.labelColumn, crops.labelColumn, 'diag-label')
+  ? await ocrColumnByRowBands(plan.labelColumn, crops.labelColumn, 'diag-label', plan.labelRowBandSlices)
   : await ocrCrop(crops.labelColumn, 'diag-label');
 const valueOcrs = [];
 for (let i = 0; i < plan.valueColumns.length; i += 1) {
   const col = plan.valueColumns[i];
   valueOcrs.push(
     rowBandOcr
-      ? await ocrColumnByRowBands(col, crops.valueColumns[i], `diag-value-${i + 1}`)
+      ? await ocrColumnByRowBands(
+          col,
+          crops.valueColumns[i],
+          `diag-value-${i + 1}`,
+          plan.valueRowBandSlicesPerColumn[i],
+        )
       : await ocrCrop(crops.valueColumns[i], `diag-value-${i + 1}`),
   );
 }

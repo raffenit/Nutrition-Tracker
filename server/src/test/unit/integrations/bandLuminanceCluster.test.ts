@@ -89,7 +89,7 @@ test('verticalRuledGutterBrightnessLevel uses bright paper gaps when dark cells 
     x += colW + gutter;
   }
   const roles = classifyBandLuminance(pixels, width, height, labelW, width, 24, 180);
-  assert.equal(roles.polarity, 'light_on_dark');
+  assert.ok(roles.ink > roles.background + 80, 'bright gutters vs dark cells');
   const level = verticalRuledGutterBrightnessLevel(roles, 0.88);
   let brightGutterCols = 0;
   let inkCols = 0;

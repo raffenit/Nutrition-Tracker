@@ -10,6 +10,8 @@ export type VarietyPackPipelineExpectation = {
   expectSharedRailPlan?: boolean;
   /** Fail if plan has fewer value columns. */
   minValueColumns?: number;
+  /** Slack vs `nutrientRows` total when comparing `plan.rowBandSlices` (default ±1). */
+  rowBandSliceCountTolerance?: number;
   /** Step 3 layout must not equal this (e.g. ice cream vs shared_rail). */
   forbidLayout?: 'shared_rail' | 'per_column_labels';
   expectFailStep?: 1 | 2 | 3 | 4;
@@ -19,6 +21,20 @@ export type VarietyPackPipelineExpectation = {
 
 export type SplitSingleLabelExpectation = {
   expectDetect?: boolean;
+};
+
+/** Ink-envelope + ruled shape gate (`resolveLabelOcrSources` / `applyGatedPortraitPanelCrop`). */
+export type PanelShapeGateExpectation = {
+  /** Tall single should enter portrait crop path (`shouldTryPortraitPanelCrop`). */
+  expectPortraitCropEligible: boolean;
+  /** `wideBandInkEnvelopeCropRect` + `assessNutritionFactsLabelShape`. */
+  expectInkEnvelopeShapeOk: boolean;
+  /** Shape-gated panel applied to page OCR (`resolveLabelOcrSources`). */
+  expectGatedPanelCrop: boolean;
+  /** When expectGatedPanelCrop, strategy id (e.g. ink_envelope). */
+  expectGatedStrategy?: 'ink_envelope' | 'center_band' | 'laplacian_vertical';
+  /** Substrings expected in shape reject reasons when ink envelope must fail. */
+  expectInkEnvelopeRejectSubstrings?: string[];
 };
 
 /**
@@ -49,6 +65,15 @@ export type TestImageFixture = {
   nutrientRows: NutrientRowGroundTruth;
   varietyPackPipeline?: VarietyPackPipelineExpectation;
   splitSingleLabel?: SplitSingleLabelExpectation;
+  panelShapeGate?: PanelShapeGateExpectation;
+  nutrientGroundTruthRegression?: Record<string, unknown>;
+  /** Wall-clock budget for `ocr:local-test-images`; `trackOnly` logs OVER without failing. */
+  ocrPerformanceRegression?: OcrPerformanceRegressionSpec;
+};
+
+export type OcrPerformanceRegressionSpec = {
+  trackMaxSeconds: number;
+  trackOnly?: boolean;
 };
 
 export type TestImageManifest = {

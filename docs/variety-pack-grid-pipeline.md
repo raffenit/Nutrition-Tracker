@@ -43,6 +43,20 @@ node scripts/diagnose-shared-label-grid.mjs [path-to.jpg]
 
 The script writes `local/diagnostics/shared-label-grid/step-N.json` for each step. If step *N* fails, it stops and does **not** run OCR for later steps. On full success it still crops PNGs and runs stitch diagnostics (same as before).
 
+### Row-band visualization (recommended when debugging OCR / grid alignment)
+
+When row stitching, merged nutrients, or warped packaging look wrong, **overlay the same row mesh used for OCR crops** before changing detection code:
+
+```bash
+cd Apps/Nutrition-Tracker/server
+npm run build
+node scripts/visualize-shared-label-row-regions.mjs ../local/test-images/<photo>.jpg
+```
+
+Open **`local/diagnostics/row-regions/preview.html`** (or `shapes-preview.jpg`). Solid fills are **per-column / label** slices passed to `extractSharedLabelColumnPngsByRowBands` when `rowSurfaceMode` is `per_column`; every column should have **the same row count** as the consensus mesh (one box per nutrient row). Skewed cells draw as quads on curved columns. Pink dashed consensus outlines appear only in `shared` row-surface mode.
+
+Use this viz with Rachael’s screenshots to tune gaps (e.g. % DV, added sugars, last vitamin row) — much faster than reading JSON alone.
+
 ## Fraction params
 
 Tunables live in `varietyPackGridPipelineParams.ts` and `ruledTableGridParams.ts`. See [resolution-invariant-image-pipelines.md](./resolution-invariant-image-pipelines.md).
@@ -51,3 +65,4 @@ Tunables live in `varietyPackGridPipelineParams.ts` and `ruledTableGridParams.ts
 
 - [CODE-MAP.md](./CODE-MAP.md) — label scan entry points
 - [playbooks/label-ocr-and-parsing.md](./playbooks/label-ocr-and-parsing.md) — end-to-end import
+- [costco-curved-pack-investigation.md](./costco-curved-pack-investigation.md) — curved outer-column warp + Costco usability notes (Nov 2026)

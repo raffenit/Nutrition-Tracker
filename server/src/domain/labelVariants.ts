@@ -221,6 +221,10 @@ export function findVariantLabelAnchors(text: string, slot: VariantLabelSlot): n
       const index = match.index ?? 0;
       if (!anchors.includes(index)) anchors.push(index);
     }
+    for (const match of text.matchAll(/\btotal\s*fat(?=\d)/gi)) {
+      const index = match.index ?? 0;
+      if (!/saturat/i.test(text.slice(Math.max(0, index - 12), index))) push(index);
+    }
     for (const match of text.matchAll(/\bt[a-z]{3,7}l\s+fat(?![a-z])/gi)) {
       const index = match.index ?? 0;
       if (!/saturat|trans/i.test(text.slice(Math.max(0, index - 10), index))) push(index);
@@ -255,8 +259,9 @@ export function findVariantLabelAnchors(text: string, slot: VariantLabelSlot): n
       const word = match[0] ?? '';
       if (matchVariantLabelToken(word) === 'sodium') push(match.index ?? 0);
     }
-    for (const match of text.matchAll(/\bs[oei]?d[iu]?[a-z]{0,8}m\b/gi)) {
-      push(match.index ?? 0);
+    for (const match of text.matchAll(/\bs[oei]?d[iu]?[a-z0-9]{2,14}\b/gi)) {
+      const word = match[0] ?? '';
+      if (!/^(?:solid|soda)\b/i.test(word)) push(match.index ?? 0);
     }
   }
 

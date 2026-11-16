@@ -1,6 +1,7 @@
 import sharp, { type Sharp } from 'sharp';
 import { COLUMN_STRIP_OCR_TARGET_WIDTH, ROW_BAND_OCR_MIN_HEIGHT } from '../domain/columnStripOcrParams.js';
 import type { OcrLayoutProfile } from '../domain/labelLayout.js';
+import { PORTRAIT_SINGLE_OCR_TARGET_WIDTH } from '../domain/portraitSingleOcrParams.js';
 import { appendImportJobDebug } from '../import/importJobProgress.js';
 import { adaptiveThresholdVariants } from './adaptiveThreshold.js';
 import { focusCropVariants } from './focusCrop.js';
@@ -35,7 +36,13 @@ const FOCUS_PREPROCESSORS: Preprocess[] = [
 export type BuildOcrVariantOptions = {
   profile?: OcrLayoutProfile;
   preserveFullWidthFocus?: boolean;
+  /** Portrait panel crops are already tight — nested focus bands break Sharp extract. */
+  skipFocusCrops?: boolean;
+  /** Single orientation, lighter preprocess — tall single-panel imports. */
+  portraitSingle?: boolean;
 };
+
+const OCR_VARIANT_MIN_SIDE = 24;
 
 export type OcrVariantMode = 'full' | 'columnStrip';
 
@@ -100,16 +107,22 @@ export async function buildRowBandOcrVariants(bytes: Buffer): Promise<Buffer[]> 
 
 export async function buildOcrImageVariants(bytes: Buffer, options?: BuildOcrVariantOptions): Promise<Buffer[]> {
   try {
-    const targetWidth = ocrTargetWidthForProfile(options?.profile);
+    const portraitSingle = options?.portraitSingle === true;
+    const targetWidth = portraitSingle
+      ? PORTRAIT_SINGLE_OCR_TARGET_WIDTH
+      : ocrTargetWidthForProfile(options?.profile);
     const glarePreprocess =
       options?.profile === 'wideTableRetry'
         ? (image: Sharp) => image.greyscale().linear(1.65, -45).median(3).normalize().sharpen({ sigma: 0.5 })
         : null;
-    const orientations = [
-      sharp(bytes).rotate(),
-      sharp(bytes).rotate().rotate(90),
-      sharp(bytes).rotate().rotate(270),
-    ];
+    const orientations = portraitSingle
+      ? [sharp(bytes).rotate()]
+      : [
+          sharp(bytes).rotate(),
+          sharp(bytes).rotate().rotate(90),
+          sharp(bytes).rotate().rotate(270),
+        ];
+    const mainPreprocessors = portraitSingle ? PREPROCESSORS.slice(0, 3) : PREPROCESSORS;
     const buffers: Buffer[] = [];
     for (const [orientationIndex, source] of orientations.entries()) {
       const meta = await source.metadata();
@@ -120,11 +133,15 @@ export async function buildOcrImageVariants(bytes: Buffer, options?: BuildOcrVar
           ? source.clone().resize({ width: Math.round(width * scale), kernel: sharp.kernel.lanczos3 })
           : source.clone();
 
-      await appendOcrVariants(buffers, scaled, PREPROCESSORS);
+      await appendOcrVariants(buffers, scaled, mainPreprocessors);
+      if (orientationIndex === 0) {
+        const adaptive = await adaptiveThresholdVariants(scaled);
+        if (adaptive[0]) buffers.push(adaptive[0]);
+      }
       if (glarePreprocess && orientationIndex === 0) {
         buffers.push(await glarePreprocess(scaled.clone()).png().toBuffer());
       }
-      if (USE_FOCUS_CROPS) {
+      if (USE_FOCUS_CROPS && !options?.skipFocusCrops && !portraitSingle) {
         for (const cropped of await focusCropVariants(scaled, {
           preserveFullWidth: options?.preserveFullWidthFocus,
         })) {
@@ -132,7 +149,7 @@ export async function buildOcrImageVariants(bytes: Buffer, options?: BuildOcrVar
         }
       }
     }
-    buffers.push(bytes);
+    if (!portraitSingle) buffers.push(bytes);
     return uniqueBuffers(buffers);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -165,6 +182,15 @@ export function tesseractVariantSubset(variants: Buffer[], extra = 0): Buffer[] 
 }
 
 async function appendOcrVariants(buffers: Buffer[], source: Sharp, preprocessors: Preprocess[]): Promise<void> {
+  const meta = await source.metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (width < OCR_VARIANT_MIN_SIDE || height < OCR_VARIANT_MIN_SIDE) {
+    appendImportJobDebug(
+      `ocr preprocess: skip variants on ${width}×${height}px (min side ${OCR_VARIANT_MIN_SIDE})`,
+    );
+    return;
+  }
   for (const preprocess of preprocessors) {
     buffers.push(await preprocess(source.clone()).png().toBuffer());
   }
@@ -181,4 +207,36 @@ function uniqueBuffers(buffers: Buffer[]): Buffer[] {
     out.push(buffer);
   }
   return out;
+}
+
+/** Gap (px) between stacked row crops so EasyOCR detects them as separate lines. */
+const STACKED_ROW_GAP = 24;
+
+/** Crop rows from their source images and stack them vertically into one PNG (one EasyOCR call). */
+export async function buildStackedRowCrops(
+  rows: Array<{ image: Buffer; rect: { left: number; top: number; width: number; height: number } }>,
+): Promise<Buffer | null> {
+  const crops: Array<{ input: Buffer; width: number; height: number }> = [];
+  for (const row of rows) {
+    try {
+      const input = await sharp(row.image).extract(row.rect).png().toBuffer();
+      crops.push({ input, width: row.rect.width, height: row.rect.height });
+    } catch {
+      /* skip invalid crop */
+    }
+  }
+  if (crops.length === 0) return null;
+  const width = Math.max(...crops.map((c) => c.width));
+  const height = crops.reduce((sum, c) => sum + c.height, 0) + STACKED_ROW_GAP * (crops.length - 1);
+  let top = 0;
+  const layers = crops.map((c) => {
+    const layer = { input: c.input, left: 0, top };
+    top += c.height + STACKED_ROW_GAP;
+    return layer;
+  });
+  return sharp({ create: { width, height, channels: 3, background: { r: 255, g: 255, b: 255 } } })
+    .composite(layers)
+    .greyscale()
+    .png()
+    .toBuffer();
 }

@@ -24,7 +24,8 @@ Long OCR sweeps on gitignored photos. Ask before running; capture exit code + st
 
 | Command | Role |
 | --- | --- |
-| `npm --prefix server run ocr:local-test-images` | All JPGs in `local/test-images/` |
+| `npm --prefix server run ocr:local-test-images` | All JPGs in `local/test-images/`; **% ok** score per label + dark HTML under `server/diagnostics/ground-truth-compare/`. Exit **0** by default; set `GROUND_TRUTH_STRICT=1` to enforce manifest targets. |
+| `localTestImagesNutrientGroundTruth.localFixtures.test.ts` | Same compare when photos exist (full `npm test`); emits score diagnostics; strict only with `GROUND_TRUTH_STRICT=1` |
 | `node scripts/run-local-test-images-ocr.mjs` | Filterable manifest/photo runs |
 | `node scripts/run-test-images-pipeline.mjs` | Geometry vs manifest |
 
