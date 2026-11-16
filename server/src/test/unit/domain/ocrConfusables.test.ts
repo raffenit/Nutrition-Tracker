@@ -7,6 +7,7 @@ import {
   parseAmountWithFuzzyUnit,
   parseConfusableAmountToken,
   parseFuzzyMassUnit,
+  parseLeadingConfusableAmount,
 } from '../../../domain/ocrConfusables.js';
 import { matchVariantLabelToken } from '../../../domain/labelVariants.js';
 
@@ -41,4 +42,14 @@ test('embedded canonical label inside noisy blob', () => {
   assert.ok(span);
   assert.equal(matchVariantLabelToken(blob), 'cholesterol');
   assert.deepEqual(parseAmountWithFuzzyUnit(blob.slice(span!.end)), { amount: 25, unit: 'mg' });
+});
+
+test('parseLeadingConfusableAmount reads confusable leading amounts conservatively', () => {
+  assert.equal(parseLeadingConfusableAmount('Omg'), 0);
+  assert.equal(parseLeadingConfusableAmount('Ig'), 1);
+  assert.equal(parseLeadingConfusableAmount('12g 5%'), 12);
+  assert.equal(parseLeadingConfusableAmount('lOmg'), null);
+  assert.equal(parseLeadingConfusableAmount('Total'), null);
+  assert.equal(parseLeadingConfusableAmount('~5g'), 5);
+  assert.equal(parseLeadingConfusableAmount('about 5g'), null);
 });
