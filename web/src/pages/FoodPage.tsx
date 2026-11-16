@@ -18,7 +18,9 @@ import { RemoveButton } from '../components/RemoveButton';
 import { kitLineKeyFromText } from '../kitLineKey';
 import { navigate } from '../nav';
 import {
+  addLabelExtra,
   CORE_NUTRIENT_FIELDS,
+  missingLabelExtras,
   removeExtraAt,
   setCoreNutrient,
   setCoreUnit,
@@ -1136,6 +1138,23 @@ function NutrientFields({
           />
         </label>
       ))}
+      {missingLabelExtras(nutrients).length > 0 && (
+        <label className="nutrient-field nutrient-add-extra">
+          <span>Add nutrient</span>
+          <select
+            value=""
+            aria-label="Add a nutrient row"
+            onChange={(event) => {
+              if (event.target.value) onChange(addLabelExtra(nutrients, event.target.value));
+            }}
+          >
+            <option value="">Choose…</option>
+            {missingLabelExtras(nutrients).map((extra) => (
+              <option key={extra.key} value={extra.key}>{extra.label} ({extra.unit})</option>
+            ))}
+          </select>
+        </label>
+      )}
     </fieldset>
   );
 }
