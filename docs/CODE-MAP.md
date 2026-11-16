@@ -67,6 +67,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Import field confidence (UI) | `server/src/domain/labelFieldReview.ts` | review map for draft fields |
 | Candidate scoring | `server/src/domain/labelSlots.ts`, `labelSlotExtract.ts` | `scoreLabelExtraction`; `primaryCandidateIndex` |
 | URL / PDF text import | `server/src/integrations/importUrl.ts`, `htmlText.ts` | `importNutritionFromUrl` |
+| URL label-image OCR fallback | `server/src/integrations/urlLabelImages.ts` | `extractLabelImageCandidates`, `importNutritionFromUrlWithImageFallback` |
 | Menu tables (non-label HTML) | `server/src/domain/parseMenuTable.ts`, `menuTableSchema.ts` | table-driven columns |
 | Sectioned PDF nutrition guides (stacked headers, size/portion variants) | `server/src/domain/parseMenuTextSections.ts` | `parseMenuTextSections` |
 | Clearable numeric fields | `web/src/components/DecimalInput.tsx` | `DecimalInput` |

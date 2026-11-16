@@ -22,6 +22,7 @@ import {
 } from '../import/importJobProgress.js';
 import { extractImageLabel } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
+import { importNutritionFromUrlWithImageFallback } from '../integrations/urlLabelImages.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
 import { searchUsda } from '../integrations/usda.js';
 import { HttpError } from '../http/errors.js';
@@ -252,16 +253,43 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
       reportImportJobStep('Request', 'Sending import request…', url.slice(0, 120));
       const fetched = await importNutritionFromUrl(url);
       reportImportJobStep('Draft', 'Building your draft…', 'Preparing import results for review.');
-      const built = buildNutritionImportWithPanels(fetched.text, fetched.kind, fetched.html);
+      let text = fetched.text;
+      let kind: 'pdf' | 'html' | 'image' = fetched.kind;
+      let html = fetched.html;
+      let built = buildNutritionImportWithPanels(text, kind, html);
+      let usedOcr = false;
+      if (!importDraftHasNutrition(built)) {
+        const fallback = await importNutritionFromUrlWithImageFallback(fetched, {
+          extractImageLabel,
+          tessdataDir: ctx.config.tessdataDir,
+          easyocrModelDir: ctx.config.easyocrEnabled ? ctx.config.easyocrModelDir : undefined,
+          textYieldsNutrition: () => false,
+        });
+        if (fallback.usedOcr && fallback.imageUrl) {
+          const ocrBuilt = buildNutritionImportWithPanels(fallback.text, 'image', null);
+          if (importDraftHasNutrition(ocrBuilt)) {
+            text = fallback.text;
+            kind = 'image';
+            html = null;
+            built = ocrBuilt;
+            usedOcr = true;
+            appendImportJobDebug(`url import: page text had no nutrition; OCR fallback read label image ${fallback.imageUrl}`);
+          }
+        }
+      }
       finishImportJob(jobId);
       sendImportJson(ctx.res, {
         uploadId: null,
-        kind: fetched.kind,
+        kind,
         finalUrl: fetched.finalUrl,
-        warning: built.warning,
-        textPreview: previewExtractedText(fetched.text),
+        warning: [
+          usedOcr ? 'Nutrition label was read from an image on the page (OCR) — review carefully.' : null,
+          built.warning,
+        ].filter(Boolean).join(' ') || null,
+        textPreview: previewExtractedText(text),
         built,
-        sourceKind: fetched.kind,
+        sourceKind: kind,
+        usedOcr,
       });
     });
   } catch (error) {
@@ -269,6 +297,18 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
     failImportJob(jobId, message);
     throw error;
   }
+}
+
+function importDraftHasNutrition(built: NutritionImportDraft): boolean {
+  const n = built.draft.nutrients;
+  return (
+    (n.calories ?? 0) > 0 ||
+    (n.protein ?? 0) > 0 ||
+    (n.fat ?? 0) > 0 ||
+    (n.carbs ?? 0) > 0 ||
+    built.candidates.length > 0 ||
+    built.menuItems.length > 0
+  );
 }
 
 type ImportJsonBody = {
