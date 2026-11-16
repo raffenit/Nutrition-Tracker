@@ -5,16 +5,19 @@ import {
   rowToMenuItem,
   schemaFromHeader,
 } from './menuTableSchema.js';
+import { parseMenuTextSections } from './parseMenuTextSections.js';
 
 export type { MenuItemDraft } from './menuTableSchema.js';
 
-const MAX_ITEMS = 250;
+const MAX_ITEMS = 600;
 
 export function parseMenuFromSource(text: string, html: string | null): MenuItemDraft[] {
   const items: MenuItemDraft[] = [];
   if (html) items.push(...parseHtmlTables(html));
   items.push(...parseDelimitedTables(text));
-  items.push(...parseWhitespaceMenuTables(text));
+  const whitespace = parseWhitespaceMenuTables(text);
+  const sectioned = parseMenuTextSections(text);
+  items.push(...(sectioned.length > whitespace.length ? sectioned : whitespace));
   return capItems(items);
 }
 

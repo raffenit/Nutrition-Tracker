@@ -59,6 +59,8 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Candidate scoring | `server/src/domain/labelSlots.ts`, `labelSlotExtract.ts` | `scoreLabelExtraction`; `primaryCandidateIndex` |
 | URL / PDF text import | `server/src/integrations/importUrl.ts`, `htmlText.ts` | `importNutritionFromUrl` |
 | Menu tables (non-label HTML) | `server/src/domain/parseMenuTable.ts`, `menuTableSchema.ts` | table-driven columns |
+| Sectioned PDF nutrition guides (stacked headers, size/portion variants) | `server/src/domain/parseMenuTextSections.ts` | `parseMenuTextSections` |
+| Clearable numeric fields | `web/src/components/DecimalInput.tsx` | `DecimalInput` |
 
 **Env (runtime):** `.env.example` — `EASYOCR_ENABLED`, `EASYOCR_MAX_VARIANTS`, `EASYOCR_AB`, `TESSERACT_MAX_VARIANTS`, `TESSERACT_DUAL_PSM`.
 
