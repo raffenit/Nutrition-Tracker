@@ -83,11 +83,79 @@ def _group_rows(detections: list) -> list[str]:
     return [" ".join(t for _x, t in sorted(r[2])) for r in rows]
 
 
+def _read_one(reader, image_path: str, mode: str) -> list[str]:
+    """Return text lines for one image; mode is lines | rows | paragraph."""
+    kw = _readtext_kwargs()
+    if mode == "rows":
+        kw["detail"] = 1
+        kw["paragraph"] = False
+        return _group_rows(reader.readtext(image_path, **kw))
+    kw["paragraph"] = mode != "lines"
+    detections = reader.readtext(image_path, **kw)
+    if isinstance(detections, str):
+        return [detections] if detections.strip() else []
+    return [str(line) for line in detections if str(line).strip()]
+
+
+def _run_batch(manifest_path: str, model_dir: str | None) -> int:
+    """One Reader for many images; JSONL results on stdout.
+
+    Manifest: [{"file": "path.png", "mode": "lines"|"rows"|"paragraph", "i": original_index}, ...]
+    Emits {"i": n, "text": "..."} per job, or {"i": n, "error": "..."} on failure.
+    """
+    import json
+
+    with open(manifest_path, "r", encoding="utf-8") as fh:
+        jobs = json.load(fh)
+    base_dir = os.path.dirname(os.path.abspath(manifest_path))
+
+    try:
+        import easyocr
+    except ImportError:
+        print("easyocr not installed", file=sys.stderr)
+        return 3
+
+    quantize = os.environ.get("EASYOCR_QUANTIZE", "").strip().lower() in ("1", "true", "yes")
+    reader = easyocr.Reader(
+        ["en"],
+        gpu=False,
+        model_storage_directory=model_dir or None,
+        verbose=False,
+        quantize=quantize,
+    )
+
+    for position, job in enumerate(jobs):
+        image_path = job["file"]
+        if not os.path.isabs(image_path):
+            image_path = os.path.join(base_dir, image_path)
+        mode = job.get("mode", "lines")
+        # "i" lets sharded manifests report the caller's original job index.
+        index = job.get("i", position)
+        try:
+            lines = _read_one(reader, image_path, mode)
+            print(json.dumps({"i": index, "text": "\n".join(lines)}))
+            sys.stdout.flush()
+        except Exception as exc:  # keep batch alive; per-image failure is data, not fatal
+            print(json.dumps({"i": index, "error": str(exc)}))
+            sys.stdout.flush()
+    return 0
+
+
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: easyocr_label.py [--lines] IMAGE_PATH [MODEL_DIR]", file=sys.stderr)
+        print(
+            "usage: easyocr_label.py [--lines|--rows|--paragraph] IMAGE_PATH [MODEL_DIR]\n"
+            "       easyocr_label.py --batch MANIFEST.json [MODEL_DIR]",
+            file=sys.stderr,
+        )
         return 2
     args = sys.argv[1:]
+    if args and args[0] == "--batch":
+        if len(args) < 2:
+            print("usage: easyocr_label.py --batch MANIFEST.json [MODEL_DIR]", file=sys.stderr)
+            return 2
+        return _run_batch(args[1], args[2] if len(args) > 2 else None)
+
     line_mode = True
     row_mode = False
     if args and args[0] == "--lines":
@@ -118,26 +186,13 @@ def main() -> int:
         quantize=quantize,
     )
 
-    kw = _readtext_kwargs()
-    if line_mode:
-        kw["paragraph"] = False
-    else:
-        kw["paragraph"] = True
-
     if row_mode:
-        kw["detail"] = 1
-        for row in _group_rows(reader.readtext(image_path, **kw)):
+        for row in _read_one(reader, image_path, "rows"):
             print(row)
         return 0
 
-    detections = reader.readtext(image_path, **kw)
-    if isinstance(detections, str):
-        print(detections)
-    else:
-        for line in detections:
-            text = line if isinstance(line, str) else str(line)
-            if text.strip():
-                print(text)
+    for text in _read_one(reader, image_path, "paragraph" if not line_mode else "lines"):
+        print(text)
     return 0
 
 

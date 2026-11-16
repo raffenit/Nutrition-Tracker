@@ -50,7 +50,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Resolution-invariant pipelines doc | [resolution-invariant-image-pipelines.md](./resolution-invariant-image-pipelines.md) | Named fraction params for image geometry |
 | Image preprocess (Sharp) | `server/src/integrations/ocrPreprocess.ts` | `buildOcrImageVariants`, `easyOcrVariantSubset`, `tesseractVariantSubset` |
 | Focus / threshold variants | `server/src/integrations/focusCrop.ts`, `adaptiveThreshold.ts` | `focusCropVariants`, `adaptiveThresholdVariants` |
-| EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `easyOcrPassEnvironments` |
+| EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `extractEasyOcrTextsForJobs`, `easyOcrPassEnvironments` |
 | Label vs menu detection | `server/src/domain/nutritionImport.ts` | `buildNutritionImport` |
 | Full label parse (text → nutrients) | `server/src/domain/parseLabel.ts` | `parseNutritionLabel`, `readSodiumMgNoisy` |
 | Variety-pack column table | `server/src/domain/parseMultiProductLabelTable.ts` | `parseMultiProductLabelTable` |

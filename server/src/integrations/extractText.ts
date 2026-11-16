@@ -47,7 +47,7 @@ import {
 } from '../domain/portraitSingleOcrParams.js';
 import type { Nutrients } from '../types.js';
 import { OcrPipelineTimer } from './ocrPipelineTimer.js';
-import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
+import { extractEasyOcrTextsForJobs, extractEasyOcrTextsFromVariants } from './easyOcr.js';
 import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
 import { inferLabelLayoutHint, resolveLabelProcessingImage } from './imageLayoutHint.js';
 import { resolveLabelOcrSources } from './labelOcrSources.js';
@@ -1093,8 +1093,9 @@ async function ocrSplitSingleLabel(
 
   if (!readiness.settled && modelDir) {
     const easyStart = Date.now();
-    const [leftEasy, rightEasy] = await Promise.all(
-      dewarped.map((d) => extractEasyOcrTextsFromVariants([d.bytes], modelDir, 'rows')),
+    const [leftEasy = [], rightEasy = []] = await extractEasyOcrTextsForJobs(
+      dewarped.map((d) => ({ bytes: d.bytes, layout: 'rows' as const })),
+      modelDir,
     );
     for (const text of stitchSplitHalfCandidates([...leftEasy, ...leftTexts], [...rightEasy, ...rightTexts])) {
       if (!candidates.includes(text)) candidates.unshift(text);
