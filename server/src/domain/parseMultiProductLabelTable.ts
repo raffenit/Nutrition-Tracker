@@ -130,7 +130,10 @@ function looksLikeProductName(cell: string): boolean {
 
 function splitTableCells(line: string): string[] {
   if (line.includes('\t')) return line.split('\t').map((cell) => cell.trim()).filter(Boolean);
-  const byGap = line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+  const byGap = line
+    .split(/\s{2,}/)
+    .map((cell) => cell.trim())
+    .filter((cell) => cell && !/^\|+$/.test(cell));
   if (byGap.length >= 2) return byGap;
   if (line.includes('|')) return line.split('|').map((cell) => cell.trim()).filter(Boolean);
   return byGap;
@@ -147,7 +150,13 @@ function isValueOnlyLine(cells: string[]): boolean {
 }
 
 function isNumericCell(cell: string): boolean {
+  if (isBlankCellPlaceholder(cell)) return true;
   return /^\d+(?:\.\d+)?\s*(?:g|mg|kcal)?$/i.test(cell.trim()) || /^\d+(?:\.\d+)?$/.test(cell.trim());
+}
+
+/** Stitched grids write `-` for an unread cell so later columns keep their position. */
+function isBlankCellPlaceholder(cell: string): boolean {
+  return /^[-–—]$/.test(cell.trim());
 }
 
 function padValues(values: string[], columnCount: number): string[] {

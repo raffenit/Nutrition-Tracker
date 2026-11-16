@@ -113,3 +113,13 @@ test('buildNutritionImportWithPanels pads missing variety-pack columns for manua
   assert.ok(built.labelPanels[3]?.warning);
   assert.match(built.warning ?? '', /Read 3 of 4/);
 });
+
+test('parseMultiProductLabelTable ignores padded pipe separators', () => {
+  const cols = parseMultiProductLabelTable(
+    ['Nutrition Facts', 'Snack A  |  Snack B', 'Calories  |  100  |  200', 'Total Fat  |  5g  |  6g', 'Sodium  |  120mg  |  140mg', 'Protein  |  3g  |  4g'].join('\n'),
+  );
+  assert.equal(cols?.length, 2);
+  assert.equal(cols![0]!.nutrients.calories, 100);
+  assert.equal(cols![1]!.nutrients.calories, 200);
+  assert.equal(cols![1]!.nutrients.protein, 4);
+});
