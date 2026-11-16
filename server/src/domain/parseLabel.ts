@@ -668,12 +668,18 @@ function servingsPerContainerFromLabel(compact: string, raw: string): number | n
     const trailing = line.match(/per\s+container[^\d]{0,28}(\d{1,2})\s*$/i)
       ?? line.match(/per\s+container[^\d]{0,28}[^\d]*(\d{1,2})\b/i);
     if (trailing) {
-      let value = Number(trailing[1]);
-      if (value === 15 && /\bcalories\b[^\d]{0,20}150\b/i.test(raw)) value = 1;
-      if (value > 0 && value <= 99) return value;
+      // Reject counts that are really the numerator of a serving-size fraction ("1/2 Cup").
+      const digitOffset = (trailing.index ?? 0) + trailing[0].lastIndexOf(trailing[1]);
+      const afterDigit = line[digitOffset + trailing[1].length] ?? '';
+      const beforeDigit = line[digitOffset - 1] ?? '';
+      if (afterDigit !== '/' && beforeDigit !== '/') {
+        let value = Number(trailing[1]);
+        if (value === 15 && /\bcalories\b[^\d]{0,20}150\b/i.test(raw)) value = 1;
+        if (value > 0 && value <= 99) return value;
+      }
     }
 
-    if (/\bper\s+container\b/i.test(line) && /\b1\b/.test(line.replace(/150/g, ''))) return 1;
+    if (/\bper\s+container\b/i.test(line) && /\b1\b/.test(line.replace(/\d+\s*\/\s*\d+/g, '').replace(/150/g, ''))) return 1;
   }
   return null;
 }

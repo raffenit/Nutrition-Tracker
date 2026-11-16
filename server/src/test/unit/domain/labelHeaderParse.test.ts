@@ -29,6 +29,12 @@ test('parseServingsPerContainerVariant reads count before garbled serving size',
   assert.equal(parseServingsPerContainerVariant(flat), 1);
 });
 
+test('parseServingsPerContainerVariant does not take a serving-size fraction as the count', () => {
+  const flat =
+    'Nutrition Facts 4.0 About Servings Per Container Serving size 1/2 Cup (113g) Amount per serving Calories 110';
+  assert.equal(parseServingsPerContainerVariant(flat), null);
+});
+
 test('parseServingSizeVariant reads bottle volume from noisy header', () => {
   const text = `
 Nutrition Facts
