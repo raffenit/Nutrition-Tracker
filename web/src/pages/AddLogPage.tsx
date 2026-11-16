@@ -6,6 +6,7 @@ import { FoodLibraryPicker, type LibraryShelf } from '../components/FoodLibraryP
 import { useAsyncAction } from '../lib/useAsyncAction';
 import { navigate, nowLocalInput } from '../nav';
 import { CORE_NUTRIENT_FIELDS, setCoreNutrient, setExtraAt } from '../nutrientFields';
+import { DecimalInput } from '../components/DecimalInput';
 import { EMPTY_NUTRIENTS, type Food, type MealLog, type Nutrients, type Targets } from '../types';
 
 const SLOTS: MealLog['slot'][] = ['meal', 'snack', 'dessert', 'drink'];
@@ -19,6 +20,7 @@ export function AddLogPage() {
   const [servings, setServings] = useState('1');
   const [eatenAt, setEatenAt] = useState(nowLocalInput());
   const [drinkMl, setDrinkMl] = useState('355');
+  const [drinkMlEdited, setDrinkMlEdited] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [entryTotals, setEntryTotals] = useState(false);
   const [quickNutrients, setQuickNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
@@ -43,7 +45,15 @@ export function AddLogPage() {
 
   useEffect(() => {
     if (food) void mergeFoodsCache([food]);
+    setDrinkMlEdited(false);
   }, [food]);
+
+  const libraryDrinkMl = drinkMlEdited || !food ? drinkMl : defaultDrinkMlText(food, servings);
+
+  function editDrinkMl(value: string): void {
+    setDrinkMl(value);
+    setDrinkMlEdited(true);
+  }
 
   const createHref = shelf === 'foods' ? '/foods/new' : '/recipes/new';
   const createLabel = shelf === 'foods' ? 'New food from label' : 'New recipe';
@@ -55,7 +65,7 @@ export function AddLogPage() {
       slot,
       servings: Number(servings),
       eatenAt,
-      drinkMl: slot === 'drink' || food.isDrink ? Number(drinkMl) : null,
+      drinkMl: slot === 'drink' || food.isDrink ? Number(libraryDrinkMl) : null,
     });
     navigate('/');
   }
@@ -126,7 +136,7 @@ export function AddLogPage() {
           <label>Servings<input value={servings} onChange={(event) => setServings(event.target.value)} inputMode="decimal" required /></label>
           <label>When<input type="datetime-local" value={eatenAt} onChange={(event) => setEatenAt(event.target.value)} required /></label>
           {(slot === 'drink' || food.isDrink) && (
-            <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>
+            <label>Volume (ml)<input value={libraryDrinkMl} onChange={(event) => editDrinkMl(event.target.value)} inputMode="decimal" /></label>
           )}
           {error && <p className="notice">{error}</p>}
           <button className="primary form-save" type="submit" disabled={saveBusy} aria-busy={saveBusy}>
@@ -151,12 +161,10 @@ export function AddLogPage() {
               <label key={field.key} className="nutrient-field">
                 <span>{field.label}</span>
                 <span className="nutrient-input-wrap">
-                  <input
-                    type="number"
-                    inputMode="decimal"
+                  <DecimalInput
                     step={field.step}
                     value={quickNutrients[field.key]}
-                    onChange={(event) => setQuickNutrients(setCoreNutrient(quickNutrients, field.key, Number(event.target.value)))}
+                    onValueChange={(value) => setQuickNutrients(setCoreNutrient(quickNutrients, field.key, value))}
                   />
                   <span className="nutrient-unit">{field.key === 'calories' ? 'kcal' : field.key === 'sodium' ? 'mg' : 'g'}</span>
                 </span>
@@ -166,12 +174,10 @@ export function AddLogPage() {
               <label key={`${extra.key}-${index}`} className="nutrient-field">
                 <span>{extra.label}</span>
                 <span className="nutrient-input-wrap">
-                  <input
-                    type="number"
-                    inputMode="decimal"
+                  <DecimalInput
                     step="0.1"
                     value={extra.amount}
-                    onChange={(event) => setQuickNutrients(setExtraAt(quickNutrients, index, Number(event.target.value)))}
+                    onValueChange={(value) => setQuickNutrients(setExtraAt(quickNutrients, index, value))}
                   />
                   <span className="nutrient-unit">{extra.unit}</span>
                 </span>
@@ -190,4 +196,13 @@ export function AddLogPage() {
       )}
     </div>
   );
+}
+
+const DEFAULT_DRINK_ML = 355;
+
+/** The food's saved volume × servings, so a 500 ml bottle logs 500 ml unless the user changes it. */
+function defaultDrinkMlText(food: Pick<Food, 'drinkMl'>, servings: string): string {
+  const count = Number(servings);
+  if (!food.drinkMl || food.drinkMl <= 0) return String(DEFAULT_DRINK_ML);
+  return String(Math.round(food.drinkMl * (Number.isFinite(count) && count > 0 ? count : 1)));
 }
