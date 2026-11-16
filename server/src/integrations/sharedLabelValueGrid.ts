@@ -66,6 +66,8 @@ export type SharedLabelValueGridPlan = {
   valueRowBandSlicesPerColumn: SharedLabelRowBandSlice[][];
   valueColumnGlareMasks: ColumnBodyGlareMask[];
   valueColumnWarpProbes?: ValueColumnWarpProbe[];
+  /** Columns whose row-slice count disagreed with consensus and were rebuilt on the consensus mesh. */
+  rowBandReconciledColumns?: number;
   headerConsensusRowBandSlices: SharedLabelRowBandSlice[];
   headerLabelRowBandSlices: SharedLabelRowBandSlice[];
   headerRowBandSlicesPerColumn: SharedLabelRowBandSlice[][];
@@ -195,9 +197,35 @@ export async function extractSharedLabelColumnPngsByRowBands(
       }
     }
 
-    buffers.push(await base.clone().extract({ left, top, width, height }).png().toBuffer());
+    const png = await base.clone().extract({ left, top, width, height }).png().toBuffer();
+    buffers.push(await deskewRowBandSlicePng(png, slice, column.width));
   }
   return buffers;
+}
+
+/**
+ * Rotate a skewed row-band crop so baseline text is horizontal. Curved pack
+ * surfaces shear each row quad; the slice carries measured edge skew, and
+ * sharp expands the canvas so no glyphs are clipped by the rotation.
+ */
+async function deskewRowBandSlicePng(
+  png: Buffer,
+  slice: SharedLabelRowBandSlice,
+  columnWidth: number,
+): Promise<Buffer> {
+  const meanSkewPx = ((slice.topSkewPx ?? 0) + (slice.bottomSkewPx ?? 0)) / 2;
+  const angleDeg = (Math.atan(meanSkewPx / Math.max(1, columnWidth)) * 180) / Math.PI;
+  const params = DEFAULT_SHARED_LABEL_GRID_PARAMS;
+  if (
+    Math.abs(angleDeg) < params.rowBandDeskewMinAngleDeg ||
+    Math.abs(angleDeg) > params.rowBandDeskewMaxAngleDeg
+  ) {
+    return png;
+  }
+  return sharp(png)
+    .rotate(-angleDeg, { background: { r: 255, g: 255, b: 255 } })
+    .png()
+    .toBuffer();
 }
 
 export function useRowBandSliceOcrForPlan(plan: SharedLabelValueGridPlan): boolean {

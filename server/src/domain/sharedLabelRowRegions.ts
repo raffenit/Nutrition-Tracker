@@ -1720,6 +1720,8 @@ export type PerColumnRowBandSlicePlan = {
   /** Per value column: glare trust bands (analysis y) used for row-surface estimation. */
   valueColumnGlareMasks: ColumnBodyGlareMask[];
   valueColumnWarpProbes: ValueColumnWarpProbe[];
+  /** Columns whose slice count disagreed with consensus and were rebuilt on the consensus mesh. */
+  rowBandReconciledColumns: number;
 };
 
 export function maxRowTopSpreadPx(
@@ -3504,6 +3506,46 @@ export function buildPerColumnRowBandSlicePlan(input: {
     );
   }
 
+  // Count reconciliation: per-column split/merge transforms above can drop or
+  // add bands when one column's local rule detection misses a row line (glare,
+  // pack curve). Rebuild any mismatched column on the consensus mesh — warped
+  // through that column's own rule probes when available — so every column
+  // emits the canonical row count and row stitching stays aligned.
+  let rowBandReconciledColumns = 0;
+  const referenceRowCount = consensusRowBandSlices.length;
+  if (referenceRowCount > 0) {
+    valueRowBandSlicesPerColumn = valueRowBandSlicesPerColumn.map((colSlices, colIndex) => {
+      if (colSlices.length === referenceRowCount) return colSlices;
+      const probe = valueColumnWarpProbes[colIndex];
+      rowBandReconciledColumns += 1;
+      return columnRowBandSlicesOnConsensusMesh(
+        consensusRowBandSlices,
+        bodyTop,
+        probe?.leftRuleYs ?? [],
+        probe?.rightRuleYs ?? [],
+        probe?.fullRuleYs ?? [],
+        meshReferenceRulesImage,
+        snapTol,
+        pooledPitch,
+        Boolean(probe?.warp),
+      );
+    });
+    if (labelRowBandSlices.length !== referenceRowCount) {
+      labelRowBandSlices = columnRowBandSlicesOnConsensusMesh(
+        consensusRowBandSlices,
+        bodyTop,
+        rulesInBody(bodyTop, bodyBottom, mapRulesToImage(labelSubs.left)),
+        rulesInBody(bodyTop, bodyBottom, mapRulesToImage(labelSubs.right)),
+        labelFull,
+        meshReferenceRulesImage,
+        snapTol,
+        pooledPitch,
+        false,
+      );
+      rowBandReconciledColumns += 1;
+    }
+  }
+
   return {
     rowSurfaceMode,
     consensusRowBandSlices,
@@ -3514,6 +3556,7 @@ export function buildPerColumnRowBandSlicePlan(input: {
     headerRowBandSlicesPerColumn,
     valueColumnGlareMasks,
     valueColumnWarpProbes,
+    rowBandReconciledColumns,
   };
 }
 

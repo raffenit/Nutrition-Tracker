@@ -42,3 +42,44 @@ test('parseRecipeCard ignores sparse OCR without section structure', () => {
   assert.equal(parsed.looksLikeRecipeCard, false);
   assert.equal(parsed.ingredientLines.length, 0);
 });
+
+// Pattern: grocery/product pages carry "Ingredients" + Nutrition Facts but are
+// not recipes — the ingredient declaration is followed by allergen/disclaimer
+// prose, and there are no instructions or serves count.
+const PRODUCT_PAGE_TEXT = `
+Kroger-style Dairy Product
+Nutrition Facts
+4.0 About Servings Per Container
+Serving size 1/2 Cup (113g)
+Amount per serving
+Calories 110
+Total Fat 5g 6%
+Protein 13g 25%
+Ingredients
+Cultured Skim Milk, Cultured Cream, Whey, Salt, Potassium Chloride, Citric Acid, Carrageenan, Guar Gum.
+Allergen Info
+Contains Milk and its derivates.
+Disclaimer
+Actual product packaging may contain additional ingredient, nutritional, or proper usage information.
+You are responsible for reading labels, warnings, and directions prior to using or consuming a product.
+`;
+
+test('parseRecipeCard does not flag product pages with ingredients + nutrition as recipes', () => {
+  const parsed = parseRecipeCard(PRODUCT_PAGE_TEXT);
+  assert.equal(parsed.looksLikeRecipeCard, false);
+});
+
+test('parseRecipeCard still flags ingredient+nutrition cards with quantified recipe lines and no instructions heading', () => {
+  const parsed = parseRecipeCard(`
+Weeknight Skillet Dinner
+Nutrition Facts
+Calories 620
+Protein 32g
+Ingredients
+12 oz boneless chicken thighs
+1 tbsp smoked paprika
+8 oz Yukon Gold potatoes, cubed
+2 oz crumbled feta
+`);
+  assert.equal(parsed.looksLikeRecipeCard, true);
+});

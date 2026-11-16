@@ -50,7 +50,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Resolution-invariant pipelines doc | [resolution-invariant-image-pipelines.md](./resolution-invariant-image-pipelines.md) | Named fraction params for image geometry |
 | Image preprocess (Sharp) | `server/src/integrations/ocrPreprocess.ts` | `buildOcrImageVariants`, `easyOcrVariantSubset`, `tesseractVariantSubset` |
 | Focus / threshold variants | `server/src/integrations/focusCrop.ts`, `adaptiveThreshold.ts` | `focusCropVariants`, `adaptiveThresholdVariants` |
-| EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `easyOcrPassEnvironments` |
+| EasyOCR (Python) | `server/src/integrations/easyOcr.ts`, `server/python/easyocr_label.py` | `extractEasyOcrTextsFromVariants`, `extractEasyOcrTextsForJobs`, `easyOcrPassEnvironments` |
 | Label vs menu detection | `server/src/domain/nutritionImport.ts` | `buildNutritionImport` |
 | Full label parse (text → nutrients) | `server/src/domain/parseLabel.ts` | `parseNutritionLabel`, `readSodiumMgNoisy` |
 | Variety-pack column table | `server/src/domain/parseMultiProductLabelTable.ts` | `parseMultiProductLabelTable` |
@@ -67,6 +67,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Import field confidence (UI) | `server/src/domain/labelFieldReview.ts` | review map for draft fields |
 | Candidate scoring | `server/src/domain/labelSlots.ts`, `labelSlotExtract.ts` | `scoreLabelExtraction`; `primaryCandidateIndex` |
 | URL / PDF text import | `server/src/integrations/importUrl.ts`, `htmlText.ts` | `importNutritionFromUrl` |
+| URL label-image OCR fallback | `server/src/integrations/urlLabelImages.ts` | `extractLabelImageCandidates`, `importNutritionFromUrlWithImageFallback` |
 | Menu tables (non-label HTML) | `server/src/domain/parseMenuTable.ts`, `menuTableSchema.ts` | table-driven columns |
 | Sectioned PDF nutrition guides (stacked headers, size/portion variants) | `server/src/domain/parseMenuTextSections.ts` | `parseMenuTextSections` |
 | Clearable numeric fields | `web/src/components/DecimalInput.tsx` | `DecimalInput` |

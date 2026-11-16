@@ -75,14 +75,19 @@ export function parseServingsPerContainerVariant(text: string): number | null {
     if (value > 0 && value <= 999) return value;
   }
 
-  const after = flat.slice(idx, idx + 90);
+  const after = flat.slice(idx, idx + 48);
   const oneBeforeServingSize = after.match(/\b(\d+)\s+serv\w*\s*size\b/i);
   if (oneBeforeServingSize) {
     const value = Number(oneBeforeServingSize[1]);
     if (value > 0 && value <= 99) return value;
   }
 
-  const nearDigit = after.match(/\b(\d{1,2})\b/);
+  // Fractions ("1/2 Cup") and measurements ("113g") are serving-size content,
+  // not a container count — strip them before grabbing a nearby number.
+  const countContext = after
+    .replace(/\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?/g, ' ')
+    .replace(/\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|l|oz|cup|cal|k?cal|iu)\b/gi, ' ');
+  const nearDigit = countContext.match(/\b(\d{1,2})\b/);
   if (nearDigit) {
     const value = Number(nearDigit[1]);
     if (value > 0 && value <= 99) return value;
@@ -90,7 +95,7 @@ export function parseServingsPerContainerVariant(text: string): number | null {
 
   if (/\bbottles?\b/i.test(after)) return 1;
 
-  return 1;
+  return null;
 }
 
 export function parseServingSizeVariant(text: string): string | null {

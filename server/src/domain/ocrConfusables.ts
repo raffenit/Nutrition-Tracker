@@ -305,3 +305,53 @@ export function findEmbeddedCanonicalSpan(
   }
   return null;
 }
+
+/**
+ * Confusable glyphs allowed inside a leading numeric token of any OCR text
+ * (single labels, table cells, stitched grids). Single source of truth for
+ * cross-engine amount parsing.
+ */
+export const OCR_CONFUSABLE_DIGITS: Record<string, string> = {
+  O: '0',
+  o: '0',
+  I: '1',
+  l: '1',
+  '|': '1',
+  S: '5',
+  s: '5',
+  B: '8',
+  b: '8',
+  Z: '2',
+  z: '2',
+};
+
+const LEADING_AMOUNT_TOKEN_RE = /^([0-9OolISsBbZz|]+(?:[.,][0-9OolISsBbZz|]+)?)/;
+
+/**
+ * Leading amount of an OCR text fragment, tolerant of digit confusions:
+ * `Omg` → 0, `Ig` → 1, `lOmg` → 10, `<1g` → 1, `12g 5%` → 12.
+ *
+ * Conservative guards: the token must contain at least one literal digit, or
+ * be a single confusable glyph (`I`/`l`/`|`/`O`) that following unit text
+ * makes unambiguous — bare multi-letter confusable runs are rejected rather
+ * than guessed.
+ */
+export function parseLeadingConfusableAmount(text: string): number | null {
+  const trimmed = text.trim().replace(/^[^\dOolISsBbZz|]+/, '');
+  const match = trimmed.match(LEADING_AMOUNT_TOKEN_RE);
+  if (!match) return null;
+  const raw = match[1]!;
+  const hasLiteralDigit = /\d/.test(raw);
+  const rest = trimmed.slice(raw.length);
+  const singleConfusable =
+    raw.length === 1 &&
+    OCR_CONFUSABLE_DIGITS[raw] !== undefined &&
+    /^(?:mg|mcg|ml|kcal|g|%)/i.test(rest);
+  if (!hasLiteralDigit && !singleConfusable) return null;
+  const digits = [...raw.replace(',', '.')]
+    .map((char) => OCR_CONFUSABLE_DIGITS[char] ?? char)
+    .join('');
+  if (!/^\d+(?:\.\d+)?$/.test(digits)) return null;
+  const value = Number(digits);
+  return Number.isFinite(value) ? value : null;
+}

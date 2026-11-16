@@ -47,7 +47,12 @@ import {
 } from '../domain/portraitSingleOcrParams.js';
 import type { Nutrients } from '../types.js';
 import { OcrPipelineTimer } from './ocrPipelineTimer.js';
-import { extractEasyOcrTextsFromVariants } from './easyOcr.js';
+import {
+  extractEasyOcrTextsForJobs,
+  extractEasyOcrTextsFromVariants,
+  isEasyOcrEnabled,
+  type EasyOcrLayout,
+} from './easyOcr.js';
 import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
 import { inferLabelLayoutHint, resolveLabelProcessingImage } from './imageLayoutHint.js';
 import { resolveLabelOcrSources } from './labelOcrSources.js';
@@ -64,6 +69,8 @@ import {
   type SharedLabelValueGridPlan,
 } from './sharedLabelValueGrid.js';
 import type { SharedLabelRowBandSlice } from '../domain/sharedLabelGridLayout.js';
+import { rowBandSliceAxisAlignedBounds } from '../domain/sharedLabelRowRegions.js';
+import { dewarpColumnToRowMesh } from '../domain/sharedLabelColumnDewarp.js';
 import type { ColumnStripRegion } from './labelColumnStrips.js';
 import {
   formatVarietyPackStepValidation,
@@ -668,6 +675,117 @@ async function ocrStitchedFromColumnStripPlan(
   return null;
 }
 
+/**
+ * Bare column/rail reads have no "Nutrition Facts" heading for
+ * {@link scoreLabelExtraction} — score digit-bearing and word-bearing lines instead.
+ */
+function scoreStructuredColumnText(text: string): number {
+  let score = 0;
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const numbers = line.match(/\d+(?:[.,]\d+)?/g)?.length ?? 0;
+    if (numbers > 0) score += 1 + Math.min(numbers, 3);
+    else if (/[a-zA-Z]{3,}/.test(line)) score += 0.5;
+  }
+  return score;
+}
+
+/**
+ * Merge Tesseract best with EasyOCR candidates for one structured column.
+ * Tesseract wins ties — its text stays aligned with row-band slice provenance.
+ */
+/** EasyOCR must beat the Tesseract read by this much to take over a column —
+ *  bare numeric columns make small score gaps noise, and a confident wrong
+ *  value is worse than a blank. */
+const STRUCTURED_EASY_SWITCH_MARGIN = 2;
+
+function bestStructuredColumnRead(
+  tesseractText: string,
+  easyTexts: string[],
+): { text: string; easyWon: boolean; tessScore: number; easyScore: number } {
+  const tessScore = scoreStructuredColumnText(tesseractText);
+  let best = tesseractText;
+  let bestScore = tessScore;
+  let easyScore = 0;
+  let easyWon = false;
+  for (const candidate of easyTexts) {
+    const score = scoreStructuredColumnText(candidate);
+    if (score > bestScore + STRUCTURED_EASY_SWITCH_MARGIN) {
+      best = candidate;
+      bestScore = score;
+      easyScore = score;
+      easyWon = true;
+    }
+  }
+  return { text: best, easyWon, tessScore, easyScore };
+}
+
+/** Label rail / header reads should be mostly words; near-empty means the Tesseract read failed. */
+function isWeakSharedLabelRead(text: string, kind: 'label' | 'header'): boolean {
+  const trimmed = text.trim();
+  if (kind === 'label') return trimmed.length < 20 || scoreLabelExtraction(trimmed) < 2;
+  return trimmed.length < 2;
+}
+
+/**
+ * Row-band slice y-extents as fractions of the whole-column crop height, so an
+ * EasyOCR 'rows' read emits exactly one line per canonical row slice — the same
+ * alignment Tesseract's per-slice reads produce.
+ */
+function rowBandFractionsForColumn(
+  column: ColumnStripRegion,
+  slices: SharedLabelRowBandSlice[],
+): [number, number][] {
+  const cropTop = Math.max(0, Math.round(column.top));
+  const cropHeight = Math.max(1, Math.round(column.height));
+  return slices.map((slice) => {
+    const aligned = rowBandSliceAxisAlignedBounds(slice);
+    const y0 = (aligned.top - cropTop) / cropHeight;
+    const y1 = (aligned.top + aligned.height - cropTop) / cropHeight;
+    return [Math.max(0, Math.min(1, y0)), Math.max(0, Math.min(1, y1))];
+  });
+}
+
+/** Dewarp a whole-column crop onto the canonical row mesh; null when the column is flat. */
+async function dewarpColumnCropToRows(
+  png: Buffer,
+  columnTop: number,
+  slices: SharedLabelRowBandSlice[],
+): Promise<{ png: Buffer; rowTops: number[]; rowHeights: number[] } | null> {
+  const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const dewarped = dewarpColumnToRowMesh(
+    { data, width: info.width, height: info.height },
+    slices,
+    Math.max(0, Math.round(columnTop)),
+  );
+  if (!dewarped) return null;
+  const out = await sharp(dewarped.pixels, {
+    raw: { width: dewarped.width, height: dewarped.height, channels: 1 },
+  }).png().toBuffer();
+  return { png: out, rowTops: dewarped.rowTops, rowHeights: dewarped.rowHeights };
+}
+
+/** One PNG per canonical row from a dewarped column (rows already axis-aligned). */
+async function extractDewarpedRowPngs(
+  png: Buffer,
+  rowTops: number[],
+  rowHeights: number[],
+): Promise<Buffer[]> {
+  const meta = await sharp(png).metadata();
+  const width = meta.width ?? 0;
+  const buffers: Buffer[] = [];
+  for (let i = 0; i < rowTops.length; i += 1) {
+    buffers.push(
+      await sharp(png)
+        .extract({ left: 0, top: rowTops[i]!, width, height: Math.max(1, rowHeights[i]!) })
+        .png()
+        .toBuffer(),
+    );
+  }
+  return buffers;
+}
+
 type SharedLabelColumnTexts = {
   labelText: string;
   headerText: string;
@@ -730,7 +848,7 @@ async function ocrSharedLabelGridColumns(
 
   const ocrColumnByRowBandsWithWorker = async (
     worker: Awaited<ReturnType<typeof openTesseractWorker>>,
-    column: Pick<ColumnStripRegion, 'left' | 'width'>,
+    column: Pick<ColumnStripRegion, 'left' | 'top' | 'width'>,
     fallbackPng: Buffer,
     rowBandSlices: SharedLabelValueGridPlan['rowBandSlices'],
     label: string,
@@ -740,7 +858,14 @@ async function ocrSharedLabelGridColumns(
     appendImportJobDebug(
       `${label} row-band: min extract ${minSize.minWidthPx}×${minSize.minHeightPx}px (column ${column.width}px, ${rowBandSlices.length} slices)`,
     );
-    const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, rowBandSlices, minSize);
+    let slicePngs: Buffer[];
+    const dewarped = await dewarpColumnCropToRows(fallbackPng, column.top, rowBandSlices).catch(() => null);
+    if (dewarped) {
+      slicePngs = await extractDewarpedRowPngs(dewarped.png, dewarped.rowTops, dewarped.rowHeights);
+      appendImportJobDebug(`${label} row-band: dewarped column onto row mesh (${slicePngs.length} rows)`);
+    } else {
+      slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, rowBandSlices, minSize);
+    }
     if (slicePngs.length === 0) {
       const text = await ocrStripText(fallbackPng, `${label} body`);
       return { text, sliceTexts: [] };
@@ -771,7 +896,8 @@ async function ocrSharedLabelGridColumns(
       const labelRowSlices = rowSurfacesForColumn(plan.labelRowBandSlices, 'label');
       const valueSliceCounts = plan.valueRowBandSlicesPerColumn.map((s) => s.length).join(',');
       appendImportJobDebug(
-        `shared-label grid: row surfaces mode=${plan.rowSurfaceMode}, label ${labelRowSlices.length} rows, values [${valueSliceCounts}], one worker`,
+        `shared-label grid: row surfaces mode=${plan.rowSurfaceMode}, label ${labelRowSlices.length} rows, values [${valueSliceCounts}], one worker` +
+          (plan.rowBandReconciledColumns ? `, ${plan.rowBandReconciledColumns} column(s) count-reconciled` : ''),
       );
       const labelBand = await ocrColumnByRowBandsWithWorker(
         worker,
@@ -871,6 +997,145 @@ async function ocrSharedLabelGridColumns(
       }
     } finally {
       await worker.terminate();
+    }
+  }
+
+  // EasyOCR rescue: one batched neural pass over the structured column crops.
+  // Value columns always (Tesseract reads bare numbers poorly); label rail and
+  // header columns only when their Tesseract read looks empty. Disable with
+  // EASYOCR_SHARED_LABEL=0.
+  const easySharedLabelEnabled =
+    Boolean(modelDir) &&
+    isEasyOcrEnabled() &&
+    process.env.EASYOCR_SHARED_LABEL !== '0' &&
+    process.env.EASYOCR_SHARED_LABEL !== 'false';
+  if (easySharedLabelEnabled) {
+    const startedAt = Date.now();
+    type EasyJob = {
+      png: Buffer;
+      layout: EasyOcrLayout;
+      bands?: [number, number][];
+      current: string;
+      /** When set, an EasyOCR win rewrites the matching row-band slice texts so the row-band stitch uses the improved read. */
+      sliceTarget?: { kind: 'label' | 'value'; index: number; count: number };
+      assign: (text: string) => void;
+    };
+    const jobs: EasyJob[] = [];
+    const consider = (
+      png: Buffer | undefined,
+      layout: EasyOcrLayout,
+      current: string,
+      assign: (text: string) => void,
+      weakOnly: boolean,
+      weakTest?: (text: string) => boolean,
+      bands?: [number, number][],
+      sliceTarget?: EasyJob['sliceTarget'],
+    ) => {
+      if (!png) return;
+      if (weakOnly && weakTest && !weakTest(current)) return;
+      jobs.push({ png, layout, current, assign, ...(bands ? { bands } : {}), ...(sliceTarget ? { sliceTarget } : {}) });
+    };
+
+    const easyColumnImage = async (
+      png: Buffer,
+      column: ColumnStripRegion,
+      slices: SharedLabelRowBandSlice[],
+    ): Promise<{ png: Buffer; bands?: [number, number][] }> => {
+      try {
+        const dewarped = await dewarpColumnCropToRows(png, column.top, slices);
+        if (!dewarped) return { png };
+        const height = dewarped.rowTops.length
+          ? dewarped.rowTops[dewarped.rowTops.length - 1]! + dewarped.rowHeights[dewarped.rowHeights.length - 1]!
+          : 1;
+        const bands = dewarped.rowTops.map(
+          (top, i) => [top / height, (top + dewarped.rowHeights[i]!) / height] as [number, number],
+        );
+        return { png: dewarped.png, bands };
+      } catch {
+        return { png };
+      }
+    };
+
+    for (const [index, text] of valueTexts.entries()) {
+      const column = plan.valueColumns[index];
+      const slices = column
+        ? rowSurfacesForColumn(plan.valueRowBandSlicesPerColumn[index], 'value', index)
+        : [];
+      const prepared =
+        column && slices.length > 0 && crops.valueColumns[index]
+          ? await easyColumnImage(crops.valueColumns[index]!, column, slices)
+          : { png: crops.valueColumns[index] as Buffer };
+      const bands =
+        prepared.bands ??
+        (column && slices.length > 0 ? rowBandFractionsForColumn(column, slices) : undefined);
+      consider(prepared.png, 'rows', text, (t) => {
+        valueTexts[index] = t;
+      }, false, undefined, bands, { kind: 'value', index, count: slices.length });
+    }
+    const labelSlices = rowSurfacesForColumn(plan.labelRowBandSlices, 'label');
+    const labelPrepared =
+      crops.labelColumn && labelSlices.length > 0
+        ? await easyColumnImage(crops.labelColumn, plan.labelColumn, labelSlices)
+        : { png: crops.labelColumn as Buffer };
+    consider(
+      labelPrepared.png,
+      'rows',
+      labelText,
+      (t) => {
+        labelText = t;
+      },
+      true,
+      (t) => isWeakSharedLabelRead(t, 'label'),
+      labelPrepared.bands ??
+        (labelSlices.length > 0 ? rowBandFractionsForColumn(plan.labelColumn, labelSlices) : undefined),
+      { kind: 'label', index: 0, count: labelSlices.length },
+    );
+    consider(crops.headerBand, 'lines', headerText, (t) => {
+      headerText = t;
+    }, true, (t) => isWeakSharedLabelRead(t, 'header'));
+    for (const [index, text] of headerColumnTexts.entries()) {
+      consider(crops.headerColumns[index], 'lines', text, (t) => {
+        headerColumnTexts[index] = t;
+      }, true, (t) => isWeakSharedLabelRead(t, 'header'));
+    }
+
+    if (jobs.length > 0) {
+      reportImportJobStep(
+        'OCR',
+        'Cross-checking label columns…',
+        `Neural OCR on ${jobs.length} column crop(s).`,
+      );
+      const perJob = await extractEasyOcrTextsForJobs(
+        jobs.map((job) => ({ bytes: job.png, layout: job.layout, ...(job.bands ? { bands: job.bands } : {}) })),
+        modelDir!,
+      );
+      let easyWins = 0;
+      for (const [index, job] of jobs.entries()) {
+        const easyTexts = perJob[index] ?? [];
+        if (easyTexts.length === 0) continue;
+        const merged = bestStructuredColumnRead(job.current, easyTexts);
+        if (!merged.easyWon) continue;
+        easyWins += 1;
+        job.assign(merged.text);
+        if (job.sliceTarget && rowBandSliceTexts && job.sliceTarget.count > 0) {
+          const lines = merged.text.split('\n');
+          while (lines.length < job.sliceTarget.count) lines.push('');
+          if (job.sliceTarget.kind === 'label') {
+            rowBandSliceTexts.labelSlices = lines.slice(0, job.sliceTarget.count);
+          } else {
+            const slices = rowBandSliceTexts.valueSlices[job.sliceTarget.index];
+            if (slices) {
+              rowBandSliceTexts.valueSlices[job.sliceTarget.index] = lines.slice(0, job.sliceTarget.count);
+            }
+          }
+        }
+        appendImportJobDebug(
+          `shared-label easy: column ${index + 1}/${jobs.length} EasyOCR won (tess ${merged.tessScore.toFixed(1)} → easy ${merged.easyScore.toFixed(1)})`,
+        );
+      }
+      appendImportJobDebug(
+        `shared-label easy: ${jobs.length} column(s) in ${((Date.now() - startedAt) / 1000).toFixed(1)}s, ${easyWins} switched to EasyOCR`,
+      );
     }
   }
 
@@ -1093,8 +1358,9 @@ async function ocrSplitSingleLabel(
 
   if (!readiness.settled && modelDir) {
     const easyStart = Date.now();
-    const [leftEasy, rightEasy] = await Promise.all(
-      dewarped.map((d) => extractEasyOcrTextsFromVariants([d.bytes], modelDir, 'rows')),
+    const [leftEasy = [], rightEasy = []] = await extractEasyOcrTextsForJobs(
+      dewarped.map((d) => ({ bytes: d.bytes, layout: 'rows' as const })),
+      modelDir,
     );
     for (const text of stitchSplitHalfCandidates([...leftEasy, ...leftTexts], [...rightEasy, ...rightTexts])) {
       if (!candidates.includes(text)) candidates.unshift(text);

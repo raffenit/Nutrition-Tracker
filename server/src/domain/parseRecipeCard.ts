@@ -11,6 +11,8 @@ export type ParsedRecipeCard = {
 const INGREDIENT_HEADING = /^(ingredients|what'?s in (the )?box|in (your|the) box|you'?ll need)\b/i;
 const INSTRUCTION_HEADING = /^(cooking )?(instructions|directions|steps|method)\b/i;
 const NUTRITION_HEADING = /^(nutrition values|nutrition facts|nutrition information|per meal)\b/i;
+/** Product pages list "Ingredients" then keep going with allergen/disclaimer prose — a recipe card's ingredient list ends at the next section. */
+const SECTION_BOUNDARY = /^(allergen|allergy|disclaimers?|directions for use|warnings?|nutrition facts|nutrition information|ingredients? statement|actual product)/i;
 const MEAL_KIT_BRAND = /\b(green chef|hello\s*fresh|blue apron|home chef|sun basket|factor|every plate)\b/i;
 
 export function parseRecipeCard(text: string): ParsedRecipeCard {
@@ -19,7 +21,10 @@ export function parseRecipeCard(text: string): ParsedRecipeCard {
   const dirStart = findHeading(lines, INSTRUCTION_HEADING);
   const nutStart = findHeading(lines, NUTRITION_HEADING);
 
-  const ingredientEnd = nextSectionAfter(ingStart, dirStart, nutStart, lines.length);
+  const recipeSectionEnd = nextSectionAfter(ingStart, dirStart, nutStart, lines.length);
+  const boundaryEnd = sectionBoundaryAfter(lines, ingStart);
+  const ingredientEnd =
+    recipeSectionEnd === -1 ? boundaryEnd : Math.min(recipeSectionEnd, boundaryEnd);
   const instructionEnd = nutStart >= 0 ? nutStart : lines.length;
 
   const ingredientLines = ingStart >= 0
@@ -33,9 +38,19 @@ export function parseRecipeCard(text: string): ParsedRecipeCard {
   const title = guessTitle(lines, ingStart, dirStart, nutStart);
   const brand = guessBrand(text, lines);
 
+  // Product pages also carry "Ingredients" + Nutrition Facts — require recipe
+  // structure (quantified ingredient lines, a serves count, or numbered steps)
+  // before calling a no-instructions card a recipe.
+  const quantifiedIngredients = ingredientLines.filter((line) => /\d/.test(line)).length;
+  const recipeStructuredIngredients =
+    ingredientLines.length >= 2 &&
+    (quantifiedIngredients / ingredientLines.length >= 0.5 || /\bserves?\s+\d+\b/i.test(text));
+  const numberedSteps = lines.filter((line) => /^\d{1,2}[.)]\s+\S/.test(line)).length >= 2;
+
   const looksLikeRecipeCard =
     (ingredientLines.length >= 2 && instructions.length >= 40)
-    || (ingredientLines.length >= 2 && nutrition.looksLikeLabel)
+    || (recipeStructuredIngredients && nutrition.looksLikeLabel)
+    || (numberedSteps && ingredientLines.length >= 2 && nutrition.looksLikeLabel)
     || (instructions.length >= 40 && nutrition.looksLikeLabel && /per meal|nutrition values/i.test(text));
 
   return { title, brand, ingredientLines, instructions, looksLikeRecipeCard };
@@ -52,6 +67,14 @@ function nextSectionAfter(from: number, ...laterHeadings: number[]): number {
   const candidates = laterHeadings.filter((value) => value > from);
   if (candidates.length === 0) return -1;
   return Math.min(...candidates);
+}
+
+/** First product-page section boundary after the ingredients heading (lines.length when none). */
+function sectionBoundaryAfter(lines: string[], from: number): number {
+  for (let index = Math.max(0, from + 1); index < lines.length; index += 1) {
+    if (SECTION_BOUNDARY.test(lines[index] ?? '')) return index;
+  }
+  return lines.length;
 }
 
 function sliceSection(lines: string[], start: number, end: number): string[] {

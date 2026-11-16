@@ -987,6 +987,7 @@ export function buildSharedLabelPlanFromPipeline(
     valueRowBandSlicesPerColumn: perColumnRows.valueRowBandSlicesPerColumn,
     valueColumnGlareMasks: perColumnRows.valueColumnGlareMasks,
     valueColumnWarpProbes: perColumnRows.valueColumnWarpProbes,
+    rowBandReconciledColumns: perColumnRows.rowBandReconciledColumns,
     headerConsensusRowBandSlices: perColumnRows.headerConsensusRowBandSlices,
     headerLabelRowBandSlices: perColumnRows.headerLabelRowBandSlices,
     headerRowBandSlicesPerColumn: perColumnRows.headerRowBandSlicesPerColumn,
