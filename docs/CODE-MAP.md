@@ -40,6 +40,8 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Column strip stitch | `server/src/domain/stitchColumnStripTexts.ts` | `stitchColumnStripOcrTexts`; wired in `extractImageLabel` |
 | Shared label grid stitch | `server/src/domain/stitchSharedLabelGridTexts.ts` | `stitchSharedLabelGridTexts`, `diagnoseSharedLabelGridStitch`; tried before full-width strips in `extractImageLabel` |
 | Split single label | `server/src/integrations/splitSingleLabel.ts`, `server/src/domain/stitchSplitLabelHalves.ts` | `detectSplitSingleLabel`, `stitchSplitLabelHalves` when `singleSubjectInFocus` |
+| Curved-rule dewarp (split halves) | `server/src/domain/curvedRuleDewarp.ts`, `server/src/integrations/curvedLabelDewarp.ts` | `detectCurvedRules`, `dewarpToStraightRules`, `dewarpCurvedLabelRules`, `buildDewarpedStripOcrVariants` |
+| %DV row inference (unreadable names) | `server/src/domain/labelDailyValueRowInference.ts` | `inferDailyValueRows`, `appendDailyValueInferredRows` |
 | Image analysis geometry (shared) | `server/src/domain/imageAnalysisGeometry.ts` | `IMAGE_ANALYSIS_WIDTH`, side/crop fractions |
 | Column-strip geometry | `server/src/domain/columnStripDetectParams.ts` | `DEFAULT_COLUMN_STRIP_DETECT_PARAMS` |
 | Focus crop geometry | `server/src/domain/focusCropParams.ts` | `DEFAULT_FOCUS_CROP_PARAMS` |

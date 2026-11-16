@@ -30,6 +30,7 @@ import {
   type SharedLabelStitchOptions,
 } from '../domain/stitchSharedLabelGridTexts.js';
 import { stitchSplitLabelHalves } from '../domain/stitchSplitLabelHalves.js';
+import { appendDailyValueInferredRows } from '../domain/labelDailyValueRowInference.js';
 import {
   mergeSlotReadingsAcrossCandidates,
 } from '../domain/labelSlotExtract.js';
@@ -70,6 +71,7 @@ import {
   type VarietyPackPipelineRunResult,
 } from './varietyPackGridPipeline.js';
 import { detectSplitSingleLabel, extractSplitSingleLabelBuffers } from './splitSingleLabel.js';
+import { buildDewarpedStripOcrVariants, dewarpCurvedLabelRules } from './curvedLabelDewarp.js';
 import {
   buildColumnStripOcrVariants,
   buildRowBandOcrVariants,
@@ -176,6 +178,25 @@ export async function extractImageLabel(
   const sharedRailPlan = varietyPackPreflight?.plan ?? null;
   const skipFullPageForSharedRail = Boolean(sharedRailPlan && geometryStep4Ok);
 
+  // The in-focus crop loses the blur contrast that marks a single subject, so split-label
+  // detection runs on the upload with the pre-crop hint when a focus crop was applied.
+  const splitSource =
+    resolved.focusCropApplied && resolved.hintBeforeFocus?.singleSubjectInFocus
+      ? { bytes, hint: resolved.hintBeforeFocus }
+      : { bytes: geometryBytes, hint: activeHint };
+  const splitLabel =
+    !skipFullPageForSharedRail && splitSource.hint.singleSubjectInFocus
+      ? await ocrSplitSingleLabel(splitSource.bytes, cachePath, options?.easyocrModelDir, splitSource.hint)
+      : null;
+  if (splitLabel) {
+    timer.lap('ocr_split_single', `${splitLabel.candidates.length} stitched candidate(s)`);
+  }
+  // Full-page EasyOCR over two side-by-side halves reads across the split; skip it when the halves already read well.
+  const splitSkipsFullPageEasy = Boolean(
+    splitLabel && splitLabel.readiness.missing.length <= SPLIT_LABEL_MAX_MISSING_CORE_FOR_EASY_SKIP,
+  );
+  if (splitSkipsFullPageEasy) appendImportJobDebug('split-single-label: skip full-page EasyOCR');
+
   const profiles: OcrLayoutProfile[] = [initialOcrLayoutProfile(activeHint)];
   let candidates: string[] = [];
   let layout = inferLabelLayoutFromText(['']);
@@ -200,7 +221,7 @@ export async function extractImageLabel(
       activeHint,
       profiles[0]!,
       'full',
-      { timer, fullPageLapId: 'ocr_full_page' },
+      { timer, fullPageLapId: 'ocr_full_page', ...(splitSkipsFullPageEasy ? { allowEasyOcr: false } : {}) },
     );
     layout = inferLabelLayoutFromText(candidates);
     if (shouldRetryWideTableOcr(activeHint, layout) && !geometryStep4Ok) {
@@ -222,19 +243,9 @@ export async function extractImageLabel(
     }
   }
 
-  // The in-focus crop loses the blur contrast that marks a single subject, so split-label
-  // detection runs on the upload with the pre-crop hint when a focus crop was applied.
-  const splitSource =
-    resolved.focusCropApplied && resolved.hintBeforeFocus?.singleSubjectInFocus
-      ? { bytes, hint: resolved.hintBeforeFocus }
-      : { bytes: geometryBytes, hint: activeHint };
-  if (splitSource.hint.singleSubjectInFocus && layout.kind === 'single') {
-    const splitLabel = await ocrSplitSingleLabel(splitSource.bytes, cachePath, options?.easyocrModelDir, splitSource.hint);
-    if (splitLabel) {
-      timer.lap('ocr_split_single', `${splitLabel.length} chars`);
-      candidates = mergeCandidateLists([splitLabel], candidates);
-      layout = inferLabelLayoutFromText(candidates);
-    }
+  if (splitLabel && (layout.kind === 'single' || splitSkipsFullPageEasy)) {
+    candidates = mergeCandidateLists(splitLabel.candidates, candidates);
+    layout = inferLabelLayoutFromText(candidates);
   }
 
   let varietyPackExpectedColumns: number | undefined;
@@ -344,7 +355,7 @@ function columnStripTesseractVariantCount(): number {
 function easyOcrAllowedForMode(mode: 'full' | 'columnStrip' | 'rowBand', allowEasyOcr?: boolean): boolean {
   if (mode === 'rowBand') return false;
   if (allowEasyOcr === false) return false;
-  if (mode === 'columnStrip' && process.env.EASYOCR_COLUMN_STRIPS !== '1') return false;
+  if (mode === 'columnStrip' && allowEasyOcr !== true && process.env.EASYOCR_COLUMN_STRIPS !== '1') return false;
   return true;
 }
 
@@ -1003,12 +1014,44 @@ async function ocrAndStitchSharedLabelPlan(
   return null;
 }
 
+/** Core macros a split-label read must reach before full-page EasyOCR is skipped. */
+const SPLIT_LABEL_MAX_MISSING_CORE_FOR_EASY_SKIP = 2;
+
+async function readSplitHalfWithTesseract(half: Buffer, cachePath: string, side: string): Promise<string[]> {
+  const variants = await buildDewarpedStripOcrVariants(half);
+  const batch = await recognizeTesseractBatch(variants, cachePath, [PSM.SINGLE_BLOCK], `split-${side}`);
+  return batch.texts;
+}
+
+function stitchSplitHalfCandidates(leftTexts: string[], rightTexts: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (stitched: string | null) => {
+    const text = stitched ? appendDailyValueInferredRows(stitched) : null;
+    if (text && !seen.has(text)) {
+      seen.add(text);
+      out.push(text);
+    }
+  };
+  const pairs = Math.min(leftTexts.length, rightTexts.length);
+  for (let i = 0; i < pairs; i += 1) push(stitchSplitLabelHalves(leftTexts[i]!, rightTexts[i]!));
+  if (leftTexts.length > 0 && rightTexts.length > 0) {
+    push(stitchSplitLabelHalves(pickBestStripCandidate(leftTexts), pickBestStripCandidate(rightTexts)));
+  }
+  return out;
+}
+
+/**
+ * One panel photographed as two side-by-side halves (curved tub). Each half is dewarped so its
+ * row rules run straight, read with Tesseract on cheap variants, and EasyOCR runs on the
+ * dewarped halves only when the stitched Tesseract reads leave core macros missing or contested.
+ */
 async function ocrSplitSingleLabel(
   bytes: Buffer,
   cachePath: string,
   modelDir: string | undefined,
   hint: Awaited<ReturnType<typeof inferLabelLayoutHint>>,
-): Promise<string | null> {
+): Promise<{ candidates: string[]; readiness: CoreMacroReadiness } | null> {
   const plan = await detectSplitSingleLabel(bytes, hint);
   if (!plan) {
     appendImportJobDebug('split-single-label: detect returned null');
@@ -1017,23 +1060,40 @@ async function ocrSplitSingleLabel(
   appendImportJobDebug(
     `split-single-label: two halves ${plan.strips[0]!.width}px + ${plan.strips[1]!.width}px`,
   );
-  const [leftBuf, rightBuf] = await extractSplitSingleLabelBuffers(plan);
-  const leftText = pickBestStripCandidate(
-    await collectOcrCandidateTexts(leftBuf, cachePath, modelDir, hint, 'default', 'columnStrip'),
-  );
-  const rightText = pickBestStripCandidate(
-    await collectOcrCandidateTexts(rightBuf, cachePath, modelDir, hint, 'default', 'columnStrip'),
-  );
+  const halves = await extractSplitSingleLabelBuffers(plan);
+  const dewarped = await Promise.all(halves.map((half) => dewarpCurvedLabelRules(half)));
   appendImportJobDebug(
-    `split-single-label: OCR left ${leftText.trim().length} chars, right ${rightText.trim().length} chars`,
+    `split-single-label: dewarp ${dewarped
+      .map((d) => `${d.applied ? 'on' : 'off'} (${d.rules.length} rules, spread ${d.maxSpreadPx.toFixed(1)}px)`)
+      .join(' / ')}`,
   );
-  const merged = stitchSplitLabelHalves(leftText, rightText);
-  if (!merged) {
+  const leftTexts = await readSplitHalfWithTesseract(dewarped[0]!.bytes, cachePath, 'left');
+  const rightTexts = await readSplitHalfWithTesseract(dewarped[1]!.bytes, cachePath, 'right');
+  const candidates = stitchSplitHalfCandidates(leftTexts, rightTexts);
+  let readiness = assessCoreMacroReadiness(candidates);
+  appendImportJobDebug(
+    `split-single-label: Tess ${candidates.length} stitched candidate(s); missing ${readiness.missing.join(', ') || '—'}; contested ${readiness.contested.join(', ') || '—'}`,
+  );
+
+  if (!readiness.settled && modelDir) {
+    const [leftEasy, rightEasy] = await Promise.all(
+      dewarped.map((d) => extractEasyOcrTextsFromVariants([d.bytes], modelDir)),
+    );
+    for (const text of stitchSplitHalfCandidates([...leftEasy, ...leftTexts], [...rightEasy, ...rightTexts])) {
+      if (!candidates.includes(text)) candidates.unshift(text);
+    }
+    readiness = assessCoreMacroReadiness(candidates);
+    appendImportJobDebug(
+      `split-single-label: + Easy on dewarped halves; missing ${readiness.missing.join(', ') || '—'}; contested ${readiness.contested.join(', ') || '—'}`,
+    );
+  }
+
+  if (candidates.length === 0) {
     appendImportJobDebug('split-single-label: stitch returned null');
     return null;
   }
   appendImportJobDebug('split-single-label: stitch OK');
-  return merged;
+  return { candidates, readiness };
 }
 
 function pickBestStripCandidate(candidates: string[]): string {
