@@ -16,7 +16,7 @@ export function stripLeadingZeros(text: string): string {
 }
 
 /** Numeric field that can be cleared while editing instead of snapping back to a stuck leading 0. */
-export function DecimalInput({ value, onValueChange, inputMode = 'decimal', ...rest }: DecimalInputProps) {
+export function DecimalInput({ value, onValueChange, inputMode = 'decimal', step = 'any', ...rest }: DecimalInputProps) {
   const [text, setText] = useState(String(value));
   useEffect(() => {
     setText((current) => (parseDecimalText(current) === value ? current : String(value)));
@@ -26,6 +26,7 @@ export function DecimalInput({ value, onValueChange, inputMode = 'decimal', ...r
       {...rest}
       type="number"
       inputMode={inputMode}
+      step={step}
       value={text}
       onChange={(event) => {
         const next = stripLeadingZeros(event.target.value);
