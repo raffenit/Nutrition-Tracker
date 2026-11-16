@@ -88,3 +88,12 @@ test('parseMenuFromSource prefers sectioned parsing when it finds more items', (
   ].join('\n');
   assert.deepEqual(parseMenuFromSource(text, null).map((i) => i.name), ['LEMONADE, 30 ounces', 'LEMONADE, 32 ounces']);
 });
+
+test('a bare "Carbs" header keeps every column aligned', () => {
+  const text = ['Item  Calories  Fat  Sodium  Carbs  Fiber  Protein', 'Grain Bowl \t520 \t18 \t890 \t60 \t9 \t42'].join('\n');
+  const [bowl] = parseMenuTextSections(text);
+  assert.equal(bowl?.name, 'Grain Bowl');
+  assert.equal(bowl?.nutrients.calories, 520);
+  assert.equal(bowl?.nutrients.carbs, 60);
+  assert.equal(bowl?.nutrients.protein, 42);
+});

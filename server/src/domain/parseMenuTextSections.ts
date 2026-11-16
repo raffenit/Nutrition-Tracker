@@ -15,7 +15,7 @@ const HEADER_PHRASES: Array<{ role: HeaderRole; pattern: string }> = [
   { role: 'saturatedFat', pattern: 'saturated\\s+fat|sat\\.?\\s*fat' },
   { role: 'skip', pattern: 'trans\\s+fat' },
   { role: 'fat', pattern: 'total\\s+fat' },
-  { role: 'carbs', pattern: 'total\\s+carb(?:ohydrates?|s|\\.)?|carbohydrates?' },
+  { role: 'carbs', pattern: 'total\\s+carb(?:ohydrates?|s|\\.)?|carbohydrates?|carbs?' },
   { role: 'skip', pattern: 'added\\s+sugars?' },
   { role: 'sugar', pattern: '(?:total\\s+)?sugars?' },
   { role: 'fiber', pattern: '(?:dietary\\s+)?fib(?:er|re)' },
