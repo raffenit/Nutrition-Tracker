@@ -1254,14 +1254,13 @@ export function rowBandSlicesFromSkewedColumnBoundaries(
   for (let i = 0; i < n; i += 1) {
     const botL = leftBoundaryYs[i]!;
     const botR = rightBoundaryYs[i]!;
-    const top = Math.min(topL, topR);
-    const bottom = Math.max(botL, botR);
-    const height = bottom - top;
-    if (height >= minSliceHeight) {
+    const envelopeHeight = Math.max(botL, botR) - Math.min(topL, topR);
+    if (envelopeHeight >= minSliceHeight) {
+      // Left-edge geometry; the right edge is expressed only through the skew offsets.
       slices.push({
         rowIndex: slices.length,
-        top,
-        height,
+        top: topL,
+        height: Math.max(1, botL - topL),
         topSkewPx: topR - topL,
         bottomSkewPx: botR - botL,
       });
@@ -1269,14 +1268,14 @@ export function rowBandSlicesFromSkewedColumnBoundaries(
     topL = botL;
     topR = botR;
   }
-  const top = Math.min(topL, topR);
-  const tailHeight = bodyBottom - top;
+  const tailHeight = bodyBottom - Math.min(topL, topR);
   if (tailHeight >= minSliceHeight) {
     slices.push({
       rowIndex: slices.length,
-      top,
-      height: tailHeight,
+      top: topL,
+      height: Math.max(1, bodyBottom - topL),
       topSkewPx: topR - topL,
+      bottomSkewPx: 0,
     });
   }
   return slices.map((slice, rowIndex) => ({ ...slice, rowIndex }));

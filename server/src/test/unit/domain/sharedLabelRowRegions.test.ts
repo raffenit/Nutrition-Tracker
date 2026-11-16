@@ -10,6 +10,7 @@ import {
   columnInkBoundaryYsAlongMesh,
   inferColumnBodyRuleYsSurface,
   rowBandSlicesFromSkewedColumnBoundaries,
+  rowBandSliceAxisAlignedBounds,
   rowBandSlicesForHeaderSpan,
   syncValueHeaderBandsToLabelHeader,
   filterLabelOnlyPreambleRulesFromBodyMesh,
@@ -1037,4 +1038,11 @@ test('rowBandSlicesForHeaderSpan keeps rule band adjacent to body top (% Daily V
   const slices = rowBandSlicesForHeaderSpan(top, bottom, [dvRule], [dvRule], 52);
   assert.equal(slices.length, 2);
   assert.ok(slices[1]!.top >= dvRule - 8 && slices[1]!.top + slices[1]!.height <= bottom);
+});
+test('rowBandSlicesFromSkewedColumnBoundaries crop bounds cover the skewed quad without double skew', () => {
+  const slices = rowBandSlicesFromSkewedColumnBoundaries(100, 200, [140], [150]);
+  const first = rowBandSliceAxisAlignedBounds(slices[0]!);
+  assert.deepEqual(first, { top: 100, height: 50 });
+  const tail = rowBandSliceAxisAlignedBounds(slices[1]!);
+  assert.deepEqual(tail, { top: 140, height: 60 });
 });
