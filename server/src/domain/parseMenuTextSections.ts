@@ -36,7 +36,7 @@ const MAX_LEADING_NAME_NUMBERS = 2;
 const MAX_VARIANT_PERIOD = 6;
 
 type Token = { text: string; line: number; cell: number };
-type RawRecord = { nameLines: string[][]; servingLabel: string | null; values: string[] };
+type RawRecord = { nameLines: string[][]; servingLabel: string | null; values: string[]; sizeLabels: string[] | null };
 
 function headerRoles(line: string): HeaderRole[] {
   const stripped = line.replace(/\([^)]*\)/g, ' ');
@@ -174,6 +174,7 @@ function sectionRecords(lines: string[], section: Section): RawRecord[] {
   const records: RawRecord[] = [];
   let text: Token[] = [];
   let numbers: Token[] = [];
+  let sizeLabels: string[] | null = null;
 
   const flush = () => {
     if (numbers.length === 0) return;
@@ -188,7 +189,7 @@ function sectionRecords(lines: string[], section: Section): RawRecord[] {
       const lead = numbers.length - expected;
       const nameTokens = [...text, ...numbers.slice(0, lead)];
       const values = numbers.slice(lead).map((t) => t.text);
-      const record = toRecord(nameTokens, values, section.hasServingColumn);
+      const record = toRecord(nameTokens, values, section.hasServingColumn, sizeLabels);
       if (record) records.push(record);
     }
     text = [];
@@ -197,6 +198,12 @@ function sectionRecords(lines: string[], section: Section): RawRecord[] {
 
   for (let li = section.startLine; li < section.endLine; li += 1) {
     const line = lines[li]!.trim();
+    const size = line.match(SIZE_HEADING);
+    if (size) {
+      flush();
+      sizeLabels = size[1]!.split('/').map((n) => `${n.trim()} ${size[2]!.toLowerCase()}`);
+      continue;
+    }
     if (!line || isNoiseLine(line) || section.variantLines.has(li)) continue;
     const tokens = tokenizeLine(line, li);
     const lastText = tokens.map((t) => isNumeric(t.text)).lastIndexOf(false);
@@ -212,7 +219,12 @@ function sectionRecords(lines: string[], section: Section): RawRecord[] {
   return records;
 }
 
-function toRecord(nameTokens: Token[], values: string[], hasServingColumn: boolean): RawRecord | null {
+function toRecord(
+  nameTokens: Token[],
+  values: string[],
+  hasServingColumn: boolean,
+  sizeLabels: string[] | null,
+): RawRecord | null {
   const byLine = new Map<number, Token[]>();
   for (const token of nameTokens) byLine.set(token.line, [...(byLine.get(token.line) ?? []), token]);
   const lineTokens = [...byLine.values()].slice(-MAX_KEPT_NAME_LINES);
@@ -226,7 +238,7 @@ function toRecord(nameTokens: Token[], values: string[], hasServingColumn: boole
   }
   const nameLines = lineTokens.map((tokens) => tokens.map((t) => t.text)).filter((l) => l.length > 0);
   if (nameLines.length === 0) return null;
-  return { nameLines, servingLabel, values };
+  return { nameLines, servingLabel, values, sizeLabels };
 }
 
 /** Short codes (EZ / REG / XTRA) that head several rows in a section mark portions of the item above. */
@@ -257,10 +269,6 @@ function portionCodes(records: RawRecord[]): Set<string> {
 }
 
 function slashVariantLabels(lines: string[], section: Section): string[] {
-  for (const line of lines.slice(section.startLine, section.endLine)) {
-    const size = line.trim().match(SIZE_HEADING);
-    if (size) return size[1]!.split('/').map((n) => `${n.trim()} ${size[2]!.toLowerCase()}`);
-  }
   for (const line of lines.slice(Math.max(0, section.startLine - 8), section.endLine)) {
     const match = line.match(/\bvalues?\s+for\s+(\S+(?:\s*\/\s*\S+)+)/i);
     if (match) return match[1]!.split('/').map((s) => s.trim());
@@ -339,7 +347,7 @@ export function parseMenuTextSections(text: string): MenuItemDraft[] {
             const parts = value.split('/');
             return parts[Math.min(vi, parts.length - 1)]!;
           });
-          items.push({ name: `${name}, ${slashLabels[vi] ?? `size ${vi + 1}`}`, servingLabel, nutrients: nutrientsFrom(section.roles, values) });
+          items.push({ name: `${name}, ${record.sizeLabels?.[vi] ?? slashLabels[vi] ?? `size ${vi + 1}`}`, servingLabel, nutrients: nutrientsFrom(section.roles, values) });
         }
         continue;
       }

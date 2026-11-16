@@ -102,3 +102,19 @@ test('short one-word item names are kept when no row names a parent item', () =>
   const text = ['Total calories (cal) \tTotal fat (g) \tSodium (mg) \tTotal carbohydrate (g) \tProtein (g)', 'TEA \t0 \t0 \t10 \t0 \t0', 'COLA \t240 \t0 \t45 \t65 \t0'].join('\n');
   assert.deepEqual(parseMenuTextSections(text).map((i) => [i.name, i.nutrients.calories]), [['TEA', 0], ['COLA', 240]]);
 });
+
+test('each slash-size group takes the size heading directly above it', () => {
+  const text = [
+    'Total calories (cal) \tTotal fat (g) \tSodium (mg) \tTotal carbohydrate (g) \tProtein (g)',
+    '16/20 OUNCES',
+    'LEMONADE 200/250 0/0 \t130/160 50/62 \t0/0',
+    '30/32 OUNCES',
+    'ICED TEA 370/400 0/0 \t20/20 94/100 \t0/0',
+  ].join('\n');
+  assert.deepEqual(parseMenuTextSections(text).map((i) => i.name), [
+    'LEMONADE, 16 ounces',
+    'LEMONADE, 20 ounces',
+    'ICED TEA, 30 ounces',
+    'ICED TEA, 32 ounces',
+  ]);
+});
