@@ -133,6 +133,10 @@ export type SharedLabelGridParams = {
   rowBandMinOcrExtractWidthImageFraction: number;
   /** Min row-band crop width as a fraction of {@link rowPitchPx} (whichever is larger with image fraction, capped at column width). */
   rowBandMinOcrExtractWidthPitchFraction: number;
+  /** Deskew row-band OCR crops when mean edge skew implies at least this baseline angle (deg). */
+  rowBandDeskewMinAngleDeg: number;
+  /** Skip deskew beyond this angle — likely a detection artifact, not pack curvature (deg). */
+  rowBandDeskewMaxAngleDeg: number;
   /** Margin around detected label+value grid when cropping previews and OCR bands (fraction of image width). */
   gridEnvelopeMarginImageFraction: number;
   /** Sparse value grid: gutter level as fraction of value-region profile peak. */
@@ -208,6 +212,8 @@ export const DEFAULT_SHARED_LABEL_GRID_PARAMS: SharedLabelGridParams = {
   rowBandMinOcrExtractHeightPitchFraction: 0.55,
   rowBandMinOcrExtractWidthImageFraction: 48 / W,
   rowBandMinOcrExtractWidthPitchFraction: 0.65,
+  rowBandDeskewMinAngleDeg: 0.35,
+  rowBandDeskewMaxAngleDeg: 6,
   gridEnvelopeMarginImageFraction: 20 / W,
   valueGutterThresholdRatio: 0.48,
   valueRawGutterSpacingFraction: 3 / W,
