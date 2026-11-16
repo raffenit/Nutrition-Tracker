@@ -29,6 +29,7 @@ import { requireUser } from '../http/access.js';
 import { readJson, sendJson } from '../http/respond.js';
 import { route, type Ctx, type Route } from '../http/router.js';
 import type { Food, Nutrients, SearchHit } from '../types.js';
+import type { LabelServingFields } from '../domain/labelServingVote.js';
 
 const MAX_UPLOAD = 12 * 1024 * 1024;
 
@@ -213,6 +214,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       if (extracted.slotMergedNutrients && !varietyPackPanels) {
         applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
       }
+      if (extracted.serving && !varietyPackPanels) applyVotedServing(built.draft, extracted.serving);
       const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
       const saved = insertUpload(ctx.db, {
         kind,
@@ -427,6 +429,7 @@ async function readExtractedText(
   usedOcr?: boolean;
   pageTexts: string[] | null;
   varietyPackExpectedColumns?: number;
+  serving?: LabelServingFields;
 }> {
   try {
     if (kind === 'pdf') {
@@ -441,7 +444,7 @@ async function readExtractedText(
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
       return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts };
     }
-    const { text, slotMergedNutrients, varietyPackExpectedColumns } = await extractImageLabel(
+    const { text, slotMergedNutrients, varietyPackExpectedColumns, serving } = await extractImageLabel(
       bytes,
       config.tessdataDir,
       {
@@ -454,6 +457,7 @@ async function readExtractedText(
       slotMergedNutrients,
       pageTexts: null,
       varietyPackExpectedColumns,
+      serving,
     };
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -498,4 +502,17 @@ function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; bytes: 
     });
     ctx.req.pipe(parser);
   });
+}
+
+/** Fill serving fields the primary OCR text missed with values voted across all candidates. */
+function applyVotedServing(
+  draft: { servingLabel: string; servingsPerContainer: number | null },
+  serving: LabelServingFields,
+): void {
+  if (serving.servingLabel && (!draft.servingLabel || draft.servingLabel === '1 serving')) {
+    draft.servingLabel = serving.servingLabel;
+  }
+  if (serving.servingsPerContainer != null && draft.servingsPerContainer == null) {
+    draft.servingsPerContainer = serving.servingsPerContainer;
+  }
 }

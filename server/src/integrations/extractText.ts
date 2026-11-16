@@ -88,6 +88,7 @@ import {
   type TesseractLineBox,
   resetTesseractRunCounter,
 } from './tesseractOcr.js';
+import { voteServingFields, type LabelServingFields } from '../domain/labelServingVote.js';
 
 /** Cap OCR text candidates while still feeding the per-slot merge pool. */
 const MAX_OCR_CANDIDATES = 28;
@@ -117,6 +118,8 @@ export type ImageLabelExtraction = {
   varietyPackExpectedColumns?: number;
   /** Wall-clock stage breakdown for this extract (all layout classes). */
   pipelineStages?: PipelineStageTiming[];
+  /** Serving size / servings per container voted across every OCR candidate. */
+  serving?: LabelServingFields;
 };
 
 type StitchedColumnOcrResult = {
@@ -292,6 +295,7 @@ export async function extractImageLabel(
 
   reportImportJobStep('Parse', 'Matching label rows…', 'Selecting the best OCR candidate and merging nutrients.');
   const slotMergedNutrients = mergeSlotReadingsAcrossCandidates(candidates);
+  const serving = voteServingFields(candidates);
   timer.lap('parse_select', layout.kind);
   const textIdx = pickImportTextCandidateIndex(candidates, layout, {
     varietyPackExpectedColumns,
@@ -300,7 +304,7 @@ export async function extractImageLabel(
   const text = candidates[textIdx] ?? candidates[0] ?? '';
   reportImportJobStep('Draft', 'Building your draft…', 'Combining structured import fields.');
   const pipelineStages = timer.finish('total', layout.kind);
-  return { text, slotMergedNutrients, varietyPackExpectedColumns, pipelineStages };
+  return { text, slotMergedNutrients, varietyPackExpectedColumns, pipelineStages, serving };
 }
 
 /** Legacy: single string (primary candidate after slot merge scoring). */
