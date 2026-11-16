@@ -17,6 +17,8 @@ Logs: **`local/test-last-run-quick.log`** (quick), **`local/test-last-run.log`**
 ### What full adds
 
 - **`*.localFixtures.test.ts`** — real photos under `local/test-images/` when present; may run `extractImageLabel` / Tesseract.
+- Full-pipeline OCR in these tests goes through `extractImageLabelCached` (`server/src/test/fixtures/cachedLocalImageOcr.ts`): results are cached in `local/.ocr-test-cache/`, keyed by image bytes + a hash of all compiled production modules, so repeat runs with no source change (and tests that OCR the same photo) skip OCR. `OCR_TEST_CACHE=0` forces fresh OCR.
+- Integration tests run offline: `testConfig()` sets `openFoodFactsEnabled: false`, so no network calls.
 
 ### Comprehensive (manual — not `npm test`)
 

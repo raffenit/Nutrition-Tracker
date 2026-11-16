@@ -386,7 +386,7 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
 
 async function remoteHits(ctx: Ctx, query: string): Promise<SearchHit[]> {
   const usda = ctx.config.usdaApiKey ? await searchUsda(query, ctx.config.usdaApiKey).catch(() => []) : [];
-  const packaged = await searchOpenFoodFacts(query).catch(() => []);
+  const packaged = ctx.config.openFoodFactsEnabled ? await searchOpenFoodFacts(query).catch(() => []) : [];
   return [...usda, ...packaged];
 }
 

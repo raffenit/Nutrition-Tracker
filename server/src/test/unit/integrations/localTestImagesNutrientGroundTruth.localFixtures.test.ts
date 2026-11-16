@@ -17,7 +17,7 @@ import {
   formatGroundTruthScoreLine,
   type NutrientGroundTruthRegressionSpec,
 } from '../../../domain/labelNutrientGroundTruthRegression.js';
-import { extractImageLabel } from '../../../integrations/extractText.js';
+import { extractImageLabelCached } from '../../fixtures/cachedLocalImageOcr.js';
 import { writeGroundTruthCompareHtmlFiles } from '../../../domain/writeGroundTruthCompareHtml.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
@@ -68,7 +68,7 @@ test(
       }
 
       const bytes = await readFile(imagePath);
-      const result = await extractImageLabel(bytes, tessCache, { easyocrModelDir });
+      const result = await extractImageLabelCached(bytes, tessCache, { easyocrModelDir });
       const parsed = resolveParsedProductsFromOcrText(result.text, gtBundle.layout, result.slotMergedNutrients);
       const rowSpecs = gtBundle.compareFields?.length
         ? inferNutrientRowSpecs(gtBundle.products, gtBundle.compareFields)

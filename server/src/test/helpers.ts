@@ -26,6 +26,7 @@ export function testConfig(): AppConfig {
     easyocrEnabled: false,
     publicDir,
     usdaApiKey: null,
+    openFoodFactsEnabled: false,
     timezone: 'America/Chicago',
     publicUrl: null,
     publishedPort: 3010,
