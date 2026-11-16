@@ -450,7 +450,7 @@ function readAmountWithUnit(slice: string, expected: 'g' | 'mg', slot?: UnitSlot
       const value = correctAmountIfUnitMisreadAsSuffix(literal, 'g', region);
       if (value <= 100) return value;
     }
-    const afterLabel = region.match(/(?:fat|carb|prot|fib\w*|sug\w*)[^\d]{0,8}(\d+(?:\.\d+)?)\b/i);
+    const afterLabel = region.match(/(?:fat|carb|prot|fib\w*|sug\w*)[^\d]{0,8}(\d+(?:\.\d+)?)\b(?!\s*%)/i);
     if (afterLabel) {
       const literal = afterLabel[1] ?? '';
       const value = correctAmountIfUnitMisreadAsSuffix(literal, 'g', region);

@@ -84,3 +84,12 @@ test('a consistent parent row keeps its top-ranked reading', () => {
   ]);
   assert.equal(merged?.carbs, 4);
 });
+
+test('a %DV figure after an unreadable amount is never taken as the gram amount', () => {
+  const merged = mergeSlotReadingsAcrossCandidates([
+    'Protein Gg 10% 5%',
+    'Protein Sg 10% 5%',
+    'Frotein 5g 10% 169',
+  ]);
+  assert.equal(merged?.protein, 5);
+});
