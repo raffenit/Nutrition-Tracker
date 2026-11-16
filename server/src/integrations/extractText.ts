@@ -70,6 +70,7 @@ import {
 } from './sharedLabelValueGrid.js';
 import type { SharedLabelRowBandSlice } from '../domain/sharedLabelGridLayout.js';
 import { rowBandSliceAxisAlignedBounds } from '../domain/sharedLabelRowRegions.js';
+import { dewarpColumnToRowMesh } from '../domain/sharedLabelColumnDewarp.js';
 import type { ColumnStripRegion } from './labelColumnStrips.js';
 import {
   formatVarietyPackStepValidation,
@@ -989,19 +990,54 @@ async function ocrSharedLabelGridColumns(
       jobs.push({ png, layout, current, assign, ...(bands ? { bands } : {}), ...(sliceTarget ? { sliceTarget } : {}) });
     };
 
+    const easyColumnImage = async (
+      png: Buffer,
+      column: ColumnStripRegion,
+      slices: SharedLabelRowBandSlice[],
+    ): Promise<{ png: Buffer; bands?: [number, number][] }> => {
+      try {
+        const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
+        const dewarped = dewarpColumnToRowMesh(
+          { data, width: info.width, height: info.height },
+          slices,
+          Math.max(0, Math.round(column.top)),
+        );
+        if (!dewarped) return { png };
+        const out = await sharp(dewarped.pixels, {
+          raw: { width: dewarped.width, height: dewarped.height, channels: 1 },
+        }).png().toBuffer();
+        const bands = dewarped.rowTops.map(
+          (top, i) => [top / dewarped.height, (top + dewarped.rowHeights[i]!) / dewarped.height] as [number, number],
+        );
+        return { png: out, bands };
+      } catch {
+        return { png };
+      }
+    };
+
     for (const [index, text] of valueTexts.entries()) {
       const column = plan.valueColumns[index];
       const slices = column
         ? rowSurfacesForColumn(plan.valueRowBandSlicesPerColumn[index], 'value', index)
         : [];
-      const bands = column && slices.length > 0 ? rowBandFractionsForColumn(column, slices) : undefined;
-      consider(crops.valueColumns[index], 'rows', text, (t) => {
+      const prepared =
+        column && slices.length > 0 && crops.valueColumns[index]
+          ? await easyColumnImage(crops.valueColumns[index]!, column, slices)
+          : { png: crops.valueColumns[index] as Buffer };
+      const bands =
+        prepared.bands ??
+        (column && slices.length > 0 ? rowBandFractionsForColumn(column, slices) : undefined);
+      consider(prepared.png, 'rows', text, (t) => {
         valueTexts[index] = t;
       }, false, undefined, bands, { kind: 'value', index, count: slices.length });
     }
     const labelSlices = rowSurfacesForColumn(plan.labelRowBandSlices, 'label');
+    const labelPrepared =
+      crops.labelColumn && labelSlices.length > 0
+        ? await easyColumnImage(crops.labelColumn, plan.labelColumn, labelSlices)
+        : { png: crops.labelColumn as Buffer };
     consider(
-      crops.labelColumn,
+      labelPrepared.png,
       'rows',
       labelText,
       (t) => {
@@ -1009,7 +1045,8 @@ async function ocrSharedLabelGridColumns(
       },
       true,
       (t) => isWeakSharedLabelRead(t, 'label'),
-      labelSlices.length > 0 ? rowBandFractionsForColumn(plan.labelColumn, labelSlices) : undefined,
+      labelPrepared.bands ??
+        (labelSlices.length > 0 ? rowBandFractionsForColumn(plan.labelColumn, labelSlices) : undefined),
       { kind: 'label', index: 0, count: labelSlices.length },
     );
     consider(crops.headerBand, 'lines', headerText, (t) => {
