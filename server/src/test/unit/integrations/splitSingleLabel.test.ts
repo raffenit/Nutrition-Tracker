@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import sharp from 'sharp';
-import { detectSplitSingleLabel } from '../../../integrations/splitSingleLabel.js';
+import { detectSplitSingleLabel, extractSplitSingleLabelBuffers } from '../../../integrations/splitSingleLabel.js';
 import { runVarietyPackGridPipeline } from '../../../integrations/varietyPackGridPipeline.js';
 import { detectSharedLabelValueGrid } from '../../../integrations/sharedLabelValueGrid.js';
 
@@ -32,6 +32,25 @@ test('detectSplitSingleLabel finds two equal halves when single-subject hint', a
   assert.equal(plan!.strips.length, 2);
   const ratio = plan!.strips[0]!.width / plan!.strips[1]!.width;
   assert.ok(ratio > 0.8 && ratio < 1.25);
+});
+
+test('detectSplitSingleLabel plan strips lie inside the processed source image, not the upload', async () => {
+  const label = await twoHalvesPng(1100, 400);
+  const bytes = await sharp({
+    create: { width: 2600, height: 900, channels: 3, background: { r: 40, g: 40, b: 40 } },
+  })
+    .composite([{ input: label, left: 1300, top: 250 }])
+    .png()
+    .toBuffer();
+  const plan = await detectSplitSingleLabel(bytes, { singleSubjectInFocus: true, sharpPeakCount: 5 });
+  if (!plan) return;
+  const meta = await sharp(plan.sourceBytes).metadata();
+  for (const strip of plan.strips) {
+    assert.ok(strip.left >= 0 && strip.left + strip.width <= (meta.width ?? 0) + 1);
+    assert.ok(strip.top >= 0 && strip.top + strip.height <= (meta.height ?? 0) + 1);
+  }
+  const halves = await extractSplitSingleLabelBuffers(plan);
+  assert.equal(halves.length, 2);
 });
 
 test('detectSplitSingleLabel skips shared label grid layouts', async () => {

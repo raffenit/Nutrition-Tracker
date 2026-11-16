@@ -222,8 +222,14 @@ export async function extractImageLabel(
     }
   }
 
-  if (activeHint.singleSubjectInFocus && layout.kind === 'single') {
-    const splitLabel = await ocrSplitSingleLabel(geometryBytes, cachePath, options?.easyocrModelDir, activeHint);
+  // The in-focus crop loses the blur contrast that marks a single subject, so split-label
+  // detection runs on the upload with the pre-crop hint when a focus crop was applied.
+  const splitSource =
+    resolved.focusCropApplied && resolved.hintBeforeFocus?.singleSubjectInFocus
+      ? { bytes, hint: resolved.hintBeforeFocus }
+      : { bytes: geometryBytes, hint: activeHint };
+  if (splitSource.hint.singleSubjectInFocus && layout.kind === 'single') {
+    const splitLabel = await ocrSplitSingleLabel(splitSource.bytes, cachePath, options?.easyocrModelDir, splitSource.hint);
     if (splitLabel) {
       timer.lap('ocr_split_single', `${splitLabel.length} chars`);
       candidates = mergeCandidateLists([splitLabel], candidates);
@@ -1011,7 +1017,7 @@ async function ocrSplitSingleLabel(
   appendImportJobDebug(
     `split-single-label: two halves ${plan.strips[0]!.width}px + ${plan.strips[1]!.width}px`,
   );
-  const [leftBuf, rightBuf] = await extractSplitSingleLabelBuffers(bytes, plan);
+  const [leftBuf, rightBuf] = await extractSplitSingleLabelBuffers(plan);
   const leftText = pickBestStripCandidate(
     await collectOcrCandidateTexts(leftBuf, cachePath, modelDir, hint, 'default', 'columnStrip'),
   );
