@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  curvedRuleParamsForHeight,
   curvedRuleY,
   detectCurvedRules,
   dewarpToStraightRules,
@@ -9,13 +10,13 @@ import {
 } from '../../../domain/curvedRuleDewarp.js';
 
 /** White image with thin dark rules that sag like rows on a cylinder: y = base + k·((x − cx)/cx)². */
-function curvedRulesImage(width: number, height: number, bases: number[], sag: number): Uint8Array {
+function curvedRulesImage(width: number, height: number, bases: number[], sag: number, halfThickness = 1): Uint8Array {
   const data = new Uint8Array(width * height).fill(235);
   const cx = width / 2;
   for (const base of bases) {
     for (let x = 0; x < width; x += 1) {
       const y = Math.round(base + sag * ((x - cx) / cx) ** 2);
-      for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dy = -halfThickness; dy <= halfThickness; dy += 1) {
         const yy = y + dy;
         if (yy >= 0 && yy < height) data[yy * width + x] = 20;
       }
@@ -64,4 +65,15 @@ test('straight rules report near-zero spread', () => {
   const rules = detectCurvedRules({ data: curvedRulesImage(width, height, [50, 120], 0), width, height });
   assert.equal(rules.length, 2);
   assert.ok(maxRuleSpreadPx(rules, width) < 1.5);
+});
+
+test('rule thickness limits scale with image height', () => {
+  const width = 800;
+  const height = 2400;
+  const bases = [300, 900, 1500, 2100];
+  // 17px rules: a 2.4× photo of rules that are ~7px at the reference height.
+  const image = { data: curvedRulesImage(width, height, bases, 36, 8), width, height };
+  assert.equal(detectCurvedRules(image).length, 0);
+  assert.equal(detectCurvedRules(image, curvedRuleParamsForHeight(height)).length, bases.length);
+  assert.deepEqual(curvedRuleParamsForHeight(600), curvedRuleParamsForHeight(1000));
 });

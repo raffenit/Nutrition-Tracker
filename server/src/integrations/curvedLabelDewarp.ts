@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import {
+  curvedRuleParamsForHeight,
   detectCurvedRules,
   dewarpToStraightRules,
   maxRuleSpreadPx,
@@ -22,7 +23,7 @@ export type CurvedLabelDewarpResult = {
 export async function dewarpCurvedLabelRules(bytes: Buffer): Promise<CurvedLabelDewarpResult> {
   const { data, info } = await sharp(bytes).rotate().greyscale().normalize().raw().toBuffer({ resolveWithObject: true });
   const image = { data, width: info.width, height: info.height };
-  const rules = detectCurvedRules(image);
+  const rules = detectCurvedRules(image, curvedRuleParamsForHeight(info.height));
   const maxSpreadPx = maxRuleSpreadPx(rules, info.width);
   const applied = rules.length >= MIN_RULES_TO_DEWARP && maxSpreadPx >= MIN_RULE_SPREAD_TO_DEWARP_PX;
   const pixels = applied ? dewarpToStraightRules(image, rules) : data;

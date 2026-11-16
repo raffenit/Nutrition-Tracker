@@ -43,6 +43,22 @@ export const DEFAULT_CURVED_RULE_PARAMS: CurvedRuleDetectParams = {
   minSupportFraction: 0.5,
 };
 
+/** Image height the pixel thresholds in {@link DEFAULT_CURVED_RULE_PARAMS} are tuned for. */
+export const CURVED_RULE_REFERENCE_HEIGHT_PX = 1000;
+
+/** Scale pixel thresholds with image height so a higher-resolution photo of the same label still qualifies. */
+export function curvedRuleParamsForHeight(
+  height: number,
+  base: CurvedRuleDetectParams = DEFAULT_CURVED_RULE_PARAMS,
+): CurvedRuleDetectParams {
+  const scale = Math.max(1, height / CURVED_RULE_REFERENCE_HEIGHT_PX);
+  return {
+    ...base,
+    maxRuleThicknessPx: Math.round(base.maxRuleThicknessPx * scale),
+    maxLinkStepPx: Math.round(base.maxLinkStepPx * scale),
+  };
+}
+
 export function curvedRuleY(rule: CurvedRule, x: number): number {
   return rule.a + rule.b * x + rule.c * x * x;
 }
