@@ -17,6 +17,8 @@ export type AppConfig = {
   easyocrEnabled: boolean;
   publicDir: string;
   usdaApiKey: string | null;
+  /** Open Food Facts packaged search (`OPEN_FOOD_FACTS_ENABLED=0` disables; tests run offline). */
+  openFoodFactsEnabled: boolean;
   timezone: string;
   /** Tailscale server URL (`TAILSCALE_SERVER_URL` or legacy `PUBLIC_URL`). */
   publicUrl: string | null;
@@ -50,6 +52,8 @@ export function loadConfig(): AppConfig {
     easyocrEnabled,
     publicDir: process.env.PUBLIC_DIR ?? path.join(process.cwd(), 'public'),
     usdaApiKey: blankToNull(process.env.USDA_API_KEY),
+    openFoodFactsEnabled:
+      process.env.OPEN_FOOD_FACTS_ENABLED !== '0' && process.env.OPEN_FOOD_FACTS_ENABLED !== 'false',
     timezone: process.env.TZ?.trim() || 'America/Chicago',
     publicUrl,
     publishedPort,

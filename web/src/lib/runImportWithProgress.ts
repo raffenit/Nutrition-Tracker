@@ -21,6 +21,8 @@ function snapshotToProgress(snapshot: ImportJobSnapshot): ImportProgressState {
       label: step.short,
       status: step.status,
     })),
+    activity: snapshot.activityLog?.length ? [...snapshot.activityLog] : undefined,
+    pipelineStages: snapshot.pipelineStages?.length ? [...snapshot.pipelineStages] : undefined,
   };
 }
 

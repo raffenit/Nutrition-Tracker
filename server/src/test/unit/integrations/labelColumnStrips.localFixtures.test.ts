@@ -9,7 +9,8 @@ import { parseMultiProductLabelTable } from '../../../domain/parseMultiProductLa
 import { inferLabelLayoutHint } from '../../../integrations/imageLayoutHint.js';
 import { detectColumnStrips } from '../../../integrations/labelColumnStrips.js';
 import { detectSharedLabelValueGrid } from '../../../integrations/sharedLabelValueGrid.js';
-import { extractImageLabel } from '../../../integrations/extractText.js';
+import { OCR_IMPORT_MAX_PRODUCT_COLUMNS } from '../../../domain/columnStripDetectParams.js';
+import { extractImageLabelCached } from '../../fixtures/cachedLocalImageOcr.js';
 import {
   LOCAL_SHARED_LABEL_MULTI_VALUE_JPG,
   LOCAL_SINGLE_PANEL_JPG,
@@ -32,9 +33,9 @@ test(
     const bytes = await readFile(path.join(localImagesDir, FIXTURES.sharedLabelMultiValue));
     const hint = await inferLabelLayoutHint(bytes);
     assert.ok(hint.widePanel);
-    const plan = await detectColumnStrips(bytes, { maxColumns: 14 });
+    const plan = await detectColumnStrips(bytes, { maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS });
     assert.ok(plan, 'expected a column strip plan');
-    const shared = await detectSharedLabelValueGrid(bytes, { maxColumns: 14 });
+    const shared = await detectSharedLabelValueGrid(bytes, { maxColumns: OCR_IMPORT_MAX_PRODUCT_COLUMNS });
     assert.ok(shared, 'expected shared label column + value grid');
     assert.ok(shared!.valueColumns.length >= 4, 'expected multiple value columns');
   },
@@ -57,7 +58,7 @@ test(
   async () => {
     const bytes = await readFile(path.join(localImagesDir, FIXTURES.splitSingle));
     const tess = await import('node:os').then((os) => os.tmpdir());
-    const { text } = await extractImageLabel(bytes, tess, {
+    const { text } = await extractImageLabelCached(bytes, tess, {
       easyocrModelDir: path.join(repoRoot, 'data', 'easyocr-models'),
     });
     const cols = parseMultiProductLabelTable(text);

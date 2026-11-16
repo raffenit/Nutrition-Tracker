@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { WIDE_PANEL_MIN_ASPECT, type LabelLayoutHint } from '../domain/labelLayout.js';
+import { appendImportJobDebug } from '../import/importJobProgress.js';
 import { bytesForFocusAwareOcr, inferDepthOfFieldHint } from './labelFocusHint.js';
 
 export type LabelProcessingImage = {
@@ -55,7 +56,9 @@ export async function inferLabelLayoutHint(bytes: Buffer): Promise<LabelLayoutHi
       sharpPeakCount: focus.sharpPeakCount,
       focusRegion: focus.focusRegion,
     };
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    appendImportJobDebug(`inferLabelLayoutHint: fallback (${reason})`);
     return fallback;
   }
 }

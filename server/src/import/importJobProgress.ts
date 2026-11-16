@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { PipelineStageTiming } from '../domain/ocrPipelineStages.js';
+import { formatPipelineStageSummary } from '../domain/ocrPipelineStages.js';
+import { humanizeImportDebugLine } from './importJobTelegraph.js';
 
 export type ImportJobFlow = 'image' | 'pdf' | 'url';
 
 export type ImportJobStepStatus = 'done' | 'active' | 'pending';
 
 const DEBUG_LOG_MAX = 80;
+const ACTIVITY_LOG_MAX = 8;
 
 export type ImportJobSnapshot = {
   id: string;
@@ -18,6 +22,10 @@ export type ImportJobSnapshot = {
   error: string | null;
   /** Server-side OCR / pipeline trace (poll via GET /api/import-jobs/:id). */
   debugLog: string[];
+  /** Humanized pipeline activity for in-app import progress (from debug telegraph). */
+  activityLog: string[];
+  /** Per-stage wall times for the last OCR pass (ms). */
+  pipelineStages?: PipelineStageTiming[];
 };
 
 type ImportJobRecord = {
@@ -32,6 +40,8 @@ type ImportJobRecord = {
   done: boolean;
   error: string | null;
   debugLog: string[];
+  activityLog: string[];
+  pipelineStages: PipelineStageTiming[];
 };
 
 const JOB_TTL_MS = 15 * 60 * 1000;
@@ -79,7 +89,18 @@ export function beginImportJob(jobId: string, userId: string, flow: ImportJobFlo
     done: false,
     error: null,
     debugLog: [],
+    activityLog: [],
+    pipelineStages: [],
   });
+}
+
+export function setImportJobPipelineStages(stages: PipelineStageTiming[]): void {
+  const ctx = jobContext.getStore();
+  if (!ctx) return;
+  const record = jobs.get(ctx.jobId);
+  if (!record) return;
+  record.pipelineStages = [...stages];
+  record.updatedAt = Date.now();
 }
 
 /** Append a diagnostic line for active import jobs (OCR engines, column strips, preprocess). */
@@ -98,6 +119,44 @@ export function appendImportJobDebug(line: string): void {
     record.debugLog.splice(0, record.debugLog.length - DEBUG_LOG_MAX);
   }
   record.updatedAt = Date.now();
+  telegraphDebugToImportJob(record, line);
+}
+
+function telegraphDebugToImportJob(record: ImportJobRecord, raw: string): void {
+  const human = humanizeImportDebugLine(raw, { audience: 'ui', verbose: false });
+  if (!human) return;
+
+  if (human.startsWith('__VALUE_PROGRESS__:')) {
+    const tag = human.slice('__VALUE_PROGRESS__:'.length);
+    const [n, m] = tag.split('/');
+    record.message = 'Reading shared label table…';
+    record.detail = `Product column ${n} of ${m}`;
+    pushActivity(record, `Reading product column ${n} of ${m}…`);
+    return;
+  }
+
+  if (human.startsWith('__HEADER_PROGRESS__:')) {
+    const tag = human.slice('__HEADER_PROGRESS__:'.length);
+    const [n, m] = tag.split('/');
+    record.message = 'Reading shared label table…';
+    record.detail = `Header stack ${n} of ${m}`;
+    pushActivity(record, `Reading header for product column ${n} of ${m}…`);
+    return;
+  }
+
+  pushActivity(record, human);
+  if (record.stepShorts[record.activeIndex] === 'OCR') {
+    record.detail = human;
+  }
+}
+
+function pushActivity(record: ImportJobRecord, line: string): void {
+  const last = record.activityLog[record.activityLog.length - 1];
+  if (last === line) return;
+  record.activityLog.push(line);
+  if (record.activityLog.length > ACTIVITY_LOG_MAX) {
+    record.activityLog.splice(0, record.activityLog.length - ACTIVITY_LOG_MAX);
+  }
 }
 
 export function runWithImportJob<T>(jobId: string | null, userId: string, flow: ImportJobFlow, fn: () => Promise<T>): Promise<T> {
@@ -126,7 +185,9 @@ export function finishImportJob(jobId: string | null): void {
   record.done = true;
   record.activeIndex = Math.max(0, record.stepShorts.length - 1);
   record.message = 'Import complete';
-  record.detail = undefined;
+  const stageSummary = record.pipelineStages.filter((s) => s.id !== 'total');
+  record.detail =
+    stageSummary.length > 0 ? formatPipelineStageSummary(stageSummary) : undefined;
   record.updatedAt = Date.now();
 }
 
@@ -158,6 +219,8 @@ function snapshotFromRecord(id: string, record: ImportJobRecord): ImportJobSnaps
     done: record.done,
     error: record.error,
     debugLog: [...record.debugLog],
+    activityLog: [...record.activityLog],
+    pipelineStages: record.pipelineStages.length ? [...record.pipelineStages] : undefined,
     steps: record.stepShorts.map((short, index) => {
       let status: ImportJobStepStatus = 'pending';
       if (index < record.activeIndex) status = 'done';

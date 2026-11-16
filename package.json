@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "test": "bash scripts/run-tests.sh",
+    "test:quick": "bash scripts/run-tests-quick.sh",
     "build": "npm --prefix web run build && npm --prefix server run build",
     "check": "npm test"
   }

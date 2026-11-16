@@ -303,6 +303,37 @@ const GLUED_FAT_ONE_LINE_OCR = `
 Nutrition Facts Calories 150/12 Tolal Fat2.Sg Saturated Fat LSg Trans Fat Og 25mg_ Total Carbohydrate 4g Dietary Fiber Ig 8 Total Sugars 2g Protein 30g
 `;
 
+test('readCalories from kcal/dv slash before total fat when Calories label is garbled', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+serving : Bottle (340mL) persening il 150/12 Fat2.Sg Saturated Fat 1.5g
+Protein 30g Sodium 230mg Total Carbohydrate 4g
+`);
+  assert.equal(parsed.nutrients.calories, 150);
+  assert.equal(parsed.nutrients.protein, 30);
+});
+
+test('prefers readCalories over columnar mispair (serving line digit before Calories 150)', () => {
+  const parsed = parseNutritionLabel(`
+Nutrition Facts
+Amount per serving
+8
+Calories
+150
+Sodium
+230mg
+Total Carbohydrate
+4g
+Dietary Fiber
+1g
+Protein
+30g
+`);
+  assert.equal(parsed.nutrients.calories, 150);
+  assert.equal(parsed.nutrients.protein, 30);
+  assert.equal(parsed.nutrients.sodium, 230);
+});
+
 test('parses glued fat decimal, saturated LSg, fiber Ig, and cholesterol after trans fat on one line', () => {
   const parsed = parseNutritionLabel(GLUED_FAT_ONE_LINE_OCR);
   assert.equal(parsed.nutrients.calories, 150);

@@ -56,6 +56,18 @@ test('parseMultiProductLabelTable tolerates bare percent lines between macros', 
   assert.equal(cols[0]?.nutrients.sodium, 210);
 });
 
+test('parseMultiProductLabelTable prefers gap split over OCR pipe noise', () => {
+  const cols = parseMultiProductLabelTable(`Nutrition Facts
+Snack A    Snack B    Snack C
+Calories
+90 | 5%    110 | 6%    80 | 4%
+Total Fat
+5g  6g  7g`);
+  assert.ok(cols && cols.length === 3);
+  assert.equal(cols[0]?.nutrients.calories, 90);
+  assert.equal(cols[1]?.nutrients.calories, 110);
+});
+
 test('parseMultiProductLabelTable ignores single-product panels', () => {
   const cols = parseMultiProductLabelTable(MULTI_PRODUCT_FIXTURE_SINGLE_PANEL);
   assert.equal(cols, null);
@@ -66,4 +78,48 @@ test('buildNutritionImportWithPanels exposes multi-product columns as labelPanel
   assert.equal(built.labelPanels.length, 3);
   assert.equal(built.labelPanels[1]?.draft.name, 'Cocoa Bar');
   assert.equal(built.labelPanels[1]?.draft.nutrients.calories, 150);
+});
+
+test('varietyPackExpectedColumns always returns placeholder panels without table parse', () => {
+  const built = buildNutritionImportWithPanels('noise only', 'image', null, null, {
+    varietyPackExpectedColumns: 10,
+  });
+  assert.equal(built.labelPanels.length, 10);
+  assert.equal(built.menuItems.length, 0);
+  assert.match(built.warning ?? '', /Read 0 of 10/);
+  assert.equal(built.draft.nutrients.calories, 0);
+});
+
+test('buildNutritionImportWithPanels pads panels when parse fails but stitch text looks structured', () => {
+  const stitchedNoParse = `
+Nutrition Facts
+Column 1 | Column 2 | Column 3
+Calories 90 zz yy
+Total Fat 3g 4g zz
+`;
+  const built = buildNutritionImportWithPanels(stitchedNoParse, 'image', null, null, {
+    varietyPackExpectedColumns: 3,
+  });
+  assert.equal(built.labelPanels.length, 3);
+  assert.match(built.warning ?? '', /3 of 3|3 products/);
+});
+
+test('buildNutritionImportWithPanels pads missing variety-pack columns for manual entry', () => {
+  const built = buildNutritionImportWithPanels(MULTI_PRODUCT_FIXTURE_SPACED_COLUMNS, 'image', null, null, {
+    varietyPackExpectedColumns: 4,
+  });
+  assert.equal(built.labelPanels.length, 4);
+  assert.equal(built.labelPanels[3]?.draft.name, 'Product 4');
+  assert.ok(built.labelPanels[3]?.warning);
+  assert.match(built.warning ?? '', /Read 3 of 4/);
+});
+
+test('parseMultiProductLabelTable ignores padded pipe separators', () => {
+  const cols = parseMultiProductLabelTable(
+    ['Nutrition Facts', 'Snack A  |  Snack B', 'Calories  |  100  |  200', 'Total Fat  |  5g  |  6g', 'Sodium  |  120mg  |  140mg', 'Protein  |  3g  |  4g'].join('\n'),
+  );
+  assert.equal(cols?.length, 2);
+  assert.equal(cols![0]!.nutrients.calories, 100);
+  assert.equal(cols![1]!.nutrients.calories, 200);
+  assert.equal(cols![1]!.nutrients.protein, 4);
 });

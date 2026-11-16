@@ -60,6 +60,7 @@ export type VarietyPackGridStep3 = {
 
 export type VarietyPackGridStep4 = {
   rowBandYs: number[];
+  headerRowBandYs: number[];
   planReady: boolean;
 };
 

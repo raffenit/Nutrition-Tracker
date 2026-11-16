@@ -1,6 +1,6 @@
 # Server tests
 
-All server tests compile to `dist-test/` and run via the repo root **`npm test`** gate (see `package.json` scripts `check`, `check:test`, `test:run`, `test`). The root runner typechecks **production and test** tsconfigs before `node --test`. `./deploy.sh` uses the same gate unless `--skip-test`. Standards: [docs/testing-standards.md](../../docs/testing-standards.md).
+Server tests compile to `dist-test/`. Repo root **`npm run test:quick`** (default after edits) or **`npm test`** (full, deploy). The root runner typechecks **production and test** tsconfigs before `node --test`. `./deploy.sh` uses **full** `npm test` unless `--skip-test`. Standards: [docs/testing-standards.md](../../docs/testing-standards.md).
 
 ## Layout
 
@@ -19,10 +19,13 @@ Production code lives under `src/domain/`, `src/integrations/`, and routes — *
 | --- | --- |
 | `npm run check` | Production `server/src` typecheck (`--noEmit`) |
 | `npm run check:test` | Test sources typecheck (`--noEmit`) |
+| `npm run test:run:quick` | Emit `dist-test/`, run all tests **except** `*.localFixtures.test.js` |
 | `npm run test:run` | Emit `dist-test/`, run **every** `dist-test/**/*.test.js` |
-| `npm test` | All three in order |
+| `npm test` | All three in order (server package) |
 
-Do not narrow the test glob to a single folder — that silently skips nested paths (e.g. integrations unit tests).
+Quick tier excludes `*localFixtures*` only — not whole folders — so nested unit/integration paths still run.
+
+Local fixture sources: `*localFixtures.test.ts` (gitignored photos under `local/test-images/`).
 
 ## Related docs
 

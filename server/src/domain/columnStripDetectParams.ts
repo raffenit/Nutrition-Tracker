@@ -81,6 +81,12 @@ export const DEFAULT_COLUMN_STRIP_DETECT_PARAMS: ColumnStripDetectParams = {
   maxColumns: 12,
 };
 
+/**
+ * Cap on value/product columns for wide-table OCR import (variety pack, shared rail, ruled grid).
+ * May exceed {@link DEFAULT_COLUMN_STRIP_DETECT_PARAMS.maxColumns} when ruled layout supports more stacks.
+ */
+export const OCR_IMPORT_MAX_PRODUCT_COLUMNS = 14;
+
 export type ColumnStripDetectOptions = {
   minColumns?: number;
   maxColumns?: number;

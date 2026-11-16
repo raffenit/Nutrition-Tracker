@@ -126,6 +126,7 @@ export function FoodImportPanel({
               type="button"
               className="import-tile import-tile-primary"
               disabled={importBusy}
+              aria-busy={importBusy}
               onClick={() => cameraInputRef.current?.click()}
             >
               <IconCamera />
@@ -142,6 +143,7 @@ export function FoodImportPanel({
             type="button"
             className={`import-tile${nativeLabelCamera ? '' : ' import-tile-primary'}`}
             disabled={importBusy}
+            aria-busy={importBusy}
             onClick={() => fileInputRef.current?.click()}
           >
             <IconFolder />
@@ -200,6 +202,7 @@ export function FoodImportPanel({
             type="button"
             className="primary import-url-btn"
             disabled={importBusy || !importUrl.trim()}
+            aria-busy={importBusy}
             onClick={() => onImportLink()}
           >
             {importBusy ? '…' : 'Import'}

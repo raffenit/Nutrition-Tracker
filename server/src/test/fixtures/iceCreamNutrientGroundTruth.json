@@ -1,0 +1,27 @@
+{
+  "sourceImage": "ice-cream.jpg",
+  "layout": "single",
+  "notes": "Split-label photo; ground truth is Per serving column (left). Calories not visible in agent snapshot — verify on pint (macros transcribed from label).",
+  "compareFields": ["calories", "fat", "sodium", "carbs", "fiber", "protein", "cholesterol", "sugar", "added_sugars"],
+  "products": [
+    {
+      "productName": "Ice cream (per serving)",
+      "servingLabel": "per serving",
+      "nutrients": {
+        "calories": 170,
+        "fat": 4.5,
+        "carbs": 32,
+        "protein": 5,
+        "fiber": 6,
+        "sodium": 90,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 3.5, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 10, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 20, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 16, "unit": "g" }
+        ]
+      }
+    }
+  ]
+}

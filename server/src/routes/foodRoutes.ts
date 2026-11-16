@@ -8,7 +8,7 @@ import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
-import { readNutrients, roundNutrients } from '../domain/nutrients.js';
+import { applySlotMergedNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
 import {
@@ -17,6 +17,7 @@ import {
   getImportJobForUser,
   parseImportJobId,
   reportImportJobStep,
+  appendImportJobDebug,
   runWithImportJob,
 } from '../import/importJobProgress.js';
 import { extractImageLabel } from '../integrations/extractText.js';
@@ -28,6 +29,7 @@ import { requireUser } from '../http/access.js';
 import { readJson, sendJson } from '../http/respond.js';
 import { route, type Ctx, type Route } from '../http/router.js';
 import type { Food, Nutrients, SearchHit } from '../types.js';
+import type { LabelServingFields } from '../domain/labelServingVote.js';
 
 const MAX_UPLOAD = 12 * 1024 * 1024;
 
@@ -204,10 +206,15 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
       const extracted = await readExtractedText(kind, file.bytes, ctx.config);
       reportImportJobStep('Draft', 'Building your draft…', 'Applying parsers and import panels.');
-      const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts);
-      if (extracted.slotMergedNutrients) {
+      const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts, {
+        varietyPackExpectedColumns: extracted.varietyPackExpectedColumns,
+      });
+      const varietyPackPanels =
+        (extracted.varietyPackExpectedColumns ?? 0) >= 2 && built.labelPanels.length > 0;
+      if (extracted.slotMergedNutrients && !varietyPackPanels) {
         applySlotMergedNutrients(built.draft.nutrients, extracted.slotMergedNutrients);
       }
+      if (extracted.serving && !varietyPackPanels) applyVotedServing(built.draft, extracted.serving);
       const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
       const saved = insertUpload(ctx.db, {
         kind,
@@ -381,7 +388,7 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
 
 async function remoteHits(ctx: Ctx, query: string): Promise<SearchHit[]> {
   const usda = ctx.config.usdaApiKey ? await searchUsda(query, ctx.config.usdaApiKey).catch(() => []) : [];
-  const packaged = await searchOpenFoodFacts(query).catch(() => []);
+  const packaged = ctx.config.openFoodFactsEnabled ? await searchOpenFoodFacts(query).catch(() => []) : [];
   return [...usda, ...packaged];
 }
 
@@ -411,21 +418,6 @@ function extensionFor(filename: string): string {
   return '.jpg';
 }
 
-function applySlotMergedNutrients(target: Nutrients, merged: Nutrients): void {
-  if (merged.calories > 0) target.calories = merged.calories;
-  if (merged.fat > 0) target.fat = merged.fat;
-  if (merged.carbs > 0) target.carbs = merged.carbs;
-  if (merged.fiber > 0) target.fiber = merged.fiber;
-  if (merged.protein > 0) target.protein = merged.protein;
-  if (merged.sodium > 0) target.sodium = merged.sodium;
-  for (const extra of merged.extras) {
-    if (extra.amount <= 0) continue;
-    const index = target.extras.findIndex((row) => row.key === extra.key);
-    if (index >= 0) target.extras[index] = { ...extra };
-    else target.extras.push({ ...extra });
-  }
-}
-
 async function readExtractedText(
   kind: 'image' | 'pdf',
   bytes: Buffer,
@@ -436,6 +428,8 @@ async function readExtractedText(
   slotMergedNutrients: Nutrients | null;
   usedOcr?: boolean;
   pageTexts: string[] | null;
+  varietyPackExpectedColumns?: number;
+  serving?: LabelServingFields;
 }> {
   try {
     if (kind === 'pdf') {
@@ -450,16 +444,26 @@ async function readExtractedText(
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
       return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts };
     }
-    const { text, slotMergedNutrients } = await extractImageLabel(bytes, config.tessdataDir, {
-      easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
-    });
+    const { text, slotMergedNutrients, varietyPackExpectedColumns, serving } = await extractImageLabel(
+      bytes,
+      config.tessdataDir,
+      {
+        easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
+      },
+    );
     return {
       text,
       warning: text.trim() ? null : 'No text was found. Enter the nutrition facts yourself.',
       slotMergedNutrients,
       pageTexts: null,
+      varietyPackExpectedColumns,
+      serving,
     };
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const stage = kind === 'pdf' ? 'readExtractedText:pdf' : 'readExtractedText:image';
+    appendImportJobDebug(`${stage}: failed (${reason})`);
+    console.error(`[${stage}]`, error);
     return {
       text: '',
       warning: 'The file is saved, and the text could not be read. Enter the nutrition facts yourself.',
@@ -498,4 +502,17 @@ function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; bytes: 
     });
     ctx.req.pipe(parser);
   });
+}
+
+/** Fill serving fields the primary OCR text missed with values voted across all candidates. */
+function applyVotedServing(
+  draft: { servingLabel: string; servingsPerContainer: number | null },
+  serving: LabelServingFields,
+): void {
+  if (serving.servingLabel && (!draft.servingLabel || draft.servingLabel === '1 serving')) {
+    draft.servingLabel = serving.servingLabel;
+  }
+  if (serving.servingsPerContainer != null && draft.servingsPerContainer == null) {
+    draft.servingsPerContainer = serving.servingsPerContainer;
+  }
 }

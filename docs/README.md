@@ -8,12 +8,12 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 | --- | --- |
 | [../AGENTS.md](../AGENTS.md) | Repo rules, deploy, privacy |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Data model, API summary, privacy rules, testing gates |
-| [testing-standards.md](./testing-standards.md) | Typecheck + test gates, clean-code expectations for `npm test` |
+| [testing-standards.md](./testing-standards.md) | Quick vs full test tiers, typecheck gates, manual OCR |
 | [CODE-MAP.md](./CODE-MAP.md) | **Feature → file paths and symbol names** (start here to find code) |
 | [playbooks/](./playbooks/README.md) | Task guides (OCR, import UI, privacy, production deploy) |
 | [ROADMAP.md](./ROADMAP.md) | Phases, acceptance criteria, what’s next vs done |
 
-**Workflow:** [CODE-MAP.md](./CODE-MAP.md) or a [playbook](./playbooks/README.md) → grep the listed **symbol** → read [ARCHITECTURE.md](./ARCHITECTURE.md) if the shape of the system changes → implement → update CODE-MAP if you added modules → `npm test` (see [Testing](#testing)).
+**Workflow:** [CODE-MAP.md](./CODE-MAP.md) or a [playbook](./playbooks/README.md) → grep the listed **symbol** → read [ARCHITECTURE.md](./ARCHITECTURE.md) if the shape of the system changes → implement → update CODE-MAP if you added modules → `npm run test:quick` (see [Testing](#testing)); `npm test` before deploy.
 
 ## Product docs
 
@@ -31,10 +31,11 @@ Start here when you need orientation in the Nutrition Tracker repo. Deep design 
 From repo root:
 
 ```bash
-npm test
+npm run test:quick   # after edits (~10s)
+npm test             # full gate / deploy parity (~2 min)
 ```
 
-Runs `scripts/run-tests.sh` → **server typecheck** (production + test tsconfigs), **server tests**, **web typecheck** — see [testing-standards.md](./testing-standards.md). Layout: [server/src/test/README.md](../server/src/test/README.md). **HTTPS smoke** runs at end of **`./deploy.sh`** (after Docker health), not during `npm test`; skip with `SKIP_HTTPS_SMOKE=1` in `.env`. Logs: `local/test-last-run.log` (full test run), `local/https-smoke-last.txt` (last smoke step when it runs).
+Quick: `scripts/run-tests-quick.sh` (excludes `*localFixtures*`). Full: `scripts/run-tests.sh` — see [testing-standards.md](./testing-standards.md). **HTTPS smoke** runs in **`./deploy.sh`**, not in either tier. Logs: `local/test-last-run-quick.log`, `local/test-last-run.log`.
 
 Before any PR that touches logs or family APIs, use the privacy checklist in [ROADMAP.md — Tracking](./ROADMAP.md#tracking).
 

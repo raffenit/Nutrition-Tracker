@@ -9,22 +9,40 @@ import {
   DEFAULT_SHARED_LABEL_GRID_PARAMS,
   type SharedLabelGridParams,
 } from '../domain/sharedLabelGridParams.js';
+import { DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS } from '../domain/varietyPackGridPipelineParams.js';
 import {
   buildColumnInkProfileFromBand,
   columnBoundariesFromInkProfile,
   type ColumnStripRegion,
 } from './labelColumnStrips.js';
 import type { BandLuminanceRoles } from '../domain/bandLuminanceRoles.js';
+import type { ColumnBodyGlareMask } from './bandLuminanceCluster.js';
 import {
   classifyBandLuminanceInScanBand,
   inkProfileGutterThreshold,
   type InkProfileGutterSense,
 } from './bandLuminanceCluster.js';
+import { classifyNutritionTableBandLuminance } from '../domain/nutritionTableInkBounds.js';
 import { DEFAULT_RULED_TABLE_GRID_PARAMS } from '../domain/ruledTableGridParams.js';
-import { categoriesFromRuledGrid, valueColumnsFromRuledGrid } from './ruledTableGridDetect.js';
-import { columnWidthCv, refineUniformProductColumns } from './uniformColumnGeometry.js';
+import {
+  categoriesFromRuledGrid,
+  nutritionTableRightAnalysisX,
+  valueColumnsFromRuledGrid,
+} from './ruledTableGridDetect.js';
+import {
+  columnWidthCv,
+  firstColumnWideVsSiblings,
+  medianPositiveWidth,
+  refineUniformProductColumns,
+} from './uniformColumnGeometry.js';
 import { collectColumnGeometryWitnesses, fitUniformValueColumns } from './labelTableLayoutFit.js';
 import { fitEqualWidthColumnGrid } from './uniformColumnGeometry.js';
+import { medianRowBandSliceHeight, type SharedLabelRowBandSlice } from '../domain/sharedLabelGridLayout.js';
+import {
+  rowBandSliceAxisAlignedBounds,
+  type RowSurfaceLayoutMode,
+  type ValueColumnWarpProbe,
+} from '../domain/sharedLabelRowRegions.js';
 
 export { detectSharedLabelValueGrid } from './varietyPackGridPipeline.js';
 
@@ -33,8 +51,26 @@ export type SharedLabelValueGridPlan = {
   labelColumn: ColumnStripRegion;
   headerBand: { left: number; top: number; width: number; height: number };
   valueColumns: ColumnStripRegion[];
+  /** Analysis x0/x1 per {@link valueColumns} strip (row warp, glare, OCR geometry). */
+  valueColumnAnalysisSegments: Array<{ x0: number; x1: number }>;
   /** Analysis-space x where the value grid starts (after shared labels). */
   valueGridAnalysisX: number;
+  /** Nutrient table body (excludes header band and typical footer). */
+  nutrientBodyTop: number;
+  nutrientBodyHeight: number;
+  /** Straight grids: shared horizontal mesh; skewed: independent column surfaces. */
+  rowSurfaceMode: RowSurfaceLayoutMode;
+  /** Manifest row-count / consensus reference (same tops when {@link rowSurfaceMode} is `shared`). */
+  rowBandSlices: SharedLabelRowBandSlice[];
+  labelRowBandSlices: SharedLabelRowBandSlice[];
+  valueRowBandSlicesPerColumn: SharedLabelRowBandSlice[][];
+  valueColumnGlareMasks: ColumnBodyGlareMask[];
+  valueColumnWarpProbes?: ValueColumnWarpProbe[];
+  headerConsensusRowBandSlices: SharedLabelRowBandSlice[];
+  headerLabelRowBandSlices: SharedLabelRowBandSlice[];
+  headerRowBandSlicesPerColumn: SharedLabelRowBandSlice[][];
+  /** Median nutrient row pitch in full-image px (from consensus rules). */
+  rowPitchPx: number;
 };
 
 export type SharedLabelGridDetectOptions = ColumnStripDetectOptions & {
@@ -44,7 +80,10 @@ export type SharedLabelGridDetectOptions = ColumnStripDetectOptions & {
 
 export type SharedLabelGridBuffers = {
   labelColumn: Buffer;
+  /** Full width above nutrient body — legacy single-strip OCR. */
   headerBand: Buffer;
+  /** Per-product header stack (names, display calories, serving) — read in full, not discarded. */
+  headerColumns: Buffer[];
   valueColumns: Buffer[];
 };
 
@@ -58,9 +97,11 @@ export async function extractSharedLabelGridBuffers(
   const maxH = meta.height ?? 0;
 
   const extract = async (region: { left: number; top: number; width: number; height: number }) => {
-    const width = Math.min(region.width, Math.max(1, maxW - region.left));
-    const height = Math.min(region.height, Math.max(1, maxH - region.top));
-    return base.clone().extract({ left: region.left, top: region.top, width, height }).png().toBuffer();
+    const left = Math.max(0, Math.round(region.left));
+    const top = Math.max(0, Math.round(region.top));
+    const width = Math.min(Math.max(1, Math.round(region.width)), Math.max(1, maxW - left));
+    const height = Math.min(Math.max(1, Math.round(region.height)), Math.max(1, maxH - top));
+    return base.clone().extract({ left, top, width, height }).png().toBuffer();
   };
 
   const valueColumns: Buffer[] = [];
@@ -68,11 +109,106 @@ export async function extractSharedLabelGridBuffers(
     valueColumns.push(await extract(col));
   }
 
+  const headerColumns: Buffer[] = [];
+  const headerTop = plan.headerBand.top;
+  const headerHeight = plan.headerBand.height;
+  for (const col of plan.valueColumns) {
+    headerColumns.push(
+      await extract({
+        left: col.left,
+        top: headerTop,
+        width: col.width,
+        height: headerHeight,
+      }),
+    );
+  }
+
   return {
     labelColumn: await extract(plan.labelColumn),
     headerBand: await extract(plan.headerBand),
+    headerColumns,
     valueColumns,
   };
+}
+
+export type RowBandExtractMinSize = {
+  minHeightPx: number;
+  minWidthPx: number;
+};
+
+export function rowBandMinExtractSize(
+  plan: Pick<SharedLabelValueGridPlan, 'rowPitchPx'>,
+  columnWidth: number,
+  fullImageWidth: number,
+  shared: SharedLabelGridParams = DEFAULT_SHARED_LABEL_GRID_PARAMS,
+): RowBandExtractMinSize {
+  const pitch = plan.rowPitchPx > 0 ? plan.rowPitchPx : 0;
+  const minHeightFromPitch =
+    pitch > 0 ? Math.round(pitch * shared.rowBandMinOcrExtractHeightPitchFraction) : 0;
+  const minHeightPx = Math.max(shared.minRowBandSliceHeightPx, minHeightFromPitch);
+
+  const minWImage =
+    fullImageWidth > 0 ? Math.round(fullImageWidth * shared.rowBandMinOcrExtractWidthImageFraction) : 0;
+  const minWPitch =
+    pitch > 0 ? Math.round(pitch * shared.rowBandMinOcrExtractWidthPitchFraction) : 0;
+  const minWidthPx = Math.min(
+    Math.max(1, columnWidth),
+    Math.max(minWImage, minWPitch),
+  );
+
+  return { minHeightPx, minWidthPx };
+}
+
+/** OCR one column as one line per horizontal row-band slice (ordered top → bottom). */
+export async function extractSharedLabelColumnPngsByRowBands(
+  bytes: Buffer,
+  column: Pick<ColumnStripRegion, 'left' | 'width'>,
+  slices: SharedLabelRowBandSlice[],
+  minSize?: RowBandExtractMinSize,
+): Promise<Buffer[]> {
+  if (slices.length === 0) return [];
+  const base = sharp(bytes).rotate();
+  const meta = await base.metadata();
+  const maxW = meta.width ?? 0;
+  const maxH = meta.height ?? 0;
+  const buffers: Buffer[] = [];
+  for (const slice of slices) {
+    let left = Math.max(0, Math.round(column.left));
+    let width = Math.min(Math.max(1, Math.round(column.width)), Math.max(1, maxW - left));
+    const aligned = rowBandSliceAxisAlignedBounds(slice);
+    let top = Math.max(0, Math.round(aligned.top));
+    let height = Math.min(Math.round(aligned.height), Math.max(1, maxH - top));
+
+    if (minSize) {
+      if (width < minSize.minWidthPx && maxW > 0) {
+        const want = Math.min(minSize.minWidthPx, maxW);
+        const expand = want - width;
+        left = Math.max(0, left - Math.floor(expand / 2));
+        width = Math.min(want, maxW - left);
+      }
+      if (height < minSize.minHeightPx) {
+        const want = minSize.minHeightPx;
+        const deficit = want - height;
+        const expandUp = Math.min(top, Math.floor(deficit / 2));
+        top -= expandUp;
+        height = Math.min(maxH - top, height + deficit);
+      }
+    }
+
+    buffers.push(await base.clone().extract({ left, top, width, height }).png().toBuffer());
+  }
+  return buffers;
+}
+
+export function useRowBandSliceOcrForPlan(plan: SharedLabelValueGridPlan): boolean {
+  const params = DEFAULT_SHARED_LABEL_GRID_PARAMS;
+  const labelSlices = plan.labelRowBandSlices ?? plan.rowBandSlices;
+  if (labelSlices.length < params.minRowBandSlicesForRowOcr) return false;
+  const medianH = medianRowBandSliceHeight(labelSlices);
+  if (medianH < params.rowBandOcrMinMedianSliceHeightPx) return false;
+  const pitch = plan.rowPitchPx > 0 ? plan.rowPitchPx : medianH;
+  if (pitch > 0 && medianH > pitch * params.rowBandMaxMedianSlicePitchRatio) return false;
+  return true;
 }
 
 function findLabelValueBoundary(profile: Float64Array, shared: SharedLabelGridParams): number | null {
@@ -126,6 +262,37 @@ export function sharedLabelBoundaryForTest(profile: Float64Array, shared?: Parti
 }
 
 /**
+ * Ink profile often splits the shared label rail early; widen to the ruled wide-left column when present.
+ */
+export function alignSharedLabelBoundaryToRuledRail(
+  pixels: Uint8Array,
+  width: number,
+  height: number,
+  inkBoundaryX: number,
+  sharedRailWidthRatioMin: number,
+  minHorizontalRulesPerColumn: number = DEFAULT_RULED_TABLE_GRID_PARAMS.minHorizontalRulesPerColumn,
+): number {
+  const cats = categoriesFromRuledGrid(pixels, width, height, 0, undefined, 14, {
+    requireHorizontalRules: false,
+  });
+  const first = cats[0];
+  if (!first || first.x0 !== 0) return inkBoundaryX;
+  const productCols = cats
+    .slice(1)
+    .filter((c) => c.horizontalRuleCount >= minHorizontalRulesPerColumn);
+  const siblingWidths = productCols.map((c) => c.x1 - c.x0);
+  const firstWidth = first.x1 - first.x0;
+  if (firstColumnWideVsSiblings(firstWidth, siblingWidths, sharedRailWidthRatioMin)) {
+    return Math.max(inkBoundaryX, first.x1);
+  }
+  const med = medianPositiveWidth(siblingWidths);
+  if (med > 0 && firstWidth > inkBoundaryX && firstWidth >= med * 0.9) {
+    return Math.max(inkBoundaryX, first.x1);
+  }
+  return inkBoundaryX;
+}
+
+/**
  * Left/right ink asymmetry for layout hypothesis scoring — uses ink-profile label boundary
  * when width is plausible, not the first ruled category edge (misleading on per-column tables).
  */
@@ -150,6 +317,13 @@ export function profileInkAsymmetryForLayoutScores(
 }
 
 /** Ink-profile shared rail + value column bounds (analysis x). */
+export type SharedRailInkProfileOptions = {
+  labelBoundaryX?: number;
+  inkGridCropped?: boolean;
+  inkGridCroppedMeta?: { labelBoundaryX: number; analysisW: number; tableRightAnalysisX?: number };
+  sharedRailWidthRatioMin?: number;
+};
+
 export function sharedRailLayoutFromInkProfile(
   pixels: Uint8Array,
   width: number,
@@ -158,14 +332,25 @@ export function sharedRailLayoutFromInkProfile(
   stripParams: ColumnStripDetectParams,
   shared: SharedLabelGridParams,
   maxColumns: number,
+  options?: SharedRailInkProfileOptions,
 ): {
   labelColumn: { x0: number; x1: number; index: number; horizontalRuleCount: number };
   valueColumns: Array<{ x0: number; x1: number; index: number; horizontalRuleCount: number }>;
   labelBoundaryX: number;
   inkAsymmetry: number;
 } | null {
-  const boundaryX = findLabelValueBoundary(profile, shared);
-  if (boundaryX === null) return null;
+  const inkBoundary = options?.labelBoundaryX ?? findLabelValueBoundary(profile, shared);
+  if (inkBoundary === null) return null;
+  const boundaryHint = options?.inkGridCroppedMeta?.labelBoundaryX ?? inkBoundary;
+  const railRatio =
+    options?.sharedRailWidthRatioMin ?? DEFAULT_VARIETY_PACK_GRID_PIPELINE_PARAMS.sharedRailWidthRatioMin;
+  const boundaryX = alignSharedLabelBoundaryToRuledRail(
+    pixels,
+    width,
+    height,
+    Math.max(inkBoundary, boundaryHint),
+    railRatio,
+  );
 
   const labelWidthFrac = boundaryX / profile.length;
   if (labelWidthFrac < shared.labelColumnMinWidthFraction || labelWidthFrac > shared.labelColumnMaxWidthFraction) {
@@ -175,9 +360,25 @@ export function sharedRailLayoutFromInkProfile(
   const leftMean = meanInk(profile, 0, boundaryX);
   const rightMean = meanInk(profile, boundaryX, profile.length);
   const asymmetry = rightMean > 0 ? leftMean / rightMean : 0;
-  if (leftMean < rightMean * shared.labelInkAsymmetryRatio) return null;
+  const skipAsymmetry = options?.inkGridCropped === true || options?.inkGridCroppedMeta !== undefined;
+  if (!skipAsymmetry && leftMean < rightMean * shared.labelInkAsymmetryRatio) return null;
 
-  const segments = valueColumnBoundaries(pixels, width, height, boundaryX, stripParams, shared, maxColumns);
+  const segments = valueColumnBoundaries(
+    pixels,
+    width,
+    height,
+    boundaryX,
+    stripParams,
+    shared,
+    maxColumns,
+    options?.inkGridCroppedMeta
+      ? {
+          labelBoundaryX: options.inkGridCroppedMeta.labelBoundaryX,
+          analysisW: options.inkGridCroppedMeta.analysisW,
+          tableRightAnalysisX: options.inkGridCroppedMeta.tableRightAnalysisX,
+        }
+      : undefined,
+  );
   if (segments.length < shared.minValueColumns) return null;
   if (!valueColumnWidthsUniform(segments, shared.maxValueColumnWidthCv)) return null;
 
@@ -223,8 +424,30 @@ function valueColumnBoundaries(
   stripParams: ColumnStripDetectParams,
   shared: SharedLabelGridParams,
   maxColumns: number,
+  inkGridCropped?: { labelBoundaryX: number; analysisW: number; tableRightAnalysisX?: number },
 ): Segment[] {
-  const luminanceRoles = classifyBandLuminanceInScanBand(pixels, width, height, boundaryX, width);
+  const valueRight =
+    inkGridCropped?.tableRightAnalysisX !== undefined
+      ? inkGridCropped.tableRightAnalysisX
+      : inkGridCropped
+        ? nutritionTableRightAnalysisX(pixels, width, height, boundaryX)
+        : nutritionTableRightAnalysisX(pixels, width, height, boundaryX);
+  const luminanceRoles = classifyNutritionTableBandLuminance(
+    pixels,
+    width,
+    height,
+    boundaryX,
+    {},
+    inkGridCropped
+      ? {
+          inkGridCropped: {
+            labelBoundaryX: inkGridCropped.labelBoundaryX,
+            tableRightAnalysisX: inkGridCropped.tableRightAnalysisX ?? valueRight,
+          },
+          analysisW: inkGridCropped.analysisW,
+        }
+      : undefined,
+  );
   let ruledCats = categoriesFromRuledGrid(pixels, width, height, boundaryX, undefined, maxColumns, {
     requireHorizontalRules: true,
   });
@@ -242,12 +465,12 @@ function valueColumnBoundaries(
       ruledSegs,
       ruledCats.map((c) => ({ horizontalRuleCount: c.horizontalRuleCount })),
       boundaryX,
-      width,
+      valueRight,
       maxColumns,
     );
     const cv = columnWidthCv(refined.map((s) => s.x1 - s.x0));
     if (refined.length >= shared.minValueColumns && cv <= shared.maxValueColumnWidthCv) {
-      const valueW = width - boundaryX;
+      const valueW = valueRight - boundaryX;
       const widths = refined.map((segment) => segment.x1 - segment.x0);
       const median = [...widths].sort((a, b) => a - b)[Math.floor(widths.length / 2)] ?? 0;
       const target = median > 0 ? Math.round(valueW / median) : 0;
@@ -257,7 +480,7 @@ function valueColumnBoundaries(
         refined.length - target <= 2 &&
         cv <= shared.maxValueColumnWidthCv
       ) {
-        return fitEqualWidthColumnGrid(boundaryX, width, target);
+        return fitEqualWidthColumnGrid(boundaryX, valueRight, target);
       }
       return refined;
     }

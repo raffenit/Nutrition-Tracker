@@ -13,6 +13,12 @@ Companion to [label-table-terminology.md](./label-table-terminology.md). Documen
 
 Prefer changing a **named default** and adding a **synthetic regression** over inline magic in integration code.
 
+## Partial results over null
+
+When geometry or stitch is confident for **part** of a variety table, **return what we have** (empty cells / placeholder import panels for the rest). Do not discard nine good columns because the tenth failed OCR, and do not require two fully parsed products before returning a stitched table string. See `varietyPackExpectedColumns`, `incompleteVarietyPackPanel`, and shared-grid stitch using **all** value columns with blank cells for weak strips.
+
+**Import contract:** If `varietyPackExpectedColumns >= 2`, `buildNutritionImportWithPanels` **always** returns that many `labelPanels` (parsed columns + `incompleteVarietyPackPanel` placeholders). Menu heuristics and slot-merged nutrients do not override this path. The top-level `draft` is taken from the first panel with readable macros, not from noisy full-page OCR text.
+
 ## Fragility watchlist (monitor when touching routing)
 
 These behaviors are **deliberate** but easy to break each other:
@@ -29,7 +35,13 @@ These behaviors are **deliberate** but easy to break each other:
 
 6. **`preferSharedRail` branches** — (a) subtype `shared_rail`, (b) ink value cols ≥ ruled + 2, (c) ink tie epsilon. Tests: `varietyPackGridPipeline.test.ts` step 3 routing; manifest for photos.
 
-7. **Local manifest** — `local/test-images/manifest.json` is the main **photo** regression. Synthetics in `syntheticVarietyPackGrids.ts` cover layout **patterns**; they do not replace noisy-rule or glare variants.
+7. **Local manifest** — `local/test-images/manifest.json` is the main **photo** regression (`valueColumnCount`, **`nutrientRows.mainSectionRows` + `secondarySectionRows`** on every fixture). Synthetics in `syntheticVarietyPackGrids.ts` cover layout **patterns**; they do not replace noisy-rule or glare variants.
+
+8. **Shared-rail OCR stitch** — Failures often chain: label-column row labels (inline nutrient match) → value-line `extractValueLines` → `parseMultiProductLabelTable` gap vs `|` splitting. Use `npm run diag:shared-label-grid` on Costco fixture; `npm run ocr:local-test-images` for full import path.
+
+9. **Geometry-first routing** — Wide panels run variety-pack steps 1–4 once up front (~seconds). Confirmed `shared_rail` **skips** full-page wide OCR and `wideTableRetry`; structured column/row OCR uses that plan. Tune row-band heights in `sharedLabelGridParams.ts` / `sharedLabelGridLayout.ts` instead of adding OCR passes. Import picks stitched text when `varietyPackExpectedColumns` is set (`pickImportTextCandidateIndex`, `looksLikeStructuredVarietyTable`).
+
+10. **Row-band OCR gates (B)** — `useRowBandSliceOcrForPlan` requires median slice height ≤ `rowPitchPx × rowBandMaxMedianSlicePitchRatio`. **Slice builder (C)** merges only hairline slivers (`rowBandMergeHairlinePitchFraction`), not whole rows. **Fallback (A)** — if row-band OCR runs but stitch/parse has zero macro columns, re-OCR once with body-column strips on the same plan.
 
 ## Regression tests (by concern)
 

@@ -66,8 +66,17 @@ const PHRASE_AT: Array<{ slot: VariantLabelSlot; re: RegExp; strength: number }>
   { slot: 'total_fat', re: /\bt[a-z]{3,7}l\s+fat\b/i, strength: 80 },
 ];
 
+/** Anchors can land on the second word ("Carbohydrate" in "Total Carbohydrate"); look back on the same line. */
+const LABEL_STRENGTH_LOOKBACK = 10;
+
+/** Fuzzy row-label slot used to find a nutrient's line (e.g. carbs → total_carb). */
+export function variantLabelSlotFor(slot: LabelSlotKey): VariantLabelSlot | null {
+  return SLOT_SPECS.find((spec) => spec.key === slot)?.variantSlot ?? null;
+}
+
 function labelStrengthAt(text: string, index: number, variantSlot: VariantLabelSlot): number {
-  const slice = text.slice(index, index + 28);
+  const lineStart = text.lastIndexOf('\n', index - 1) + 1;
+  const slice = text.slice(Math.max(lineStart, index - LABEL_STRENGTH_LOOKBACK), index + 28);
   let best = 65;
   for (const row of PHRASE_AT) {
     if (row.slot !== variantSlot) continue;
@@ -101,7 +110,7 @@ function readSlotInSlice(
   if (spec.unit === 'kcal') return readCaloriesInSlice(slice);
   const unitSlot =
     spec.key === 'carbs' ? 'total_carb'
-    : spec.key === 'fat' ? undefined
+    : spec.key === 'fat' ? 'total_fat'
     : spec.key === 'fiber' ? 'fiber'
     : spec.key === 'protein' ? 'protein'
     : spec.key === 'sodium' ? 'sodium'
@@ -178,26 +187,116 @@ function applyReadingToNutrients(nutrients: Nutrients, reading: SlotReading, spe
   else if (spec.key === 'carbs') nutrients.carbs = amount;
 }
 
+type SlotAmountGroup = {
+  amount: number;
+  best: SlotReading;
+  bestScore: number;
+  /** Distinct OCR candidates whose best reading for this slot has this amount. */
+  support: number;
+};
+
+function groupSlotReadings(candidates: string[]): Map<LabelSlotKey, SlotAmountGroup[]> {
+  const groups = new Map<LabelSlotKey, SlotAmountGroup[]>();
+  candidates.forEach((text, candidateIndex) => {
+    for (const reading of extractSlotReadingsFromText(text, candidateIndex)) {
+      const amount = reading.amount;
+      if (amount == null || amount <= 0) continue;
+      const score = readingScore(reading);
+      const list = groups.get(reading.slot) ?? [];
+      const group = list.find((g) => g.amount === amount);
+      if (group) {
+        group.support += 1;
+        if (score > group.bestScore) {
+          group.best = reading;
+          group.bestScore = score;
+        }
+      } else {
+        list.push({ amount, best: reading, bestScore: score, support: 1 });
+      }
+      groups.set(reading.slot, list);
+    }
+  });
+  for (const list of groups.values()) {
+    list.sort((a, b) => b.bestScore - a.bestScore || b.support - a.support);
+  }
+  return groups;
+}
+
+/** Name/unit score gap under which a different amount still contests the winner. */
+const SLOT_CONTEST_SCORE_MARGIN = 10;
+
+export type SlotConsensus = {
+  slot: LabelSlotKey;
+  amount: number;
+  support: number;
+  /** Another amount scored within SLOT_CONTEST_SCORE_MARGIN of the winner. */
+  contested: boolean;
+  rivals: number[];
+};
+
+/**
+ * Per-slot winner plus agreement across candidates. Equal name/unit scores are broken by how many
+ * candidates read the same amount — never by expected values.
+ */
+export function assessSlotConsensus(candidates: string[]): Map<LabelSlotKey, SlotConsensus> {
+  const out = new Map<LabelSlotKey, SlotConsensus>();
+  for (const [slot, list] of groupSlotReadings(candidates)) {
+    const winner = list[0];
+    if (!winner) continue;
+    const rivals = list
+      .slice(1)
+      .filter((g) => g.bestScore >= winner.bestScore - SLOT_CONTEST_SCORE_MARGIN)
+      .map((g) => g.amount);
+    out.set(slot, {
+      slot,
+      amount: winner.amount,
+      support: winner.support,
+      contested: rivals.length > 0,
+      rivals,
+    });
+  }
+  return out;
+}
+
 /** Merge best per-slot readings across OCR candidates (names + units, not target values). */
 export function mergeSlotReadingsAcrossCandidates(candidates: string[]): Nutrients | null {
   if (candidates.length === 0) return null;
 
-  const winners = new Map<LabelSlotKey, SlotReading>();
-  candidates.forEach((text, candidateIndex) => {
-    for (const reading of extractSlotReadingsFromText(text, candidateIndex)) {
-      const prev = winners.get(reading.slot);
-      if (!prev || readingScore(reading) > readingScore(prev)) winners.set(reading.slot, reading);
-    }
-  });
-
-  if (winners.size === 0) return null;
+  const groups = groupSlotReadings(candidates);
+  if (groups.size === 0) return null;
 
   const nutrients = emptyNutrients();
   for (const spec of SLOT_SPECS) {
-    const reading = winners.get(spec.key);
-    if (reading) applyReadingToNutrients(nutrients, reading, spec);
+    const winner = consistentWinner(groups, spec.key);
+    if (winner) applyReadingToNutrients(nutrients, winner.best, spec);
   }
   return nutrients;
+}
+
+/** Rounding room when checking a parent row against the sum of its sub-rows. */
+const PARENT_ROW_SLACK = 1;
+
+/** Sub-rows that a parent amount must cover (carbs ≥ sugars + fiber, total fat ≥ saturated fat). */
+const PARENT_ROW_CHILDREN: Partial<Record<LabelSlotKey, LabelSlotKey[]>> = {
+  carbs: ['sugar', 'fiber'],
+  fat: ['saturated_fat'],
+};
+
+/**
+ * Top-ranked group, unless it is smaller than its sub-rows sum and another candidate amount is not —
+ * a parent row read as "2" beside "Fiber 6g" / "Sugars 20g" is a dropped digit, not the label value.
+ */
+function consistentWinner(
+  groups: Map<LabelSlotKey, SlotAmountGroup[]>,
+  slot: LabelSlotKey,
+): SlotAmountGroup | undefined {
+  const list = groups.get(slot);
+  const top = list?.[0];
+  const children = PARENT_ROW_CHILDREN[slot];
+  if (!list || !top || !children) return top;
+  const floor = children.reduce((sum, child) => sum + (groups.get(child)?.[0]?.amount ?? 0), 0);
+  if (top.amount + PARENT_ROW_SLACK >= floor) return top;
+  return list.find((g) => g.amount + PARENT_ROW_SLACK >= floor) ?? top;
 }
 
 /** Index of candidate that contributed the most winning slots (for field review text). */

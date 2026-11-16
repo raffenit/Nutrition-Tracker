@@ -1,0 +1,27 @@
+{
+  "sourceImage": "protein-shake.jpg",
+  "layout": "single",
+  "notes": "Per serving (1 bottle 340 mL). Transcribed from physical label — verify before tightening tolerances.",
+  "compareFields": ["calories", "fat", "sodium", "carbs", "fiber", "protein", "cholesterol"],
+  "products": [
+    {
+      "productName": "Protein shake (per serving)",
+      "servingLabel": "1 Bottle (340mL)",
+      "nutrients": {
+        "calories": 150,
+        "fat": 2.5,
+        "carbs": 4,
+        "protein": 30,
+        "fiber": 1,
+        "sodium": 230,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 1.5, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 25, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 2, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 0, "unit": "g" }
+        ]
+      }
+    }
+  ]
+}

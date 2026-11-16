@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { appendImportJobDebug } from '../import/importJobProgress.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -56,10 +57,14 @@ export function easyOcrPassEnvironments(): EasyOcrPassEnv[] {
   return passes;
 }
 
+/** `lines`: one detected box per line. `rows`: boxes sharing a vertical band joined left-to-right (ruled tables). */
+export type EasyOcrLayout = 'lines' | 'rows';
+
 async function runEasyOcrOnImage(
   imageBytes: Buffer,
   modelDir: string,
   passEnv: EasyOcrPassEnv,
+  layout: EasyOcrLayout,
 ): Promise<string | null> {
   if (!isEasyOcrEnabled()) return null;
   const script = easyOcrScriptPath();
@@ -70,14 +75,16 @@ async function runEasyOcrOnImage(
   const imagePath = path.join(dir, 'label.png');
   try {
     await writeFile(imagePath, imageBytes);
-    const { stdout } = await execFileAsync(python, [script, '--lines', imagePath, modelDir], {
+    const { stdout } = await execFileAsync(python, [script, layout === 'rows' ? '--rows' : '--lines', imagePath, modelDir], {
       timeout: 180_000,
       maxBuffer: 8 * 1024 * 1024,
       env: passEnv,
     });
     const text = stdout.trim();
     return text || null;
-  } catch {
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    appendImportJobDebug(`easyocr subprocess: failed (${reason})`);
     return null;
   } finally {
     await unlink(imagePath).catch(() => undefined);
@@ -90,6 +97,7 @@ async function runEasyOcrOnImage(
 export async function extractEasyOcrTextsFromVariants(
   variants: Buffer[],
   modelDir: string,
+  layout: EasyOcrLayout = 'lines',
 ): Promise<string[]> {
   if (!isEasyOcrEnabled() || variants.length === 0) return [];
   const passes = easyOcrPassEnvironments();
@@ -98,7 +106,7 @@ export async function extractEasyOcrTextsFromVariants(
 
   for (const image of variants) {
     for (const passEnv of passes) {
-      const text = await runEasyOcrOnImage(image, modelDir, passEnv);
+      const text = await runEasyOcrOnImage(image, modelDir, passEnv, layout);
       if (!text || seen.has(text)) continue;
       seen.add(text);
       out.push(text);

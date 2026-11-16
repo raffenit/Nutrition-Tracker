@@ -19,6 +19,135 @@ export function scanBandLuminanceY(
 }
 
 /** Two-color roles for any wide-band / table image region (both label polarities). */
+/** Vertical glare trust mask for one product column body (analysis y). Same {@link classifyBandLuminance} as gutter detection. */
+export type ColumnBodyGlareMask = {
+  glareCap: number;
+  y0: number;
+  y1: number;
+  bandCount: number;
+  brightFraction: number[];
+  /** When true, do not trust local horizontal rule ink for row-surface estimation at this band. */
+  untrusted: boolean[];
+  /** Whole column wash-out / heavy glare — prefer gutter interpolation only when paired with warp. */
+  columnGlareWarpSuspect: boolean;
+  glareMassFraction: number;
+  brightPixelFraction: number;
+  peakBandBrightPixelFraction: number;
+};
+
+export function emptyColumnBodyGlareMask(y0: number, y1: number, bandCount = 1): ColumnBodyGlareMask {
+  return {
+    glareCap: 255,
+    y0,
+    y1,
+    bandCount,
+    brightFraction: [0],
+    untrusted: [false],
+    columnGlareWarpSuspect: false,
+    glareMassFraction: 0,
+    brightPixelFraction: 0,
+    peakBandBrightPixelFraction: 0,
+  };
+}
+
+export function columnBodyGlareMask(
+  pixels: Uint8Array,
+  width: number,
+  height: number,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  params: {
+    maxGlareMassFraction: number;
+    maxBrightPixelFraction: number;
+    maxBandBrightPixelFraction: number;
+    bandCount: number;
+    glareCapMaxForMassRule: number;
+  },
+): ColumnBodyGlareMask {
+  const yStart = Math.max(0, y0);
+  const yEnd = Math.min(height, y1);
+  const xStart = Math.max(0, x0);
+  const xEnd = Math.min(width, x1);
+  const roles = classifyBandLuminance(pixels, width, height, xStart, xEnd, yStart, yEnd);
+  const glareMass = roles.clusters
+    .filter((c) => c.role === 'glare')
+    .reduce((sum, c) => sum + c.massFraction, 0);
+  const threshold =
+    roles.glareCap < 255
+      ? Math.max(0, roles.glareCap - 1)
+      : Math.min(248, Math.max(roles.background, roles.ink) + 25);
+
+  let bright = 0;
+  let total = 0;
+  const span = Math.max(1, yEnd - yStart);
+  const bands = Math.max(4, params.bandCount);
+  const bandBright = new Array<number>(bands).fill(0);
+  const bandTotal = new Array<number>(bands).fill(0);
+
+  for (let y = yStart; y < yEnd; y += 1) {
+    const bi = Math.min(bands - 1, Math.floor(((y - yStart) / span) * bands));
+    for (let x = xStart; x < xEnd; x += 1) {
+      total += 1;
+      bandTotal[bi]! += 1;
+      const v = pixels[y * width + x]!;
+      if (v >= threshold) {
+        bright += 1;
+        bandBright[bi]! += 1;
+      }
+    }
+  }
+
+  const brightFraction: number[] = [];
+  const untrusted: boolean[] = [];
+  let peakBandBrightPixelFraction = 0;
+  const massRuleApplies = roles.glareCap < params.glareCapMaxForMassRule;
+  const wholeBodySuspect =
+    (total > 0 ? bright / total : 0) > params.maxBrightPixelFraction ||
+    (massRuleApplies && glareMass > params.maxGlareMassFraction);
+
+  for (let bi = 0; bi < bands; bi += 1) {
+    const frac = bandTotal[bi]! > 0 ? bandBright[bi]! / bandTotal[bi]! : 0;
+    brightFraction.push(frac);
+    peakBandBrightPixelFraction = Math.max(peakBandBrightPixelFraction, frac);
+    untrusted.push(frac > params.maxBandBrightPixelFraction);
+  }
+
+  return {
+    glareCap: roles.glareCap,
+    y0: yStart,
+    y1: yEnd,
+    bandCount: bands,
+    brightFraction,
+    untrusted,
+    columnGlareWarpSuspect: wholeBodySuspect,
+    glareMassFraction: glareMass,
+    brightPixelFraction: total > 0 ? bright / total : 0,
+    peakBandBrightPixelFraction,
+  };
+}
+
+export function columnTrustsRuleAtY(mask: ColumnBodyGlareMask, yAnalysis: number): boolean {
+  const span = Math.max(1, mask.y1 - mask.y0);
+  if (yAnalysis < mask.y0 || yAnalysis > mask.y1) return true;
+  const bi = Math.min(mask.bandCount - 1, Math.floor(((yAnalysis - mask.y0) / span) * mask.bandCount));
+  return !mask.untrusted[bi];
+}
+
+export function columnHasGlareBands(mask: ColumnBodyGlareMask): boolean {
+  return mask.untrusted.some(Boolean);
+}
+
+export function filterRuleYsByGlareMask(
+  ruleYs: number[],
+  mask: ColumnBodyGlareMask,
+  toAnalysisY: (yImage: number) => number,
+): number[] {
+  const filtered = ruleYs.filter((y) => columnTrustsRuleAtY(mask, toAnalysisY(y)));
+  return filtered.length > 0 ? filtered : ruleYs;
+}
+
 export function classifyBandLuminanceInScanBand(
   pixels: Uint8Array,
   width: number,
@@ -52,6 +181,12 @@ export function verticalRuledGutterBrightnessLevel(
   roles: BandLuminanceRoles,
   gutterBrightnessMinFraction: number,
 ): number {
+  if (roles.polarity === 'light_on_dark' && roles.ink > roles.background + 80) {
+    return gutterBrightnessLevel(
+      { ...roles, polarity: 'dark_on_light', background: roles.ink, ink: roles.background },
+      gutterBrightnessMinFraction,
+    );
+  }
   if (roles.polarity === 'light_on_dark') {
     const span = roles.ink - roles.background;
     return roles.ink - span * (1 - gutterBrightnessMinFraction);
@@ -249,12 +384,6 @@ export function classifyBandLuminance(
       clusterCount: clusters.length,
       clusters,
     };
-  }
-
-  if (backgroundPeak.mass < inkPeak.mass) {
-    const swap = backgroundPeak;
-    backgroundPeak = inkPeak;
-    inkPeak = swap;
   }
 
   const background = backgroundPeak.level;

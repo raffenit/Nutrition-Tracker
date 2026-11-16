@@ -115,6 +115,7 @@ export function expandOcrDecimalBeforeGram(intPart: string, afterDot: string): n
   const tail = afterDot.replace(/[^A-Za-z0-9]/g, '');
   if (!tail) return null;
   if (/^[Ss5][gq9]?$/i.test(tail)) return base + 0.5;
+  if (/^d{1,2}$/i.test(tail)) return base + 0.5;
   const fuzzy = parseFuzzyMassUnit(tail);
   if (fuzzy === 'g' && /^[Ss5]/i.test(tail)) return base + 0.5;
   const digit = parseConfusableAmountToken(tail.charAt(0));

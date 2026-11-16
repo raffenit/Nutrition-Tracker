@@ -1124,6 +1124,25 @@ label.import-field-review,
 .import-progress-label { margin: 0; font-size: 0.9rem; font-weight: 650; min-width: 0; }
 .import-progress-elapsed { flex-shrink: 0; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--muted); }
 .import-progress-detail { margin: 0; font-size: 0.8rem; line-height: 1.35; }
+.import-progress-activity {
+  margin: 0.35rem 0 0;
+  padding-inline-start: 1.1rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--muted);
+  display: grid;
+  gap: 0.15rem;
+}
+.import-progress-stages {
+  margin: 0.35rem 0 0;
+  padding-inline-start: 1.1rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  display: grid;
+  gap: 0.12rem;
+}
 .import-progress-steps {
   margin: 0;
   padding: 0;

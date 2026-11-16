@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { splitEmbeddedPdfPages } from '../domain/labelTextBlocks.js';
-import { reportImportJobStep } from '../import/importJobProgress.js';
+import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
 import { extractImageText } from './extractText.js';
 
 const execFileAsync = promisify(execFile);
@@ -44,7 +44,10 @@ async function ocrPdfPageTexts(bytes: Buffer, tessdataDir: string, easyocrModelD
       .filter((name) => name.startsWith('page') && name.endsWith('.png'))
       .sort();
     const chunks: string[] = [];
-    for (const name of files) {
+    const pageCount = files.length;
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      const name = files[pageIndex]!;
+      appendImportJobDebug(`pdf ocr: page ${pageIndex + 1}/${pageCount}`);
       const image = await readFile(path.join(dir, name));
       const pageText = await extractImageText(image, tessdataDir, easyocrModelDir ? { easyocrModelDir } : undefined);
       if (pageText.trim()) chunks.push(pageText.trim());

@@ -1,7 +1,21 @@
+import {
+  buildCalorieRowCellsForStitch,
+  shouldInjectCalorieRowOverride,
+} from './sharedLabelHeaderCalories.js';
 import { SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN } from './splitSingleLabelParams.js';
+
+export type SharedLabelStitchOptions = {
+  /** Full OCR per product column above the ruled body (names, display calories, etc.). */
+  headerColumnTexts?: string[];
+  /** Full body strips (used to read display kcal before % Daily Value when row indices disagree). */
+  valueColumnTexts?: string[];
+};
 
 const NUTRIENT_ROW =
   /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|includes.+added sugars|protein)\b/i;
+/** Nutrient name anywhere on a line — shared label-column OCR often prefixes garbage. */
+const NUTRIENT_ROW_INLINE =
+  /\b(calories|total\s+fat|saturated\s+fat|trans\s+fat|cholesterol|sodium|total\s+carb(?:ohydrate|ohyd\w*)?|dietary\s+fiber|(?<!dietary\s)\bfiber\b|total\s+sugars?|includes[^\n]{0,40}added\s+sugars?|protein)\b/gi;
 const SKIP_LINE = /^(nutrition\s+facts|serving size|servings per|amount per serving|\*|% daily value)/i;
 
 export type SharedLabelGridStitchFailure =
@@ -26,17 +40,19 @@ export function diagnoseSharedLabelGridStitch(
   headerBandText?: string,
 ): SharedLabelGridStitchDiagnosis {
   const rowLabels = extractRowLabels(labelColumnText);
-  const filtered = filterProductColumns(valueColumnTexts);
-  const valueLineCounts = filtered.map((col) => col.values.length);
+  const allColumns = productColumnsForStitch(valueColumnTexts);
+  const valueLineCounts = allColumns.map((col) => col.values.length);
+  const confidentCount = allColumns.filter(
+    (col) => col.values.length >= SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN,
+  ).length;
+  const maxValueLines = valueLineCounts.length > 0 ? Math.max(...valueLineCounts) : 0;
   const rowCount =
-    rowLabels.length > 0 && valueLineCounts.length > 0
-      ? Math.min(rowLabels.length, ...valueLineCounts)
-      : 0;
+    rowLabels.length > 0 && maxValueLines > 0 ? Math.min(rowLabels.length, maxValueLines) : 0;
 
   let failure: SharedLabelGridStitchFailure | null = null;
   if (valueColumnTexts.length < 2) failure = 'too_few_columns';
   else if (rowLabels.length === 0) failure = 'no_row_labels';
-  else if (filtered.length < 2) failure = 'too_few_product_columns';
+  else if (confidentCount < 2 && rowCount === 0) failure = 'too_few_product_columns';
   else if (rowCount === 0) failure = 'row_count_zero';
   else {
     const stitched = stitchSharedLabelGridTexts(labelColumnText, valueColumnTexts, headerBandText);
@@ -47,7 +63,7 @@ export function diagnoseSharedLabelGridStitch(
     ok: failure === null,
     failure,
     rowLabelCount: rowLabels.length,
-    productColumnCount: filtered.length,
+    productColumnCount: confidentCount,
     valueLineCounts,
     rowCount,
   };
@@ -68,30 +84,48 @@ export function formatSharedLabelStitchFailure(diag: SharedLabelGridStitchDiagno
 /**
  * Build a wide table string for {@link parseMultiProductLabelTable} from a shared label column
  * and per-product strips (values — amounts, units, words like "Varies", not labels-only).
+ *
+ * Inputs follow `sharedLabelStitchContract.ts` (`SharedLabelStitchColumnTexts`):
+ * `labelColumnText` is the full nutrient-name rail; `valueColumnTexts` are product values only.
  */
 export function stitchSharedLabelGridTexts(
   labelColumnText: string,
   valueColumnTexts: string[],
   headerBandText?: string,
+  stitchOptions?: SharedLabelStitchOptions,
 ): string | null {
   const rowLabels = extractRowLabels(labelColumnText);
   if (rowLabels.length === 0 || valueColumnTexts.length < 2) return null;
 
-  const filtered = filterProductColumns(valueColumnTexts);
-  if (filtered.length < 2) return null;
+  const columns = productColumnsForStitch(valueColumnTexts);
+  const confident = columns.filter((col) => col.values.length >= SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN);
+  if (confident.length < 2) return null;
 
-  const valueRows = filtered.map((col) => col.values);
-  const columnCount = filtered.length;
-  const rowCount = Math.min(rowLabels.length, ...valueRows.map((rows) => rows.length));
+  const valueRows = columns.map((col) => col.values);
+  const columnCount = columns.length;
+  const maxValueLines = Math.max(...valueRows.map((rows) => rows.length));
+  const rowCount = Math.min(rowLabels.length, maxValueLines);
   if (rowCount === 0) return null;
 
   const names =
+    extractProductNamesFromHeaderColumns(stitchOptions?.headerColumnTexts, columnCount) ??
     extractProductNames(headerBandText, columnCount) ??
-    filtered.map((_, index) => `Column ${index + 1}`);
+    columns.map((_, index) => `Column ${index + 1}`);
+
+  const valueTextsForCalories = stitchOptions?.valueColumnTexts ?? valueColumnTexts;
+  const calorieOverride = buildCalorieRowCellsForStitch(
+    valueTextsForCalories,
+    stitchOptions?.headerColumnTexts,
+  );
 
   const lines = ['Nutrition Facts', padNames(names, columnCount).join('  ')];
   for (let row = 0; row < rowCount; row += 1) {
-    lines.push(formatRowLabel(rowLabels[row]!));
+    const rowKey = rowLabels[row]!;
+    lines.push(formatRowLabel(rowKey));
+    if (rowKey === 'calories' && shouldInjectCalorieRowOverride(calorieOverride)) {
+      lines.push(padCalorieCells(calorieOverride, columnCount).join('  '));
+      continue;
+    }
     lines.push(
       valueRows
         .map((rows) => cleanValue(rows[row] ?? ''))
@@ -103,31 +137,205 @@ export function stitchSharedLabelGridTexts(
   return /calories/i.test(text) ? text : null;
 }
 
-function filterProductColumns(valueColumnTexts: string[]): Array<{ text: string; values: string[] }> {
-  const columns = valueColumnTexts.map((text) => ({ text, values: extractValueLines(text) }));
-  return columns.filter((col) => col.values.length >= SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN);
+const DAILY_VALUE_SLICE = /%\s*daily\s*value/i;
+
+function dailyValueTextInSlice(text: string): boolean {
+  return DAILY_VALUE_SLICE.test(text.replace(/\s+/g, ' ').trim());
 }
 
-function extractRowLabels(text: string): string[] {
+/** Row label from label OCR, or from value-column % Daily Value when the label band is empty. */
+function rowLabelForBandIndex(
+  labelSliceTexts: string[],
+  valueSliceTextsPerColumn: string[][],
+  index: number,
+): string | null {
+  const fromLabel = nutrientLabelFromRowBandSlice(labelSliceTexts[index] ?? '');
+  if (fromLabel) return fromLabel;
+  const valueHit = valueSliceTextsPerColumn.some((col) => dailyValueTextInSlice(col[index] ?? ''));
+  if (valueHit) return '% Daily Value*';
+  return null;
+}
+
+function countParsableLabelNutrientSlices(labelSliceTexts: string[]): number {
+  let count = 0;
+  for (const slice of labelSliceTexts) {
+    if (nutrientLabelFromRowBandSlice(slice)) count += 1;
+  }
+  return count;
+}
+
+function valueSliceTextForLabelRow(
+  valueSliceTexts: string[],
+  rowLabel: string,
+  nutrientRowOrdinal: number,
+  labelNutrientSliceCount: number,
+  labelSliceIndex: number,
+  labelSliceCount: number,
+): string {
+  const key = rowLabel.toLowerCase();
+  for (let i = 0; i < valueSliceTexts.length; i += 1) {
+    const sliceLabel = nutrientLabelFromRowBandSlice(valueSliceTexts[i] ?? '');
+    if (sliceLabel && sliceLabel.toLowerCase() === key) {
+      return cleanValue(valueSliceTexts[i] ?? '');
+    }
+  }
+  if (valueSliceTexts.length === labelSliceCount) {
+    return cleanValue(valueSliceTexts[labelSliceIndex] ?? '');
+  }
+  if (valueSliceTexts.length === 0) return '';
+  const nutrientCount = Math.max(1, labelNutrientSliceCount);
+  const fraction = nutrientCount <= 1 ? 0 : nutrientRowOrdinal / (nutrientCount - 1);
+  const vi = Math.round(fraction * (valueSliceTexts.length - 1));
+  return cleanValue(valueSliceTexts[vi] ?? '');
+}
+
+/**
+ * Stitch when each horizontal row band produced one OCR string per slice (shared-rail row-band path).
+ * Rows come from the **label column**; value strips follow by row label or pitch-weighted index when counts differ.
+ */
+export function stitchSharedLabelGridFromRowBandSlices(
+  labelSliceTexts: string[],
+  valueSliceTextsPerColumn: string[][],
+  headerBandText?: string,
+  stitchOptions?: SharedLabelStitchOptions,
+): string | null {
+  if (valueSliceTextsPerColumn.length < 2 || labelSliceTexts.length === 0) return null;
+
+  const columnCount = valueSliceTextsPerColumn.length;
+  const names =
+    extractProductNamesFromHeaderColumns(stitchOptions?.headerColumnTexts, columnCount) ??
+    extractProductNames(headerBandText, columnCount) ??
+    padNames([], columnCount);
+
+  const seenRows = new Set<string>();
+  const rowBlocks: Array<{ label: string; values: string[] }> = [];
+  const labelNutrientSliceCount = countParsableLabelNutrientSlices(labelSliceTexts);
+  let nutrientRowOrdinal = 0;
+  const bandCount = Math.max(
+    labelSliceTexts.length,
+    ...valueSliceTextsPerColumn.map((col) => col.length),
+  );
+  for (let i = 0; i < bandCount; i += 1) {
+    const rowLabel = rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i);
+    if (!rowLabel) continue;
+    const key = rowLabel.toLowerCase();
+    if (seenRows.has(key)) continue;
+
+    const isDailyValueHeader = DAILY_VALUE_SLICE.test(rowLabel);
+    const values = isDailyValueHeader
+      ? valueSliceTextsPerColumn.map((col) => cleanValue(col[i] ?? ''))
+      : valueSliceTextsPerColumn.map((col) =>
+          valueSliceTextForLabelRow(
+            col,
+            rowLabel,
+            nutrientRowOrdinal,
+            labelNutrientSliceCount,
+            i,
+            labelSliceTexts.length,
+          ),
+        );
+    nutrientRowOrdinal += 1;
+    const hasDigit = values.some((v) => /\d/.test(v));
+    const hasVaries = values.some((v) => /varies/i.test(v));
+    if (!isDailyValueHeader && !hasDigit && !hasVaries && rowLabel !== 'calories') continue;
+    if (rowLabel === 'calories' && !hasDigit && !hasVaries) continue;
+
+    seenRows.add(key);
+    rowBlocks.push({ label: rowLabel, values });
+  }
+
+  const valueTextsForCalories =
+    stitchOptions?.valueColumnTexts ??
+    valueSliceTextsPerColumn.map((col) => col.join('\n'));
+  const calorieOverride = buildCalorieRowCellsForStitch(
+    valueTextsForCalories,
+    stitchOptions?.headerColumnTexts,
+  );
+  if (shouldInjectCalorieRowOverride(calorieOverride)) {
+    const calCells = padCalorieCells(calorieOverride, columnCount);
+    const calIdx = rowBlocks.findIndex((r) => r.label === 'calories');
+    if (calIdx >= 0) rowBlocks[calIdx]!.values = calCells;
+    else rowBlocks.unshift({ label: 'calories', values: calCells });
+  }
+
+  if (rowBlocks.length === 0 || !rowBlocks.some((r) => r.label === 'calories')) return null;
+
+  const lines = ['Nutrition Facts', names.join('    ')];
+  for (const row of rowBlocks) {
+    lines.push(formatRowLabel(row.label));
+    lines.push(row.values.map((v) => v.trim() || BLANK_CELL).join('  '));
+  }
+  const text = lines.join('\n');
+  return /calories/i.test(text) ? text : null;
+}
+
+/** Keeps an empty OCR cell's column position when rows are re-split on whitespace gaps. */
+const BLANK_CELL = '-';
+
+function nutrientLabelFromRowBandSlice(sliceText: string): string | null {
+  const line = sliceText.replace(/\s+/g, ' ').trim();
+  if (!line || SKIP_LINE.test(line)) return null;
+  if (/%\s*daily\s*value/i.test(line)) return null;
+
+  const lineStart = line.match(
+    /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|protein)\b/i,
+  );
+  if (lineStart) return normalizeRowLabel(lineStart[0]!);
+
+  const labelOnly = line.match(NUTRIENT_ROW);
+  if (labelOnly) return normalizeRowLabel(labelOnly[1]!);
+
+  const inline = [...line.matchAll(NUTRIENT_ROW_INLINE)];
+  if (inline.length === 1) return normalizeRowLabel(inline[0]![1]!);
+  if (inline.length > 1) return normalizeRowLabel(inline[0]![1]!);
+  return null;
+}
+
+function productColumnsForStitch(valueColumnTexts: string[]): Array<{ text: string; values: string[] }> {
+  return valueColumnTexts.map((text) => ({ text, values: extractValueLines(text) }));
+}
+
+export function extractRowLabels(text: string): string[] {
+  const seen = new Set<string>();
   const labels: string[] = [];
+  const push = (raw: string) => {
+    const norm = normalizeRowLabel(raw.replace(/\s+/g, ' ').trim());
+    const key = norm.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    labels.push(norm);
+  };
+
   const lines = text.replace(/\r/g, '\n').split(/\n/).map((line) => line.trim()).filter(Boolean);
   for (const line of lines) {
     if (SKIP_LINE.test(line)) continue;
     if (/%\s*daily\s*value/i.test(line)) continue;
-    const inline = line.match(
+    const lineStart = line.match(
       /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|protein)\b/i,
     );
-    if (inline) {
-      labels.push(normalizeRowLabel(inline[0]!));
+    if (lineStart) {
+      push(lineStart[0]!);
       continue;
     }
     const labelOnly = line.match(NUTRIENT_ROW);
-    if (labelOnly) labels.push(normalizeRowLabel(labelOnly[1]!));
+    if (labelOnly) {
+      push(labelOnly[1]!);
+      continue;
+    }
+    for (const match of line.matchAll(NUTRIENT_ROW_INLINE)) {
+      push(match[1]!);
+    }
+  }
+
+  if (labels.length === 0) {
+    for (const match of text.matchAll(NUTRIENT_ROW_INLINE)) {
+      push(match[1]!);
+    }
   }
   return labels;
 }
 
-function extractValueLines(text: string): string[] {
+export function extractValueLines(text: string): string[] {
   const values: string[] = [];
   let inTable = false;
   for (const raw of text.replace(/\r/g, '\n').split(/\n/)) {
@@ -151,6 +359,32 @@ function extractValueLines(text: string): string[] {
     if (looksLikeValueCell(line)) values.push(cleanValue(line));
   }
   return values;
+}
+
+function padCalorieCells(cells: string[], columnCount: number): string[] {
+  const next = [...cells];
+  while (next.length < columnCount) next.push('');
+  return next.slice(0, columnCount).map((c) => c.trim());
+}
+
+function extractProductNamesFromHeaderColumns(
+  headerColumnTexts: string[] | undefined,
+  columnCount: number,
+): string[] | null {
+  if (!headerColumnTexts?.length) return null;
+  const names = headerColumnTexts.slice(0, columnCount).map((text) => {
+    const lines = text
+      .replace(/\r/g, '\n')
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      if (looksLikeProductName(line)) return line;
+    }
+    return lines.find((line) => /[A-Za-z]/.test(line)) ?? '';
+  });
+  if (names.filter((n) => n.length >= 2).length < 2) return null;
+  return padNames(names, columnCount);
 }
 
 function extractProductNames(headerBandText: string | undefined, columnCount: number): string[] | null {

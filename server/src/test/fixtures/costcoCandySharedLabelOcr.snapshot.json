@@ -1,0 +1,41 @@
+{
+  "sourceImage": "costco-candy.jpg",
+  "capturedAt": "2026-11-15T01:55:33.244Z",
+  "geometry": {
+    "lastOkStep": 4,
+    "valueColumnCount": 10,
+    "rowBandOcr": true,
+    "rowBandSliceCount": 17,
+    "rowPitchPx": 44
+  },
+  "labelColumnText": "= Nutrition Facts\nA Servings per cv 2iner\nServing si\n2 AEST Saud\n5 [Amount per serving\n|\" (Calories\nAl | ———————————————\nTEE\n\\  savratedFt\nBN ransPt\n; Cholesterol\n| Sodium\nTotal Carbohydrate\nDietary Fiber\nTotal Sugars\nIncludes Added Sugars\nProtein\nEERRST. a Oh a\nTeno n ODE yr)\na serving of food contributes ~~ Calcium\nto a daily diet. 2,000 calories Iron\na day is used for general mp\nnutrition advice Potassium\n",
+  "headerBandText": "CE ——— ER ————— A ————MGS\nKIT KAT® SNICKERS® M&M'S® Peanut , 1s peanut | 3 MUSKETEERS® | BUTTERFINGER® | ALMOND Joy*\nWafer Bar Fun Size Bar Chocolate Candies NE Me rim I MILKCHEES or Cup bl. —— i A\n— — ————— | —————— ————————— - 3 ry\nVaries Varies Varies Verkade TT Varies IEEE Varies Varies Varies Varies\n2 Packs (28g) 1Bar (17g) 1Pack (18g) ~(189) |  2Packs (27g) 1Bar (17g) | 2 Pieces (31) 2 Bars (30g) 2Bars(37g) | 2Pieces (34g)\neen | ese | ee | V8) | ETE AL et PE —TEy err\n",
+  "valueColumnTexts": [
+    "% Daily Value*\n19 9%\n4.59 23%\nOg\n\n<5mg 0%\n15mg 1%\n19g %\n<lg 0%\n15g\n\n14g 28%\nig\nsir ir\nOmcg 0%\n20mg 0%\n0.6mg 4%\n55ma 2%\n",
+    "FERRE,\n% Daily Value®\n4g 5%\n1.5¢ 8%\nA\nOmg 0%\n40mg 2%\n10g 4%\nBR\n9 aay\n8g 16%\nig\n\nET TE\nOmcg 0%\nOmg 0%\n\nOmg 0%\n\nOmg 0%\n",
+    "FE.\n% Daily Value®\n5g 6%\n29 10%\n0g\nOmg 0%\n10mg 0%\nNg 4%\n<Ig 3%\n39\n8g 16%\n29\nLTE\nOmcg 0%\nOmg 0%\n04mg 2%\nOma 0%\n",
+    "3.59 4%\n20 10%\n0g\nOmg 0%\n30mg 1%\nlig 4%\n0g 0%\n| PEA\n1g 14%\n<1g\nesi]\nOmcg 0%\nOmg 0%\nOmg 0%\nOmg 0%\n",
+    "Ib\n% Dally value® |\n5g 6%\n\n3g 15% |\n0g\nOmg 0%\n\n20mg 1% |\n19g % |\n<Ig 3% |\n17g\n16g 32%\n\nIg\nTONNE |\nOmcg 0%\n\n30mg 2% |\n04mg 2% |\nOmg 0% |\n",
+    "Led\n\n% Daily value” |\nTY\n29 10%\n0g |\nOmg 0% |\n25mg 1%\n129 4% | 1\n0g 0% | 1\n10g i\n9g 18% | 1\n<Ig :\nEE | |\nOmcg 0% | (\nOmg 0% | :\nOmg 0% |\nOma 0% | 1\n",
+    "————\n% Daily Value®\n9g 12%\n\n3g 15%\n\n0g\n\n<dmg 0%\n00mg 4%\n\n8g 7% |\ng a% |\n6g\n5 30% |\nig |\nI | |\nmcg 0% |\n0mg 0% | (\n).9mg 6% | C\noma 2% | ¢\n",
+    "TETRIS. WE\n% Daily Value*\n4g 5%\n2.59 13%\nEE —\nLl\nomy 0%\n55mg 2%\n89 8% |\nDe 0%\n20g\n\nEE ——— |\n20g 20% |\na —— )\n<Ig\nFo |\nImcg 0% |\n—3 0%\nImg 0% | :\n——— -\nmg 0% |\nma 0% | &\n",
+    "% Daily Value®\n79 9%\nSee on\nBE en\nTR\n259 9%\n<Ig 3%\n159\n\n14g 28%\n3g\nERSTE TT)\nmeg ___ 0%\n20mg 0%\n— Sy §\nOma saz |\n",
+    "2 ily Value®\n9g 12%\n79 35%\nER\nOmg 0%\n45mg 2%\n20g T%\n1g 4%\n14g 28%\n1g\n\nLIF RSShaes\nOmcg 0%\n10mg 0%\n.—.. SREY\n"
+  ],
+  "ocrScores": {
+    "label": 8,
+    "header": 1,
+    "values": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ]
+  }
+}

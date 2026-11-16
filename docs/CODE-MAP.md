@@ -30,6 +30,8 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | --- | --- | --- |
 | Upload + merge into draft | `server/src/routes/foodRoutes.ts` | `receiveUpload`, `applySlotMergedNutrients`, `extractUploadText` |
 | OCR orchestration | `server/src/integrations/extractText.ts` | `extractImageLabel`, `extractPdfText` |
+| OCR orchestration (internals — grep first) | same file + `varietyPackGridPipeline.ts` | `collectOcrCandidateTexts`, `ocrAndStitchVarietyPack`, `ocrAndStitchSharedLabelPlan`, `ocrSharedLabelGridColumns`, `ocrAndStitchColumnStrips` |
+| Wide-table column cap | `server/src/domain/columnStripDetectParams.ts` | `OCR_IMPORT_MAX_PRODUCT_COLUMNS`, `DEFAULT_COLUMN_STRIP_DETECT_PARAMS` |
 | Layout routing (wide table / candidate pick) | `server/src/domain/labelLayout.ts`, `server/src/integrations/imageLayoutHint.ts` | `inferLabelLayoutFromText`, `pickImportTextCandidateIndex`, `inferLabelLayoutHint` |
 | Import job progress (server phases) | `server/src/import/importJobProgress.ts`, `web/src/lib/runImportWithProgress.ts` | `reportImportJobStep`, `GET /api/import-jobs/:id`, `createImportProgressRunner` |
 | Variety-pack column strips (12b part B) | `server/src/integrations/labelColumnStrips.ts` | `detectColumnStrips`, `extractColumnStripBuffers`, `shouldRunColumnStripOcr` |
@@ -38,6 +40,9 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Column strip stitch | `server/src/domain/stitchColumnStripTexts.ts` | `stitchColumnStripOcrTexts`; wired in `extractImageLabel` |
 | Shared label grid stitch | `server/src/domain/stitchSharedLabelGridTexts.ts` | `stitchSharedLabelGridTexts`, `diagnoseSharedLabelGridStitch`; tried before full-width strips in `extractImageLabel` |
 | Split single label | `server/src/integrations/splitSingleLabel.ts`, `server/src/domain/stitchSplitLabelHalves.ts` | `detectSplitSingleLabel`, `stitchSplitLabelHalves` when `singleSubjectInFocus` |
+| Curved-rule dewarp (split halves) | `server/src/domain/curvedRuleDewarp.ts`, `server/src/integrations/curvedLabelDewarp.ts` | `detectCurvedRules`, `dewarpToStraightRules`, `dewarpCurvedLabelRules`, `buildDewarpedStripOcrVariants` |
+| Serving size / servings per container vote (OCR candidates) | `server/src/domain/labelServingVote.ts` | `voteServingFields` |
+| %DV row inference (unreadable names) | `server/src/domain/labelDailyValueRowInference.ts` | `inferDailyValueRows`, `appendDailyValueInferredRows` |
 | Image analysis geometry (shared) | `server/src/domain/imageAnalysisGeometry.ts` | `IMAGE_ANALYSIS_WIDTH`, side/crop fractions |
 | Column-strip geometry | `server/src/domain/columnStripDetectParams.ts` | `DEFAULT_COLUMN_STRIP_DETECT_PARAMS` |
 | Focus crop geometry | `server/src/domain/focusCropParams.ts` | `DEFAULT_FOCUS_CROP_PARAMS` |
@@ -49,7 +54,11 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Label vs menu detection | `server/src/domain/nutritionImport.ts` | `buildNutritionImport` |
 | Full label parse (text → nutrients) | `server/src/domain/parseLabel.ts` | `parseNutritionLabel`, `readSodiumMgNoisy` |
 | Variety-pack column table | `server/src/domain/parseMultiProductLabelTable.ts` | `parseMultiProductLabelTable` |
-| Per-slot merge across OCR strings | `server/src/domain/labelSlotExtract.ts` | `mergeSlotReadingsAcrossCandidates`, `extractSlotReadingsFromText` |
+| Per-slot merge across OCR strings | `server/src/domain/labelSlotExtract.ts` | `mergeSlotReadingsAcrossCandidates`, `assessSlotConsensus`, `extractSlotReadingsFromText` |
+| Portrait-single OCR profile | `server/src/domain/portraitSingleOcrParams.ts` | `isPortraitSingleOcrHint`, `PORTRAIT_SINGLE_*` caps, `portraitSingleOcrEnabled` |
+| Progressive OCR gate (Tess → Easy) | `server/src/domain/labelOcrMacroReadiness.ts` | `assessCoreMacroReadiness` (missing / contested / inconsistent core macros) |
+| Contested-row re-read | `server/src/domain/labelRowReread.ts`, `server/src/integrations/ocrPreprocess.ts` | `findSlotRowLine`, `rowCropRect`, `buildStackedRowCrops` |
+| OCR stage timing | `server/src/domain/ocrPipelineStages.ts`, `server/src/integrations/ocrPipelineTimer.ts` | `OcrPipelineTimer`, `PIPELINE_STAGE_LABELS` |
 | Units, macro-gap sodium | `server/src/domain/labelUnits.ts` | `readSodiumFromMacroGap`, `readNutrientAmountInSlice`, `assignByVariantLabelWindow` |
 | Fuzzy row names (Sedium, Tolal fat) | `server/src/domain/labelVariants.ts` | `findVariantLabelAnchors`, `matchVariantLabelToken` |
 | OCR character normalization | `server/src/domain/ocrConfusables.ts` | confusable maps used by parsers |
@@ -60,7 +69,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | URL / PDF text import | `server/src/integrations/importUrl.ts`, `htmlText.ts` | `importNutritionFromUrl` |
 | Menu tables (non-label HTML) | `server/src/domain/parseMenuTable.ts`, `menuTableSchema.ts` | table-driven columns |
 
-**Env (runtime):** `.env.example` — `EASYOCR_ENABLED`, `EASYOCR_MAX_VARIANTS`, `EASYOCR_AB`, `TESSERACT_MAX_VARIANTS`, `TESSERACT_DUAL_PSM`.
+**Env (runtime):** `.env.example` — `EASYOCR_ENABLED`, `EASYOCR_MAX_VARIANTS`, `EASYOCR_AB`, `TESSERACT_MAX_VARIANTS`, `TESSERACT_DUAL_PSM`, `OCR_PORTRAIT_SINGLE` (`0` = disable portrait-single profile).
 
 **Playbook:** [playbooks/label-ocr-and-parsing.md](./playbooks/label-ocr-and-parsing.md)
 
@@ -154,7 +163,8 @@ See [server/src/test/README.md](../server/src/test/README.md) and [testing-stand
 | HTTP integration | `server/src/test/integration/` | `api.test.ts`, `coverage.test.ts` |
 | Test harness | `server/src/test/helpers.ts` | `createTestServer` |
 | Label / parse unit | `server/src/test/unit/domain/parseLabel.test.ts` | `parseNutritionLabel`, sodium gap |
-| Slot merge unit | `server/src/test/unit/domain/labelSlotExtract.test.ts` | `mergeSlotReadingsAcrossCandidates` |
+| Slot merge unit | `server/src/test/unit/domain/labelSlotExtract.test.ts` | `mergeSlotReadingsAcrossCandidates`, `assessSlotConsensus` |
+| Progressive gate / row re-read units | `server/src/test/unit/domain/labelOcrMacroReadiness.test.ts`, `labelRowReread.test.ts` | `assessCoreMacroReadiness`, `findSlotRowLine` |
 | EasyOCR env unit | `server/src/test/unit/integrations/easyOcr.test.ts` | `easyOcrPassEnvironments` |
 | Family privacy unit | `server/src/test/unit/domain/familyView.test.ts` | `assertFamilyBoardIsPublic` |
 | Web | `web/` | `npm run check` (no component tests yet) |

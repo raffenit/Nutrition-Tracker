@@ -1,0 +1,24 @@
+{
+  "sourceImage": "your-label-photo.jpg",
+  "layout": "single",
+  "notes": "Copy to *NutrientGroundTruth.json in this folder. layout: single | multi_column | shared_rail. Use products[] (one entry per panel/column). For '<' amounts, set core field 0 and list lessThan. Pair with local/test-images/manifest.json nutrientGroundTruthRegression gates.",
+  "compareFields": ["calories", "fat", "sodium", "carbs", "protein"],
+  "products": [
+    {
+      "productName": "Example product",
+      "servingLabel": "1 cup (240g)",
+      "nutrients": {
+        "calories": 200,
+        "fat": 8,
+        "carbs": 28,
+        "protein": 6,
+        "fiber": 4,
+        "sodium": 140,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 2, "unit": "g" },
+          { "key": "sugar", "label": "Total sugars", "amount": 5, "unit": "g" }
+        ]
+      }
+    }
+  ]
+}

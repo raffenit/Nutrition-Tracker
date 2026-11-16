@@ -16,11 +16,14 @@ import {
 } from './labelColumnStrips.js';
 import { resolveLabelProcessingImage } from './imageLayoutHint.js';
 
+/** Strip coordinates are in {@link sourceBytes} space (the processed label image, not the upload). */
+export type SplitSingleLabelPlan = ColumnStripPlan & { sourceBytes: Buffer };
+
 /** Two equal vertical halves of one Nutrition Facts panel (not two products). */
 export async function detectSplitSingleLabel(
   bytes: Buffer,
   hint: Pick<LabelLayoutHint, 'singleSubjectInFocus' | 'sharpPeakCount'>,
-): Promise<ColumnStripPlan | null> {
+): Promise<SplitSingleLabelPlan | null> {
   if (!hint.singleSubjectInFocus) return null;
   if (hint.sharpPeakCount >= 18) return null;
 
@@ -52,17 +55,15 @@ export async function detectSplitSingleLabel(
   const ratio = wl < wr ? wl / wr : wr / wl;
   if (ratio < widthRatioMin || ratio > widthRatioMax) return null;
 
-  return buildColumnStripPlanFromAnalysisSegments(bytes, segments, {
+  const plan = await buildColumnStripPlanFromAnalysisSegments(bytes, segments, {
     minColumns: 2,
     maxColumns: 2,
     requireWideAspect: false,
   });
+  return plan ? { ...plan, sourceBytes: labelBytes } : null;
 }
 
-export async function extractSplitSingleLabelBuffers(
-  bytes: Buffer,
-  plan: ColumnStripPlan,
-): Promise<[Buffer, Buffer]> {
-  const [left, right] = await extractColumnStripBuffers(bytes, plan);
+export async function extractSplitSingleLabelBuffers(plan: SplitSingleLabelPlan): Promise<[Buffer, Buffer]> {
+  const [left, right] = await extractColumnStripBuffers(plan.sourceBytes, plan);
   return [left!, right!];
 }

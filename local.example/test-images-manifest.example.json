@@ -6,17 +6,33 @@
       "description": "Variety pack, shared_rail layout (one nutrient rail + N value columns).",
       "layout": "shared_rail",
       "valueColumnCount": 10,
+      "nutrientRows": {
+        "mainSectionRows": 10,
+        "secondarySectionRows": 4,
+        "notes": "Count main vs secondary blocks on the shared label rail. Optional fixture field caloriesKcalPerValueColumn (0-based) enables OCR regression in run-local-test-images-ocr.mjs; see server/src/test/fixtures/costcoCandyGlareGroundTruth.json for Costco."
+      },
       "varietyPackPipeline": {
         "expectRun": true,
         "expectLastOkStep": 4,
         "expectSharedRailPlan": true,
         "minValueColumns": 10
+      },
+      "panelShapeGate": {
+        "expectPortraitCropEligible": false,
+        "expectInkEnvelopeShapeOk": false,
+        "expectGatedPanelCrop": false,
+        "expectInkEnvelopeRejectSubstrings": ["horizontal_rules", "first_rule"]
       }
     },
     {
       "file": "split-halves.jpg",
       "layout": "split_single",
       "valueColumnCount": null,
+      "nutrientRows": {
+        "mainSectionRows": 12,
+        "secondarySectionRows": 5,
+        "notes": "Single panel after horizontal stitch (example counts)."
+      },
       "varietyPackPipeline": {
         "expectRun": true,
         "expectSharedRailPlan": false,
@@ -24,16 +40,37 @@
       },
       "splitSingleLabel": {
         "expectDetect": true
+      },
+      "panelShapeGate": {
+        "expectPortraitCropEligible": false,
+        "expectInkEnvelopeShapeOk": false,
+        "expectGatedPanelCrop": false,
+        "expectInkEnvelopeRejectSubstrings": ["horizontal_rules", "no_first_rule"]
       }
     },
     {
       "file": "single-panel.jpg",
       "layout": "single",
       "valueColumnCount": null,
+      "nutrientRows": {
+        "mainSectionRows": 10,
+        "secondarySectionRows": 12,
+        "notes": "Example single panel; some labels use dot leaders instead of a grid."
+      },
       "varietyPackPipeline": {
         "expectRun": false,
         "expectFailStep": 1,
         "expectFailCode": "band_unavailable"
+      },
+      "panelShapeGate": {
+        "expectPortraitCropEligible": true,
+        "expectInkEnvelopeShapeOk": true,
+        "expectGatedPanelCrop": true,
+        "expectGatedStrategy": "ink_envelope"
+      },
+      "ocrPerformanceRegression": {
+        "trackMaxSeconds": 45,
+        "trackOnly": true
       }
     }
   ]

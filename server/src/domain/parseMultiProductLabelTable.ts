@@ -10,8 +10,8 @@ export type MultiProductColumn = {
   preview: string;
 };
 
-const TABLE_END = /^(ingredients|distributed by|contains:|% daily value)/i;
-const SKIP_LINE = /^(serving size|servings per|amount per serving|daily value|\*)\b/i;
+const TABLE_END = /^(ingredients|distributed by|contains:)/i;
+const SKIP_LINE = /^(serving size|servings per|amount per serving|daily value|\*|%?\s*daily\s*value)/i;
 const NUTRIENT_ROW =
   /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|includes.+added sugars|protein)\b/i;
 
@@ -65,6 +65,11 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
       continue;
     }
 
+    if (pendingRow && cells.length >= columnCount) {
+      applyRowValues(columns, pendingRow, padValues(cells, columnCount));
+      pendingRow = null;
+      continue;
+    }
     if (pendingRow && isValueOnlyLine(cells)) {
       applyRowValues(columns, pendingRow, padValues(cells, columnCount));
       pendingRow = null;
@@ -81,8 +86,11 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
     }
   }
 
-  const filled = columns.filter((col) => col.nutrients.calories > 0 || col.nutrients.protein > 0);
-  if (filled.length < 2) return null;
+  const withMacros = columns.filter((col) => col.nutrients.calories > 0 || col.nutrients.protein > 0);
+  if (withMacros.length < 1) {
+    if (names.length >= 2) return columns;
+    return null;
+  }
   return columns;
 }
 
@@ -122,8 +130,13 @@ function looksLikeProductName(cell: string): boolean {
 
 function splitTableCells(line: string): string[] {
   if (line.includes('\t')) return line.split('\t').map((cell) => cell.trim()).filter(Boolean);
+  const byGap = line
+    .split(/\s{2,}/)
+    .map((cell) => cell.trim())
+    .filter((cell) => cell && !/^\|+$/.test(cell));
+  if (byGap.length >= 2) return byGap;
   if (line.includes('|')) return line.split('|').map((cell) => cell.trim()).filter(Boolean);
-  return line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+  return byGap;
 }
 
 function matchNutrientRowLabel(line: string): string | null {
@@ -137,7 +150,13 @@ function isValueOnlyLine(cells: string[]): boolean {
 }
 
 function isNumericCell(cell: string): boolean {
+  if (isBlankCellPlaceholder(cell)) return true;
   return /^\d+(?:\.\d+)?\s*(?:g|mg|kcal)?$/i.test(cell.trim()) || /^\d+(?:\.\d+)?$/.test(cell.trim());
+}
+
+/** Stitched grids write `-` for an unread cell so later columns keep their position. */
+function isBlankCellPlaceholder(cell: string): boolean {
+  return /^[-–—]$/.test(cell.trim());
 }
 
 function padValues(values: string[], columnCount: number): string[] {

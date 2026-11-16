@@ -1,4 +1,4 @@
-import type { Sharp } from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import {
   DEFAULT_FOCUS_CROP_PARAMS,
   resolveFocusCropParams,
@@ -37,6 +37,36 @@ export async function focusCropVariants(source: Sharp, options?: FocusCropOption
   return variants;
 }
 
+export function centerBandCropRect(
+  fullWidth: number,
+  fullHeight: number,
+  options?: { heightFraction?: number; widthFraction?: number; geometry?: Partial<FocusCropParams> },
+): FocusCropRect {
+  const params = resolveFocusCropParams(options?.geometry);
+  const heightFraction = options?.heightFraction ?? params.centerBandHeightFraction;
+  const widthFraction = options?.widthFraction ?? params.centerBandWidthFraction;
+  const cropH = Math.max(
+    minCropSidePx(fullHeight, params.minCropSideFraction),
+    Math.round(fullHeight * heightFraction),
+  );
+  const cropW = Math.max(
+    minCropSidePx(fullWidth, params.minCropSideFraction),
+    Math.round(fullWidth * widthFraction),
+  );
+  const top = Math.max(0, Math.round((fullHeight - cropH) / 2));
+  const left = Math.max(0, Math.round((fullWidth - cropW) / 2));
+  return { left, top, width: cropW, height: cropH };
+}
+
+const FOCUS_CROP_MIN_SIDE = 3;
+
+function isValidFocusCropRect(rect: FocusCropRect, fullWidth: number, fullHeight: number): boolean {
+  if (rect.width < FOCUS_CROP_MIN_SIDE || rect.height < FOCUS_CROP_MIN_SIDE) return false;
+  if (rect.left < 0 || rect.top < 0) return false;
+  if (rect.left + rect.width > fullWidth || rect.top + rect.height > fullHeight) return false;
+  return true;
+}
+
 function centerBandCrop(
   source: Sharp,
   width: number,
@@ -45,11 +75,14 @@ function centerBandCrop(
   widthFraction: number,
   params: FocusCropParams,
 ): Sharp {
-  const cropH = Math.max(minCropSidePx(height, params.minCropSideFraction), Math.round(height * heightFraction));
-  const cropW = Math.max(minCropSidePx(width, params.minCropSideFraction), Math.round(width * widthFraction));
-  const top = Math.max(0, Math.round((height - cropH) / 2));
-  const left = Math.max(0, Math.round((width - cropW) / 2));
-  return source.clone().extract({ left, top, width: cropW, height: cropH });
+  const { left, top, width: cropW, height: cropH } = centerBandCropRect(width, height, {
+    heightFraction,
+    widthFraction,
+    geometry: params,
+  });
+  const rect = { left, top, width: cropW, height: cropH };
+  if (!isValidFocusCropRect(rect, width, height)) return source;
+  return source.clone().extract(rect);
 }
 
 async function laplacianBandCrop(
@@ -85,12 +118,15 @@ async function laplacianBandCrop(
   );
   if (!rect) return null;
 
-  return source.clone().extract({
+  const clamped: FocusCropRect = {
     left: Math.max(0, rect.left),
     top: Math.max(0, rect.top),
     width: Math.min(rect.width, fullWidth - rect.left),
     height: Math.min(rect.height, fullHeight - rect.top),
-  });
+  };
+  if (!isValidFocusCropRect(clamped, fullWidth, fullHeight)) return null;
+
+  return source.clone().extract(clamped);
 }
 
 /** Test hook: laplacian-guided crop in full-image coordinates. */

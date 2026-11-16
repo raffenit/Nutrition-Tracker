@@ -1,0 +1,270 @@
+{
+  "sourceImage": "costco-candy.jpg",
+  "layout": "shared_rail",
+  "valueColumnIndexBase": 0,
+  "valueColumnCount": 10,
+  "caloriesKcalPerValueColumn": [140, 80, 90, 80, 130, 80, 160, 130, 170, 170],
+  "notes": "Human ground truth on costco-candy.jpg (0-based step-3 value column index). caloriesKcalPerValueColumn and productsPerValueColumn follow value columns left to right (Kit Kat through Almond Joy). productsPerValueColumn transcribed from the physical label — verify before locking regression tolerances. For \"< X\" amounts, numeric fields use 0 and lessThan records the bound.",
+  "productsPerValueColumn": [
+    {
+      "productName": "KIT KAT® Wafer Bar Fun Size",
+      "servingLabel": "2 Packs (28g)",
+      "nutrients": {
+        "calories": 140,
+        "fat": 7,
+        "carbs": 19,
+        "protein": 1,
+        "fiber": 0,
+        "sodium": 15,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 4.5, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "sugar", "label": "Total sugars", "amount": 15, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 14, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 20, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0.6, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 55, "unit": "mg" }
+        ]
+      },
+      "lessThan": [
+        { "field": "cholesterol", "amount": 5, "unit": "mg" },
+        { "field": "fiber", "amount": 1, "unit": "g" }
+      ]
+    },
+    {
+      "productName": "SNICKERS® Fun Size Bar",
+      "servingLabel": "1 Bar (17g)",
+      "nutrients": {
+        "calories": 80,
+        "fat": 4,
+        "carbs": 10,
+        "protein": 1,
+        "fiber": 0,
+        "sodium": 40,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 1.5, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 9, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 8, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 0, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 0, "unit": "mg" }
+        ]
+      }
+    },
+    {
+      "productName": "M&M'S® Peanut",
+      "servingLabel": "1 Pack (18g)",
+      "nutrients": {
+        "calories": 90,
+        "fat": 5,
+        "carbs": 11,
+        "protein": 2,
+        "fiber": 0,
+        "sodium": 10,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 2, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 9, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 8, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 0, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0.4, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 0, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "fiber", "amount": 1, "unit": "g" }]
+    },
+    {
+      "productName": "TWIX® Fun Size Candy Bar",
+      "servingLabel": "1 Bar (16g)",
+      "nutrients": {
+        "calories": 80,
+        "fat": 3.5,
+        "carbs": 11,
+        "protein": 0,
+        "fiber": 0,
+        "sodium": 30,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 2, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 8, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 7, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 0, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 0, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "protein", "amount": 1, "unit": "g" }]
+    },
+    {
+      "productName": "M&M'S® Milk Chocolate Candies",
+      "servingLabel": "2 Packs (27g)",
+      "nutrients": {
+        "calories": 130,
+        "fat": 5,
+        "carbs": 19,
+        "protein": 1,
+        "fiber": 0,
+        "sodium": 20,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 3, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 17, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 16, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 30, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0.4, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 0, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "fiber", "amount": 1, "unit": "g" }]
+    },
+    {
+      "productName": "MILKY WAY® Fun Size Bar",
+      "servingLabel": "1 Bar (17g)",
+      "nutrients": {
+        "calories": 80,
+        "fat": 3,
+        "carbs": 12,
+        "protein": 0,
+        "fiber": 0,
+        "sodium": 25,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 2, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 10, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 9, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 0, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 0, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "protein", "amount": 1, "unit": "g" }]
+    },
+    {
+      "productName": "REESE'S Peanut Butter Cup",
+      "servingLabel": "2 Pieces (31g)",
+      "nutrients": {
+        "calories": 160,
+        "fat": 9,
+        "carbs": 18,
+        "protein": 3,
+        "fiber": 1,
+        "sodium": 100,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 3, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "sugar", "label": "Total sugars", "amount": 16, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 15, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 20, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0.9, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 110, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "cholesterol", "amount": 5, "unit": "mg" }]
+    },
+    {
+      "productName": "3 MUSKETEERS® Fun Size Candy Bar",
+      "servingLabel": "2 Bars (30g)",
+      "nutrients": {
+        "calories": 130,
+        "fat": 4,
+        "carbs": 23,
+        "protein": 0,
+        "fiber": 0,
+        "sodium": 55,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 2.5, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 20, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 20, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 0, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 0, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "protein", "amount": 1, "unit": "g" }]
+    },
+    {
+      "productName": "BUTTERFINGER® Fun Size Candy Bar",
+      "servingLabel": "2 Bars (37g)",
+      "nutrients": {
+        "calories": 170,
+        "fat": 7,
+        "carbs": 25,
+        "protein": 1,
+        "fiber": 0,
+        "sodium": 110,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 3.5, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 15, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 14, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 20, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0.5, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 80, "unit": "mg" }
+        ]
+      },
+      "lessThan": [{ "field": "fiber", "amount": 1, "unit": "g" }]
+    },
+    {
+      "productName": "ALMOND JOY® Candy",
+      "servingLabel": "2 Pieces (34g)",
+      "nutrients": {
+        "calories": 170,
+        "fat": 9,
+        "carbs": 20,
+        "protein": 1,
+        "fiber": 1,
+        "sodium": 45,
+        "extras": [
+          { "key": "saturated_fat", "label": "Saturated fat", "amount": 7, "unit": "g" },
+          { "key": "trans_fat", "label": "Trans fat", "amount": 0, "unit": "g" },
+          { "key": "cholesterol", "label": "Cholesterol", "amount": 0, "unit": "mg" },
+          { "key": "sugar", "label": "Total sugars", "amount": 16, "unit": "g" },
+          { "key": "added_sugars", "label": "Includes added sugars", "amount": 14, "unit": "g" },
+          { "key": "vitamin_d", "label": "Vitamin D", "amount": 0, "unit": "mcg" },
+          { "key": "calcium", "label": "Calcium", "amount": 10, "unit": "mg" },
+          { "key": "iron", "label": "Iron", "amount": 0.5, "unit": "mg" },
+          { "key": "potassium", "label": "Potassium", "amount": 90, "unit": "mg" }
+        ]
+      }
+    }
+  ],
+  "columns": [
+    {
+      "valueColumnIndex": 4,
+      "glare": [
+        { "zone": "header", "headerRowIndex": 1, "description": "second header band" },
+        {
+          "zone": "body",
+          "rowRole": "daily_value",
+          "coverage": "partial",
+          "description": "slight spill into % Daily Value row from header glare"
+        },
+        { "zone": "body", "bodyRowIndex": 0, "description": "calories row" }
+      ]
+    },
+    {
+      "valueColumnIndex": 8,
+      "glare": [
+        { "zone": "body", "bodyRowIndexFrom": 5, "bodyRowIndexTo": 9, "description": "main nutrient body rows 5-9" }
+      ]
+    }
+  ]
+}

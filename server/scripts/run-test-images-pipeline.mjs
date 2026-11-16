@@ -42,7 +42,18 @@ function checkFixture(name, pipeline, plan, splitPlan, hint) {
   const fx = fixtureByFile.get(name);
   if (!fx) return;
 
-  console.log(`  ground truth: layout=${fx.layout}${fx.valueColumnCount != null ? `, valueColumns=${fx.valueColumnCount}` : ''}`);
+  const nr = fx.nutrientRows;
+  const rowLine =
+    nr != null
+      ? `, nutrientRows=${nr.mainSectionRows}+${nr.secondarySectionRows}`
+      : '';
+  console.log(
+    `  ground truth: layout=${fx.layout}${fx.valueColumnCount != null ? `, valueColumns=${fx.valueColumnCount}` : ''}${rowLine}`,
+  );
+  if (!nr) {
+    fail('manifest missing nutrientRows');
+    return;
+  }
 
   const vp = fx.varietyPackPipeline;
   if (!vp) return;
@@ -75,6 +86,14 @@ function checkFixture(name, pipeline, plan, splitPlan, hint) {
 
   if (vp.minValueColumns != null && plan && plan.valueColumns.length < vp.minValueColumns) {
     fail(`expected >= ${vp.minValueColumns} value columns, got ${plan.valueColumns.length}`);
+  }
+
+  if (fx.layout === 'shared_rail' && plan && nr) {
+    const wantRows = nr.mainSectionRows + nr.secondarySectionRows;
+    const got = plan.rowBandSlices.length;
+    if (got < wantRows - 1 || got > wantRows + 1) {
+      fail(`rowBandSlices ${got} not within ±1 of manifest nutrient rows ${wantRows}`);
+    }
   }
 
   if (fx.splitSingleLabel?.expectDetect && !splitPlan) {

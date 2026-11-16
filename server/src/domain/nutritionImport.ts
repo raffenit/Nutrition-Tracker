@@ -4,7 +4,13 @@ import { menuCandidates, parseNutritionLabel } from './parseLabel.js';
 import { multiProductColumnsToFieldReview, parseMultiProductLabelTable } from './parseMultiProductLabelTable.js';
 import { parseRecipeCard } from './parseRecipeCard.js';
 import { parseMenuFromSource, type MenuItemDraft } from './parseMenuTable.js';
+import { emptyNutrients } from './nutrients.js';
 import type { Nutrients } from '../types.js';
+
+export type NutritionImportBuildOptions = {
+  /** Variety-pack geometry column count when OCR stitched fewer parseable products. */
+  varietyPackExpectedColumns?: number;
+};
 
 export type RecipeCardImportDraft = {
   name: string;
@@ -57,7 +63,28 @@ export function buildNutritionImportWithPanels(
   kind: 'pdf' | 'html' | 'image',
   html: string | null = null,
   pageTexts: string[] | null = null,
+  options?: NutritionImportBuildOptions,
 ): NutritionImportDraft {
+  const expectedCols = options?.varietyPackExpectedColumns ?? 0;
+  const multiProductEarly = parseMultiProductLabelTable(text);
+
+  /** Geometry-confirmed variety pack: always surface partial panels (parsed + placeholders). */
+  if (expectedCols >= 2) {
+    const primary = buildNutritionImport(text, kind, html);
+    return panelsFromMultiProductColumns(
+      multiProductEarly ?? [],
+      text,
+      kind,
+      primary.menuItems.length > 0 ? null : primary.warning,
+      expectedCols,
+    );
+  }
+
+  if (multiProductEarly && multiProductEarly.length >= 2) {
+    const primary = buildNutritionImport(text, kind, html);
+    return panelsFromMultiProductColumns(multiProductEarly, text, kind, primary.warning, undefined);
+  }
+
   const primary = buildNutritionImport(text, kind, html);
   if (primary.menuItems.length > 0 || primary.recipeCard) {
     return { ...primary, labelPanels: [] };
@@ -74,41 +101,116 @@ export function buildNutritionImportWithPanels(
   if (blocksLookLikeSeparateLabels(fallbackBlocks)) {
     return panelsFromBlocks(fallbackBlocks, text, kind, html, primary.warning);
   }
-  const multiProduct = parseMultiProductLabelTable(text);
-  if (multiProduct && multiProduct.length >= 2) {
-    return panelsFromMultiProductColumns(multiProduct, text, kind, primary.warning);
-  }
   return { ...primary, labelPanels: [] };
 }
 
+function columnHasMacroNutrients(nutrients: Nutrients): boolean {
+  return nutrients.calories > 0 || nutrients.protein > 0 || nutrients.fat > 0 || nutrients.carbs > 0;
+}
+
 function panelsFromMultiProductColumns(
-  columns: ReturnType<typeof parseMultiProductLabelTable>,
+  columns: NonNullable<ReturnType<typeof parseMultiProductLabelTable>>,
   sourceText: string,
   kind: 'pdf' | 'html' | 'image',
   primaryWarning: string | null,
+  varietyPackExpectedColumns?: number,
 ): NutritionImportDraft {
-  if (!columns) return buildNutritionImport(sourceText, kind);
-  const labelPanels: LabelPanelImport[] = columns.map((column, index) => ({
+  const labelPanels: LabelPanelImport[] = columns.map((column, index) => {
+    const readable = columnHasMacroNutrients(column.nutrients);
+    return {
+      index,
+      preview: readable
+        ? `${column.name} · ${column.nutrients.calories} kcal`
+        : `${column.name} · needs review`,
+      draft: {
+        name: column.name,
+        brand: null,
+        kind: 'packaged',
+        servingLabel: column.servingLabel ?? '1 serving',
+        servingsPerContainer: null,
+        nutrients: column.nutrients,
+        isDrink: false,
+        drinkMl: null,
+        source: kind === 'pdf' ? 'pdf' : 'manual',
+      },
+      fieldReview: multiProductColumnsToFieldReview(sourceText, column),
+      warning: readable
+        ? null
+        : 'Nutrients for this column could not be read from the photo. Enter or correct them manually.',
+    };
+  });
+
+  const targetCount = Math.max(labelPanels.length, varietyPackExpectedColumns ?? 0);
+  for (let i = labelPanels.length; i < targetCount; i += 1) {
+    labelPanels.push(incompleteVarietyPackPanel(i, kind));
+  }
+
+  const parsedCount = columns.filter((col) => columnHasMacroNutrients(col.nutrients)).length;
+  const incomplete = targetCount > parsedCount;
+  const warning =
+    primaryWarning ??
+    (incomplete
+      ? `Read ${parsedCount} of ${targetCount} products on this variety label. Pick one to edit, or import all (fill any blank slots manually).`
+      : `Found ${labelPanels.length} products on one label panel. Pick one or import all.`);
+
+  const primaryShell = buildNutritionImport(sourceText, kind);
+  const draft =
+    draftFromLabelPanels(labelPanels, kind) ??
+    ({
+      ...primaryShell.draft,
+      name: '',
+      kind: 'packaged',
+      nutrients: { ...emptyNutrients() },
+    } satisfies NutritionImportDraftBody);
+
+  return {
+    ...primaryShell,
+    draft,
+    menuItems: [],
+    candidates: [],
+    labelPanels,
+    warning,
+  };
+}
+
+function draftFromLabelPanels(
+  panels: LabelPanelImport[],
+  kind: 'pdf' | 'html' | 'image',
+): NutritionImportDraftBody | null {
+  const readable = panels.find(
+    (panel) => !panel.warning && columnHasMacroNutrients(panel.draft.nutrients),
+  );
+  if (!readable) return null;
+  return { ...readable.draft, source: kind === 'pdf' ? 'pdf' : 'manual' };
+}
+
+function incompleteVarietyPackPanel(
+  index: number,
+  kind: 'pdf' | 'html' | 'image',
+): LabelPanelImport {
+  const name = `Product ${index + 1}`;
+  const nutrients = emptyNutrients();
+  return {
     index,
-    preview: `${column.name} · ${column.nutrients.calories} kcal`,
+    preview: `${name} · needs manual entry`,
     draft: {
-      name: column.name,
+      name,
       brand: null,
       kind: 'packaged',
-      servingLabel: column.servingLabel ?? '1 serving',
+      servingLabel: '1 serving',
       servingsPerContainer: null,
-      nutrients: column.nutrients,
+      nutrients,
       isDrink: false,
       drinkMl: null,
       source: kind === 'pdf' ? 'pdf' : 'manual',
     },
-    fieldReview: multiProductColumnsToFieldReview(sourceText, column),
-    warning: null,
-  }));
-  return {
-    ...buildNutritionImport(sourceText, kind),
-    labelPanels,
-    warning: primaryWarning ?? `Found ${labelPanels.length} products on one label panel. Pick one or import all.`,
+    fieldReview: assessLabelFieldReview('', {
+      servingLabel: null,
+      servingsPerContainer: null,
+      nutrients,
+      looksLikeLabel: false,
+    }),
+    warning: 'Could not read this column from the photo. Enter nutrition facts manually.',
   };
 }
 
