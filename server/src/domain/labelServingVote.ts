@@ -5,6 +5,13 @@ export type LabelServingFields = { servingLabel: string | null; servingsPerConta
 /** A lone servings-per-container read is often a stray number near the garbled phrase. */
 const MIN_SERVINGS_PER_CONTAINER_VOTES = 2;
 
+/** Only "N servings per container" with the count first: the fuzzy fallbacks can pick up the serving-size number. */
+function countFirstServingsPerContainer(text: string): number | null {
+  const match = text.replace(/\s+/g, ' ').match(/(\d+(?:\.\d+)?)\s*serv\w*\s+per\s+c[a-z]{2,14}/i);
+  const value = match ? Number(match[1]) : NaN;
+  return value > 0 && value <= 999 ? value : null;
+}
+
 function mostCommon<T>(values: T[], key: (value: T) => string, minVotes = 1): T | null {
   const counts = new Map<string, { value: T; count: number }>();
   for (const value of values) {
@@ -25,7 +32,7 @@ function mostCommon<T>(values: T[], key: (value: T) => string, minVotes = 1): T 
 export function voteServingFields(candidates: string[]): LabelServingFields {
   const parsed = candidates.map((text) => parseNutritionLabel(text));
   const labels = parsed.map((p) => p.servingLabel).filter((v): v is string => Boolean(v && v.trim()));
-  const counts = parsed.map((p) => p.servingsPerContainer).filter((v): v is number => v != null && v > 0);
+  const counts = candidates.map(countFirstServingsPerContainer).filter((v): v is number => v != null);
   return {
     servingLabel: mostCommon(labels, (label) => label.toLowerCase().replace(/\s+/g, ' ').trim()),
     servingsPerContainer: mostCommon(counts, String, Math.min(MIN_SERVINGS_PER_CONTAINER_VOTES, candidates.length)),

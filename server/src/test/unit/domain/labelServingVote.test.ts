@@ -53,3 +53,8 @@ test('label parse reads trans fat, added sugars and minerals with their own unit
   assert.equal(extras.potassium, '200mg');
   assert.equal(extras.sugar, '20g');
 });
+
+test('an unnumbered container header never turns the serving-size number into a count', () => {
+  const header = 'Servings per container\n1 Serving size 2/3 cup (85g)\nCalories 170';
+  assert.equal(voteServingFields([header, header]).servingsPerContainer, null);
+});
