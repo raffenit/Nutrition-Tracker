@@ -196,7 +196,10 @@ export async function extractImageLabel(
     splitLabel && splitLabel.readiness.missing.length <= SPLIT_LABEL_MAX_MISSING_CORE_FOR_EASY_SKIP,
   );
   const splitSkipsFullPage = Boolean(
-    splitLabel && splitLabel.readiness.missing.length <= SPLIT_LABEL_MAX_MISSING_CORE_FOR_PAGE_SKIP,
+    splitLabel &&
+      splitLabel.readiness.missing.length <= SPLIT_LABEL_MAX_MISSING_CORE_FOR_PAGE_SKIP &&
+      splitLabel.readiness.contested.length === 0 &&
+      splitLabel.readiness.inconsistent.length === 0,
   );
   if (splitSkipsFullPage) appendImportJobDebug('split-single-label: skip full-page OCR');
   else if (splitSkipsFullPageEasy) appendImportJobDebug('split-single-label: skip full-page EasyOCR');
