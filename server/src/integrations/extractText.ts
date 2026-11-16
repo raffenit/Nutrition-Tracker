@@ -1082,15 +1082,17 @@ async function ocrSplitSingleLabel(
       .map((d) => `${d.applied ? 'on' : 'off'} (${d.rules.length} rules, spread ${d.maxSpreadPx.toFixed(1)}px)`)
       .join(' / ')}`,
   );
+  const tessStart = Date.now();
   const leftTexts = await readSplitHalfWithTesseract(dewarped[0]!.bytes, cachePath, 'left');
   const rightTexts = await readSplitHalfWithTesseract(dewarped[1]!.bytes, cachePath, 'right');
   const candidates = stitchSplitHalfCandidates(leftTexts, rightTexts);
   let readiness = assessCoreMacroReadiness(candidates);
   appendImportJobDebug(
-    `split-single-label: Tess ${candidates.length} stitched candidate(s); missing ${readiness.missing.join(', ') || '—'}; contested ${readiness.contested.join(', ') || '—'}`,
+    `split-single-label: Tess ${candidates.length} stitched candidate(s) in ${((Date.now() - tessStart) / 1000).toFixed(1)}s; missing ${readiness.missing.join(', ') || '—'}; contested ${readiness.contested.join(', ') || '—'}`,
   );
 
   if (!readiness.settled && modelDir) {
+    const easyStart = Date.now();
     const [leftEasy, rightEasy] = await Promise.all(
       dewarped.map((d) => extractEasyOcrTextsFromVariants([d.bytes], modelDir, 'rows')),
     );
@@ -1099,7 +1101,7 @@ async function ocrSplitSingleLabel(
     }
     readiness = assessCoreMacroReadiness(candidates);
     appendImportJobDebug(
-      `split-single-label: + Easy on dewarped halves; missing ${readiness.missing.join(', ') || '—'}; contested ${readiness.contested.join(', ') || '—'}`,
+      `split-single-label: + Easy on dewarped halves in ${((Date.now() - easyStart) / 1000).toFixed(1)}s; missing ${readiness.missing.join(', ') || '—'}; contested ${readiness.contested.join(', ') || '—'}`,
     );
   }
 
