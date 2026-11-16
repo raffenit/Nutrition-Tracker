@@ -267,10 +267,36 @@ export function mergeSlotReadingsAcrossCandidates(candidates: string[]): Nutrien
 
   const nutrients = emptyNutrients();
   for (const spec of SLOT_SPECS) {
-    const winner = groups.get(spec.key)?.[0];
+    const winner = consistentWinner(groups, spec.key);
     if (winner) applyReadingToNutrients(nutrients, winner.best, spec);
   }
   return nutrients;
+}
+
+/** Rounding room when checking a parent row against the sum of its sub-rows. */
+const PARENT_ROW_SLACK = 1;
+
+/** Sub-rows that a parent amount must cover (carbs ≥ sugars + fiber, total fat ≥ saturated fat). */
+const PARENT_ROW_CHILDREN: Partial<Record<LabelSlotKey, LabelSlotKey[]>> = {
+  carbs: ['sugar', 'fiber'],
+  fat: ['saturated_fat'],
+};
+
+/**
+ * Top-ranked group, unless it is smaller than its sub-rows sum and another candidate amount is not —
+ * a parent row read as "2" beside "Fiber 6g" / "Sugars 20g" is a dropped digit, not the label value.
+ */
+function consistentWinner(
+  groups: Map<LabelSlotKey, SlotAmountGroup[]>,
+  slot: LabelSlotKey,
+): SlotAmountGroup | undefined {
+  const list = groups.get(slot);
+  const top = list?.[0];
+  const children = PARENT_ROW_CHILDREN[slot];
+  if (!list || !top || !children) return top;
+  const floor = children.reduce((sum, child) => sum + (groups.get(child)?.[0]?.amount ?? 0), 0);
+  if (top.amount + PARENT_ROW_SLACK >= floor) return top;
+  return list.find((g) => g.amount + PARENT_ROW_SLACK >= floor) ?? top;
 }
 
 /** Index of candidate that contributed the most winning slots (for field review text). */

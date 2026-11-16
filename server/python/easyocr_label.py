@@ -62,13 +62,38 @@ def _readtext_kwargs() -> dict:
     return kw
 
 
+def _group_rows(detections: list) -> list[str]:
+    """Join word boxes whose vertical spans overlap into left-to-right table rows."""
+    boxes = []
+    for box, text, _conf in detections:
+        if not str(text).strip():
+            continue
+        ys = [p[1] for p in box]
+        xs = [p[0] for p in box]
+        boxes.append((min(ys), max(ys), min(xs), str(text).strip()))
+    boxes.sort(key=lambda b: (b[0] + b[1]) / 2)
+    rows: list[list] = []
+    for top, bottom, left, text in boxes:
+        center = (top + bottom) / 2
+        row = rows[-1] if rows else None
+        if row is not None and row[0] <= center <= row[1]:
+            row[2].append((left, text))
+        else:
+            rows.append([top, bottom, [(left, text)]])
+    return [" ".join(t for _x, t in sorted(r[2])) for r in rows]
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: easyocr_label.py [--lines] IMAGE_PATH [MODEL_DIR]", file=sys.stderr)
         return 2
     args = sys.argv[1:]
     line_mode = True
+    row_mode = False
     if args and args[0] == "--lines":
+        args = args[1:]
+    elif args and args[0] == "--rows":
+        row_mode = True
         args = args[1:]
     elif args and args[0] == "--paragraph":
         line_mode = False
@@ -98,6 +123,12 @@ def main() -> int:
         kw["paragraph"] = False
     else:
         kw["paragraph"] = True
+
+    if row_mode:
+        kw["detail"] = 1
+        for row in _group_rows(reader.readtext(image_path, **kw)):
+            print(row)
+        return 0
 
     detections = reader.readtext(image_path, **kw)
     if isinstance(detections, str):

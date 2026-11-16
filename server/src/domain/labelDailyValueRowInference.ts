@@ -42,7 +42,11 @@ function normalizeNumericToken(token: string): string {
     .replace(/[_.,:;]+$/, '')
     .replace(/^[Il|]/, '1')
     .replace(/(?<=\d)[Il|]|[Il|](?=\d)/g, '1')
-    .replace(/(?<=\d)[Oo]|[Oo](?=\d)|^[Oo](?=[.,]?\d|mg|mcg|g)/g, '0');
+    .replace(/(?<=\d)[OoU]|[Oo](?=\d)|^[Oo](?=[.,]?\d|mg|mcg|g)/g, '0');
+}
+
+function isNumericToken(normalized: string): boolean {
+  return /^\d[\d.,]*(%|k|K|g|mg|mcg)?$/.test(normalized);
 }
 
 /** Interpretations of an amount token; unitless digits may have lost a decimal point or a trailing "g". */
@@ -122,19 +126,24 @@ function matchPair(amountToken: string, percentToken: string): DvInferredRow | n
  * for the same nutrient makes it ambiguous and drops it.
  */
 export function inferDailyValueRows(text: string): DvInferredRow[] {
-  const tokens = text.split(/\s+/).filter((t) => t && !/^[_—\-–|]+$/.test(t));
   const first = new Map<string, DvInferredRow>();
   const rejected = new Set<string>();
-  for (let i = 0; i + 1 < tokens.length; i += 1) {
-    const row = matchPair(tokens[i]!, tokens[i + 1]!);
-    if (!row || rejected.has(row.key)) continue;
-    const prev = first.get(row.key);
-    if (!prev) first.set(row.key, row);
-    else if (row.amount < prev.amount) {
-      first.delete(row.key);
-      rejected.add(row.key);
+  for (const line of text.split('\n')) {
+    const tokens = line.split(/\s+/).filter((t) => t && !/^[_—\-–|]+$/.test(t));
+    for (let i = 0; i + 1 < tokens.length; i += 1) {
+      // Once a %DV (or an amount + %DV pair) has passed on this row, later pairs are a per-container column.
+      const before = tokens.slice(0, i).map(normalizeNumericToken);
+      if (before.some((t) => /^\d{1,3}[%kK]$/.test(t)) || before.filter(isNumericToken).length >= 2) break;
+      const row = matchPair(tokens[i]!, tokens[i + 1]!);
+      if (!row || rejected.has(row.key)) continue;
+      const prev = first.get(row.key);
+      if (!prev) first.set(row.key, row);
+      else if (row.amount < prev.amount) {
+        first.delete(row.key);
+        rejected.add(row.key);
+      }
+      i += 1;
     }
-    i += 1;
   }
   return [...first.values()];
 }

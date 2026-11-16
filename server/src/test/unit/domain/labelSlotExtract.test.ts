@@ -66,3 +66,21 @@ Carbohydrate 4g
   assert.ok(carbs);
   assert.equal(carbs.labelStrength, 65);
 });
+
+test('a parent row smaller than its sub-rows yields to a consistent rival reading', () => {
+  const merged = mergeSlotReadingsAcrossCandidates([
+    'Total Carb. 2g 1%\nDietary Fiber 6g 21%\nTotal Sugars 20g',
+    'Total Carb. 2g 1%\nDietary Fiber 6g\nTotal Sugars 20g',
+    'Total Carb: 32g 12%\nDietary Fiber 6g\nTotal Sugars 20g',
+  ]);
+  assert.equal(merged?.carbs, 32);
+});
+
+test('a consistent parent row keeps its top-ranked reading', () => {
+  const merged = mergeSlotReadingsAcrossCandidates([
+    'Total Carbohydrate 4g\nTotal Sugars 2g',
+    'Total Carbohydrate 4g\nTotal Sugars 2g',
+    'Total Carbohydrate 14g',
+  ]);
+  assert.equal(merged?.carbs, 4);
+});

@@ -195,7 +195,11 @@ export async function extractImageLabel(
   const splitSkipsFullPageEasy = Boolean(
     splitLabel && splitLabel.readiness.missing.length <= SPLIT_LABEL_MAX_MISSING_CORE_FOR_EASY_SKIP,
   );
-  if (splitSkipsFullPageEasy) appendImportJobDebug('split-single-label: skip full-page EasyOCR');
+  const splitSkipsFullPage = Boolean(
+    splitLabel && splitLabel.readiness.missing.length <= SPLIT_LABEL_MAX_MISSING_CORE_FOR_PAGE_SKIP,
+  );
+  if (splitSkipsFullPage) appendImportJobDebug('split-single-label: skip full-page OCR');
+  else if (splitSkipsFullPageEasy) appendImportJobDebug('split-single-label: skip full-page EasyOCR');
 
   const profiles: OcrLayoutProfile[] = [initialOcrLayoutProfile(activeHint)];
   let candidates: string[] = [];
@@ -212,6 +216,8 @@ export async function extractImageLabel(
       multiProductColumnCount: sharedRailPlan!.valueColumns.length,
       nutritionFactsCount: 1,
     };
+  } else if (splitSkipsFullPage) {
+    timer.lap('ocr_full_page', 'skipped — split label halves read');
   } else {
     reportImportJobStep('OCR', 'Reading the Nutrition Facts panel…', 'Neural OCR and Tesseract on preprocessed variants.');
     candidates = await collectOcrCandidateTexts(
@@ -243,7 +249,7 @@ export async function extractImageLabel(
     }
   }
 
-  if (splitLabel && (layout.kind === 'single' || splitSkipsFullPageEasy)) {
+  if (splitLabel && (layout.kind === 'single' || splitSkipsFullPageEasy || candidates.length === 0)) {
     candidates = mergeCandidateLists(splitLabel.candidates, candidates);
     layout = inferLabelLayoutFromText(candidates);
   }
@@ -1014,8 +1020,10 @@ async function ocrAndStitchSharedLabelPlan(
   return null;
 }
 
-/** Core macros a split-label read must reach before full-page EasyOCR is skipped. */
+/** Core macros a split-label read may miss and still skip full-page EasyOCR. */
 const SPLIT_LABEL_MAX_MISSING_CORE_FOR_EASY_SKIP = 2;
+/** Core macros a split-label read may miss and still skip full-page OCR (it reads rows across the split). */
+const SPLIT_LABEL_MAX_MISSING_CORE_FOR_PAGE_SKIP = 1;
 
 async function readSplitHalfWithTesseract(half: Buffer, cachePath: string, side: string): Promise<string[]> {
   const variants = await buildDewarpedStripOcrVariants(half);
@@ -1077,7 +1085,7 @@ async function ocrSplitSingleLabel(
 
   if (!readiness.settled && modelDir) {
     const [leftEasy, rightEasy] = await Promise.all(
-      dewarped.map((d) => extractEasyOcrTextsFromVariants([d.bytes], modelDir)),
+      dewarped.map((d) => extractEasyOcrTextsFromVariants([d.bytes], modelDir, 'rows')),
     );
     for (const text of stitchSplitHalfCandidates([...leftEasy, ...leftTexts], [...rightEasy, ...rightTexts])) {
       if (!candidates.includes(text)) candidates.unshift(text);

@@ -23,12 +23,24 @@ test('percentReadings treats a trailing 9 as a misread %', () => {
 
 test('unlabeled rows are identified by amount and %DV (dual-column, squashed names)', () => {
   // Names on a curved tub edge read as junk; per-serving then per-container pairs follow.
-  const text = 'Fa per container MFa 4.50 6% 14g 18% SantedFat 350 18 Itg _ 55% Me IOmg 3 25mg _ 89 M 90mg 4 270mg 129';
+  const text = [
+    'Fa per container',
+    'MFa 4.50 6% 14g 18%',
+    'SantedFat 350 18 Itg _ 55%',
+    'Me IOmg 3 25mg _ 89',
+    'M 90mg 4 270mg 129',
+  ].join('\n');
   const rows = new Map(inferDailyValueRows(text).map((r) => [r.key, r]));
   assert.equal(rows.get('fat')?.amount, 4.5);
   assert.equal(rows.get('saturated_fat')?.amount, 3.5);
   assert.equal(rows.get('cholesterol')?.amount, 10);
   assert.equal(rows.get('sodium')?.amount, 90);
+});
+
+test('per-container pairs after a %DV on the same row are ignored', () => {
+  const rows = new Map(inferDailyValueRows('A IUmg 3 25mg 89\nSdFa 95 I8 11g 55%\nwml 3% % 11g 55%').map((r) => [r.key, r]));
+  assert.equal(rows.get('cholesterol')?.amount, 10);
+  assert.equal(rows.has('saturated_fat'), false);
 });
 
 test('ambiguous daily values (protein vs added sugars) are not guessed', () => {
