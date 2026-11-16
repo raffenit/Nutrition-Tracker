@@ -747,6 +747,45 @@ function rowBandFractionsForColumn(
   });
 }
 
+/** Dewarp a whole-column crop onto the canonical row mesh; null when the column is flat. */
+async function dewarpColumnCropToRows(
+  png: Buffer,
+  columnTop: number,
+  slices: SharedLabelRowBandSlice[],
+): Promise<{ png: Buffer; rowTops: number[]; rowHeights: number[] } | null> {
+  const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const dewarped = dewarpColumnToRowMesh(
+    { data, width: info.width, height: info.height },
+    slices,
+    Math.max(0, Math.round(columnTop)),
+  );
+  if (!dewarped) return null;
+  const out = await sharp(dewarped.pixels, {
+    raw: { width: dewarped.width, height: dewarped.height, channels: 1 },
+  }).png().toBuffer();
+  return { png: out, rowTops: dewarped.rowTops, rowHeights: dewarped.rowHeights };
+}
+
+/** One PNG per canonical row from a dewarped column (rows already axis-aligned). */
+async function extractDewarpedRowPngs(
+  png: Buffer,
+  rowTops: number[],
+  rowHeights: number[],
+): Promise<Buffer[]> {
+  const meta = await sharp(png).metadata();
+  const width = meta.width ?? 0;
+  const buffers: Buffer[] = [];
+  for (let i = 0; i < rowTops.length; i += 1) {
+    buffers.push(
+      await sharp(png)
+        .extract({ left: 0, top: rowTops[i]!, width, height: Math.max(1, rowHeights[i]!) })
+        .png()
+        .toBuffer(),
+    );
+  }
+  return buffers;
+}
+
 type SharedLabelColumnTexts = {
   labelText: string;
   headerText: string;
@@ -809,7 +848,7 @@ async function ocrSharedLabelGridColumns(
 
   const ocrColumnByRowBandsWithWorker = async (
     worker: Awaited<ReturnType<typeof openTesseractWorker>>,
-    column: Pick<ColumnStripRegion, 'left' | 'width'>,
+    column: Pick<ColumnStripRegion, 'left' | 'top' | 'width'>,
     fallbackPng: Buffer,
     rowBandSlices: SharedLabelValueGridPlan['rowBandSlices'],
     label: string,
@@ -819,7 +858,14 @@ async function ocrSharedLabelGridColumns(
     appendImportJobDebug(
       `${label} row-band: min extract ${minSize.minWidthPx}×${minSize.minHeightPx}px (column ${column.width}px, ${rowBandSlices.length} slices)`,
     );
-    const slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, rowBandSlices, minSize);
+    let slicePngs: Buffer[];
+    const dewarped = await dewarpColumnCropToRows(fallbackPng, column.top, rowBandSlices).catch(() => null);
+    if (dewarped) {
+      slicePngs = await extractDewarpedRowPngs(dewarped.png, dewarped.rowTops, dewarped.rowHeights);
+      appendImportJobDebug(`${label} row-band: dewarped column onto row mesh (${slicePngs.length} rows)`);
+    } else {
+      slicePngs = await extractSharedLabelColumnPngsByRowBands(bytes, column, rowBandSlices, minSize);
+    }
     if (slicePngs.length === 0) {
       const text = await ocrStripText(fallbackPng, `${label} body`);
       return { text, sliceTexts: [] };
@@ -996,20 +1042,15 @@ async function ocrSharedLabelGridColumns(
       slices: SharedLabelRowBandSlice[],
     ): Promise<{ png: Buffer; bands?: [number, number][] }> => {
       try {
-        const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
-        const dewarped = dewarpColumnToRowMesh(
-          { data, width: info.width, height: info.height },
-          slices,
-          Math.max(0, Math.round(column.top)),
-        );
+        const dewarped = await dewarpColumnCropToRows(png, column.top, slices);
         if (!dewarped) return { png };
-        const out = await sharp(dewarped.pixels, {
-          raw: { width: dewarped.width, height: dewarped.height, channels: 1 },
-        }).png().toBuffer();
+        const height = dewarped.rowTops.length
+          ? dewarped.rowTops[dewarped.rowTops.length - 1]! + dewarped.rowHeights[dewarped.rowHeights.length - 1]!
+          : 1;
         const bands = dewarped.rowTops.map(
-          (top, i) => [top / dewarped.height, (top + dewarped.rowHeights[i]!) / dewarped.height] as [number, number],
+          (top, i) => [top / height, (top + dewarped.rowHeights[i]!) / height] as [number, number],
         );
-        return { png: out, bands };
+        return { png: dewarped.png, bands };
       } catch {
         return { png };
       }
