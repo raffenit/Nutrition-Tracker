@@ -83,12 +83,43 @@ def _group_rows(detections: list) -> list[str]:
     return [" ".join(t for _x, t in sorted(r[2])) for r in rows]
 
 
-def _read_one(reader, image_path: str, mode: str) -> list[str]:
+def _read_banded(reader, image_path: str, kw: dict, bands: list) -> list[str]:
+    """Group detections into caller-supplied row bands (fractions of image height).
+
+    Returns exactly len(bands) lines — one per band, empty string when a band has
+    no detections — so downstream row alignment matches other OCR engines that
+    read the same slices.
+    """
+    import cv2
+
+    img = cv2.imread(image_path)
+    if img is None:
+        return [""] * len(bands)
+    height = img.shape[0]
+    detections = reader.readtext(image_path, **kw)
+    grouped: list[list] = [[] for _ in bands]
+    for box, text, _conf in detections:
+        label = str(text).strip()
+        if not label:
+            continue
+        ys = [p[1] for p in box]
+        xs = [p[0] for p in box]
+        center_y = (sum(ys) / len(ys)) / height
+        for band_index, (y0, y1) in enumerate(bands):
+            if y0 <= center_y < y1:
+                grouped[band_index].append((min(xs), label))
+                break
+    return [" ".join(t for _x, t in sorted(row)) for row in grouped]
+
+
+def _read_one(reader, image_path: str, mode: str, bands: list | None = None) -> list[str]:
     """Return text lines for one image; mode is lines | rows | paragraph."""
     kw = _readtext_kwargs()
     if mode == "rows":
         kw["detail"] = 1
         kw["paragraph"] = False
+        if bands:
+            return _read_banded(reader, image_path, kw, bands)
         return _group_rows(reader.readtext(image_path, **kw))
     kw["paragraph"] = mode != "lines"
     detections = reader.readtext(image_path, **kw)
@@ -100,7 +131,8 @@ def _read_one(reader, image_path: str, mode: str) -> list[str]:
 def _run_batch(manifest_path: str, model_dir: str | None) -> int:
     """One Reader for many images; JSONL results on stdout.
 
-    Manifest: [{"file": "path.png", "mode": "lines"|"rows"|"paragraph", "i": original_index}, ...]
+    Manifest: [{"file": "path.png", "mode": "lines"|"rows"|"paragraph", "i": original_index,
+                "bands": optional [[y0_frac, y1_frac], ...] row bands for rows mode}, ...]
     Emits {"i": n, "text": "..."} per job, or {"i": n, "error": "..."} on failure.
     """
     import json
@@ -129,10 +161,11 @@ def _run_batch(manifest_path: str, model_dir: str | None) -> int:
         if not os.path.isabs(image_path):
             image_path = os.path.join(base_dir, image_path)
         mode = job.get("mode", "lines")
+        bands = job.get("bands")
         # "i" lets sharded manifests report the caller's original job index.
         index = job.get("i", position)
         try:
-            lines = _read_one(reader, image_path, mode)
+            lines = _read_one(reader, image_path, mode, bands)
             print(json.dumps({"i": index, "text": "\n".join(lines)}))
             sys.stdout.flush()
         except Exception as exc:  # keep batch alive; per-image failure is data, not fatal

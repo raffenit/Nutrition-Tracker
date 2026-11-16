@@ -8,7 +8,7 @@ export type ImportJobFlow = 'image' | 'pdf' | 'url';
 
 export type ImportJobStepStatus = 'done' | 'active' | 'pending';
 
-const DEBUG_LOG_MAX = 80;
+const DEBUG_LOG_MAX = 400;
 const ACTIVITY_LOG_MAX = 8;
 
 export type ImportJobSnapshot = {

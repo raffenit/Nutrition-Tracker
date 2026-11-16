@@ -63,9 +63,11 @@ export type EasyOcrLayout = 'lines' | 'rows';
 export type EasyOcrJob = {
   bytes: Buffer;
   layout: EasyOcrLayout;
+  /** Row bands as [y0, y1] fractions of image height — one output line per band (rows layout only). */
+  bands?: [number, number][];
 };
 
-type BatchManifestEntry = { file: string; mode: EasyOcrLayout; i: number };
+type BatchManifestEntry = { file: string; mode: EasyOcrLayout; i: number; bands?: [number, number][] };
 
 /** One JSONL record per manifest job on stdout. */
 type BatchResultLine = { i: number; text?: string; error?: string };
@@ -127,7 +129,7 @@ async function runEasyOcrJobs(
     for (const [index, job] of jobs.entries()) {
       const file = `${index}.png`;
       await writeFile(path.join(dir, file), job.bytes);
-      shards[index % workerCount]!.push({ file, mode: job.layout, i: index });
+      shards[index % workerCount]!.push({ file, mode: job.layout, i: index, ...(job.bands ? { bands: job.bands } : {}) });
     }
     const manifestPaths = await Promise.all(
       shards.map(async (shard, worker) => {

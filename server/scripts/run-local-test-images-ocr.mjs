@@ -195,7 +195,7 @@ for (const name of names) {
 
   if (!streamImportProgress) {
     const trail = debug.filter((l) =>
-      /geometry preflight|geometry: skip|shared-label grid:|variety pack|column-strip|stitch|split-single/i.test(l),
+      /geometry preflight|geometry: skip|shared-label grid:|shared-label easy|easyocr batch|variety pack|column-strip|stitch|split-single/i.test(l),
     );
     if (trail.length) {
       console.log('pipeline debug (tail):');
