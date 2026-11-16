@@ -249,7 +249,11 @@ function portionCodes(records: RawRecord[]): Set<string> {
     const lastWord = flat[flat.length - 1]!;
     if (next?.length === 1 && standalone.has(next[0]!) && flat.length > 1 && /^[A-Z]{1,5}$/.test(lastWord)) codes.add(lastWord);
   });
-  return codes;
+  const hasParentRow = records.some((record) => {
+    const flat = record.nameLines.flat();
+    return flat.length > 1 && codes.has(flat[flat.length - 1]!);
+  });
+  return hasParentRow ? codes : new Set();
 }
 
 function slashVariantLabels(lines: string[], section: Section): string[] {
@@ -314,8 +318,7 @@ export function parseMenuTextSections(text: string): MenuItemDraft[] {
       let name = words.join(' ');
       if (isPortion) {
         if (words.length > 0) parent = name;
-        if (!parent) continue;
-        name = `${parent} (${lastWord})`;
+        name = parent ? `${parent} (${lastWord})` : nameWords(record.nameLines).join(' ');
       } else parent = null;
       const h = section.roles.length;
       const variantCount = record.values.length / h;

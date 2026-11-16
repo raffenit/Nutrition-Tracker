@@ -97,3 +97,8 @@ test('a bare "Carbs" header keeps every column aligned', () => {
   assert.equal(bowl?.nutrients.carbs, 60);
   assert.equal(bowl?.nutrients.protein, 42);
 });
+
+test('short one-word item names are kept when no row names a parent item', () => {
+  const text = ['Total calories (cal) \tTotal fat (g) \tSodium (mg) \tTotal carbohydrate (g) \tProtein (g)', 'TEA \t0 \t0 \t10 \t0 \t0', 'COLA \t240 \t0 \t45 \t65 \t0'].join('\n');
+  assert.deepEqual(parseMenuTextSections(text).map((i) => [i.name, i.nutrients.calories]), [['TEA', 0], ['COLA', 240]]);
+});
