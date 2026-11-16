@@ -92,4 +92,5 @@ test('a %DV figure after an unreadable amount is never taken as the gram amount'
     'Frotein 5g 10% 169',
   ]);
   assert.equal(merged?.protein, 5);
+  assert.equal(extractSlotReadingsFromText('Protein Gg 2.5%', 0).find((r) => r.slot === 'protein'), undefined);
 });
