@@ -263,11 +263,14 @@ export function stitchSharedLabelGridFromRowBandSlices(
   const lines = ['Nutrition Facts', names.join('    ')];
   for (const row of rowBlocks) {
     lines.push(formatRowLabel(row.label));
-    lines.push(row.values.join('  '));
+    lines.push(row.values.map((v) => v.trim() || BLANK_CELL).join('  '));
   }
   const text = lines.join('\n');
   return /calories/i.test(text) ? text : null;
 }
+
+/** Keeps an empty OCR cell's column position when rows are re-split on whitespace gaps. */
+const BLANK_CELL = '-';
 
 function nutrientLabelFromRowBandSlice(sliceText: string): string | null {
   const line = sliceText.replace(/\s+/g, ' ').trim();

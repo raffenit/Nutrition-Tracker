@@ -174,3 +174,19 @@ Protein
   assert.ok(diag.rowLabelCount >= 4, `expected row labels, got ${diag.rowLabelCount}`);
   assert.equal(diag.failure, null);
 });
+
+test('stitchSharedLabelGridFromRowBandSlices keeps column positions when a middle cell is blank', () => {
+  const labelSlices = ['Calories', 'Total Fat', 'Protein'];
+  const valueSlices = [
+    ['90', '5g', '3g'],
+    ['110', '', '4g'],
+    ['130', '7g', '5g'],
+  ];
+  const stitched = stitchSharedLabelGridFromRowBandSlices(labelSlices, valueSlices, 'Snack A    Snack B    Snack C');
+  assert.ok(stitched);
+  const cols = parseMultiProductLabelTable(stitched!);
+  assert.equal(cols?.length, 3);
+  assert.equal(cols![1]!.nutrients.fat, 0);
+  assert.equal(cols![2]!.nutrients.fat, 7);
+  assert.equal(cols![2]!.nutrients.protein, 5);
+});
