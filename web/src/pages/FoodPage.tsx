@@ -18,7 +18,9 @@ import { RemoveButton } from '../components/RemoveButton';
 import { kitLineKeyFromText } from '../kitLineKey';
 import { navigate } from '../nav';
 import {
+  addLabelExtra,
   CORE_NUTRIENT_FIELDS,
+  missingLabelExtras,
   removeExtraAt,
   setCoreNutrient,
   setCoreUnit,
@@ -33,6 +35,7 @@ import {
   type CoreNutrientUnits,
 } from '../nutrientUnits';
 import { supportsNativeLabelCamera } from '../lib/cameraCapture';
+import { DecimalInput } from '../components/DecimalInput';
 import { EMPTY_NUTRIENTS, type Food, type MultiLabelImportDefault, type Nutrients, type Session } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
@@ -90,6 +93,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const [drinkMl, setDrinkMl] = useState('355');
   const [candidates, setCandidates] = useState<string[]>([]);
   const [menuItems, setMenuItems] = useState<Array<{ name: string; servingLabel: string; nutrients: Nutrients }>>([]);
+  const [menuFilter, setMenuFilter] = useState('');
   const [uploadId, setUploadId] = useState<string | null>(null);
   const [importKind, setImportKind] = useState<'pdf' | 'image' | null>(null);
   const [textPreview, setTextPreview] = useState<string | null>(null);
@@ -183,6 +187,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
     setCandidates(result.candidates);
     const items = result.menuItems ?? [];
     setMenuItems(items);
+    setMenuFilter('');
     if (items.length > 0) {
       setName('');
       setNutrients(EMPTY_NUTRIENTS);
@@ -419,9 +424,15 @@ function FoodEditor({ editId }: { editId: string | null }) {
             )}
           </div>
         )}
+        {menuItems.length > MENU_FILTER_MIN_ITEMS && (
+          <label className="menu-pick-filter">
+            Filter {menuItems.length} menu items
+            <input type="search" value={menuFilter} onChange={(event) => setMenuFilter(event.target.value)} placeholder="e.g. turkey 8&quot;" />
+          </label>
+        )}
         {menuItems.length > 0 && (
           <ul className="library-list compact-list menu-pick-list">
-            {menuItems.map((item) => (
+            {filterMenuItems(menuItems, menuFilter).map((item) => (
               <li key={item.name}>
                 <button type="button" className="library-item" onClick={() => pickMenuItem(item)}>
                   <span className="library-item-text">
@@ -915,15 +926,14 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                 <span className="recipe-ingredient-name">{line.name}</span>
                 <label className="recipe-ingredient-qty">
                   <span className="sr-only">Servings of {line.name}</span>
-                  <input
-                    type="number"
+                  <DecimalInput
                     min="0.25"
                     step="0.25"
                     value={line.servings}
                     aria-label={`Servings of ${line.name}`}
-                    onChange={(event) => {
+                    onValueChange={(value) => {
                       const next = [...lines];
-                      next[index] = { ...line, servings: Number(event.target.value) };
+                      next[index] = { ...line, servings: value };
                       setLines(next);
                     }}
                   />
@@ -1072,16 +1082,14 @@ function NutrientFields({
             <ImportFieldHint entry={fieldReview?.[field.key]} />
           </span>
           <span className="nutrient-input-wrap">
-            <input
-              type="number"
-              inputMode="decimal"
+            <DecimalInput
               step={field.step}
               value={nutrients[field.key]}
               aria-invalid={fieldReview?.[field.key]?.status === 'missing'}
               aria-describedby={fieldReview?.[field.key] ? `${field.key}-import-hint` : undefined}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 onFieldEdited?.(field.key);
-                onChange(setCoreNutrient(nutrients, field.key, Number(event.target.value)));
+                onChange(setCoreNutrient(nutrients, field.key, value));
               }}
             />
             <select
@@ -1107,15 +1115,13 @@ function NutrientFields({
             <ImportFieldHint entry={fieldReview?.[extra.key]} />
           </span>
           <span className="nutrient-input-wrap">
-            <input
-              type="number"
-              inputMode="decimal"
+            <DecimalInput
               step="0.1"
               value={extra.amount}
               aria-invalid={fieldReview?.[extra.key]?.status === 'missing'}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 onFieldEdited?.(extra.key);
-                onChange(setExtraAt(nutrients, index, Number(event.target.value)));
+                onChange(setExtraAt(nutrients, index, value));
               }}
             />
             <select
@@ -1135,6 +1141,34 @@ function NutrientFields({
           />
         </label>
       ))}
+      {missingLabelExtras(nutrients).length > 0 && (
+        <label className="nutrient-field nutrient-add-extra">
+          <span>Add nutrient</span>
+          <select
+            value=""
+            aria-label="Add a nutrient row"
+            onChange={(event) => {
+              if (event.target.value) onChange(addLabelExtra(nutrients, event.target.value));
+            }}
+          >
+            <option value="">Choose…</option>
+            {missingLabelExtras(nutrients).map((extra) => (
+              <option key={extra.key} value={extra.key}>{extra.label} ({extra.unit})</option>
+            ))}
+          </select>
+        </label>
+      )}
     </fieldset>
   );
+}
+
+const MENU_FILTER_MIN_ITEMS = 12;
+
+function filterMenuItems<T extends { name: string }>(items: T[], query: string): T[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return items;
+  return items.filter((item) => {
+    const name = item.name.toLowerCase();
+    return words.every((word) => name.includes(word));
+  });
 }

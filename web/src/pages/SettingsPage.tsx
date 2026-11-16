@@ -11,6 +11,7 @@ import {
   type Units,
 } from '../units';
 import { disablePushNotifications, enablePushNotifications, fetchPushStatus, type PushStatus } from '../push';
+import { DecimalInput } from '../components/DecimalInput';
 import type { DietPresetPublic, MultiLabelImportDefault, Session, Targets, User, WeightStatus } from '../types';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -231,20 +232,16 @@ function TargetForm({ targets, onSave }: { targets: Targets; onSave: (targets: T
       {(['calories', 'protein', 'fiber', 'fat', 'carbs'] as const).map((key) => (
         <label key={key}>
           {key}{draft.carbsIsLimit && key === 'carbs' ? ' (daily max)' : ''}
-          <input value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: Number(event.target.value) })} />
+          <DecimalInput min={0} value={draft[key]} onValueChange={(value) => setDraft({ ...draft, [key]: value })} />
         </label>
       ))}
       <label>
         {hydrationTargetLabel(draft.units)}
-        <input
-          type="number"
+        <DecimalInput
           min={0}
           step={draft.units === 'imperial' ? 1 : 50}
           value={hydrationGoalInputValue(draft.hydrationMl, draft.units)}
-          onChange={(event) => {
-            const raw = event.target.value === '' ? 0 : Number(event.target.value);
-            setDraft({ ...draft, hydrationMl: hydrationGoalFromInput(raw, draft.units) });
-          }}
+          onValueChange={(raw) => setDraft({ ...draft, hydrationMl: hydrationGoalFromInput(raw, draft.units) })}
         />
       </label>
       {draft.units === 'imperial' ? (
@@ -298,9 +295,9 @@ function ExtraGoalsEditor({ extras, onChange }: { extras: Targets['extras']; onC
               next[index] = { ...extra, label: event.target.value, key: slug(event.target.value) };
               onChange(next);
             }} /></label>
-            <label>Goal<input type="number" min={0} value={extra.amount} onChange={(event) => {
+            <label>Goal<DecimalInput min={0} value={extra.amount} onValueChange={(value) => {
               const next = [...extras];
-              next[index] = { ...extra, amount: Number(event.target.value) };
+              next[index] = { ...extra, amount: value };
               onChange(next);
             }} /></label>
             <label>Unit<input value={extra.unit} onChange={(event) => {

@@ -38,3 +38,27 @@ export function setExtraUnitAt(nutrients: Nutrients, index: number, unit: string
 export function removeExtraAt(nutrients: Nutrients, index: number): Nutrients {
   return { ...nutrients, extras: nutrients.extras.filter((_, i) => i !== index) };
 }
+
+/** Nutrition Facts rows beyond the core six, with the keys and units label import uses. */
+export const LABEL_EXTRA_NUTRIENTS: ReadonlyArray<{ key: string; label: string; unit: string }> = [
+  { key: 'saturated_fat', label: 'Saturated fat', unit: 'g' },
+  { key: 'trans_fat', label: 'Trans fat', unit: 'g' },
+  { key: 'cholesterol', label: 'Cholesterol', unit: 'mg' },
+  { key: 'sugar', label: 'Total sugars', unit: 'g' },
+  { key: 'added_sugars', label: 'Added sugars', unit: 'g' },
+  { key: 'vitamin_d', label: 'Vitamin D', unit: 'mcg' },
+  { key: 'calcium', label: 'Calcium', unit: 'mg' },
+  { key: 'iron', label: 'Iron', unit: 'mg' },
+  { key: 'potassium', label: 'Potassium', unit: 'mg' },
+];
+
+export function missingLabelExtras(nutrients: Nutrients): Array<{ key: string; label: string; unit: string }> {
+  const present = new Set(nutrients.extras.map((extra) => extra.key));
+  return LABEL_EXTRA_NUTRIENTS.filter((extra) => !present.has(extra.key));
+}
+
+export function addLabelExtra(nutrients: Nutrients, key: string): Nutrients {
+  const spec = LABEL_EXTRA_NUTRIENTS.find((extra) => extra.key === key);
+  if (!spec || nutrients.extras.some((extra) => extra.key === key)) return nutrients;
+  return { ...nutrients, extras: [...nutrients.extras, { ...spec, amount: 0 }] };
+}
