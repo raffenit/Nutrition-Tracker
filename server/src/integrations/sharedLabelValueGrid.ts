@@ -66,6 +66,8 @@ export type SharedLabelValueGridPlan = {
   valueRowBandSlicesPerColumn: SharedLabelRowBandSlice[][];
   valueColumnGlareMasks: ColumnBodyGlareMask[];
   valueColumnWarpProbes?: ValueColumnWarpProbe[];
+  /** Columns whose row-slice count disagreed with consensus and were rebuilt on the consensus mesh. */
+  rowBandReconciledColumns?: number;
   headerConsensusRowBandSlices: SharedLabelRowBandSlice[];
   headerLabelRowBandSlices: SharedLabelRowBandSlice[];
   headerRowBandSlicesPerColumn: SharedLabelRowBandSlice[][];

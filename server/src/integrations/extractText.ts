@@ -849,7 +849,8 @@ async function ocrSharedLabelGridColumns(
       const labelRowSlices = rowSurfacesForColumn(plan.labelRowBandSlices, 'label');
       const valueSliceCounts = plan.valueRowBandSlicesPerColumn.map((s) => s.length).join(',');
       appendImportJobDebug(
-        `shared-label grid: row surfaces mode=${plan.rowSurfaceMode}, label ${labelRowSlices.length} rows, values [${valueSliceCounts}], one worker`,
+        `shared-label grid: row surfaces mode=${plan.rowSurfaceMode}, label ${labelRowSlices.length} rows, values [${valueSliceCounts}], one worker` +
+          (plan.rowBandReconciledColumns ? `, ${plan.rowBandReconciledColumns} column(s) count-reconciled` : ''),
       );
       const labelBand = await ocrColumnByRowBandsWithWorker(
         worker,
