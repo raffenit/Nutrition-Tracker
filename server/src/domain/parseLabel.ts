@@ -68,6 +68,11 @@ export function parseNutritionLabel(text: string): LabelParse {
   );
   addExtra(nutrients, 'sugar', 'Total sugars', readSugar(compact, raw), 'g');
   addExtra(nutrients, 'cholesterol', 'Cholesterol', readAmount(compact, raw, ['cholesterol'], 'mg'), 'mg');
+  addExtra(nutrients, 'trans_fat', 'Trans fat', readAmount(compact, raw, ['trans fat'], 'g', true), 'g');
+  addExtra(nutrients, 'added_sugars', 'Added sugars', readAddedSugars(compact), 'g');
+  for (const mineral of LABEL_MICRONUTRIENTS) {
+    addExtra(nutrients, mineral.key, mineral.label, readMicronutrient(compact, mineral.pattern, mineral.unit), mineral.unit);
+  }
 
   const servingLabel =
     servingSize(compact, raw) ?? parseServingSizeVariant(raw) ?? mealKitServing(raw);
@@ -527,6 +532,28 @@ function readStandaloneFatGrams(raw: string): number | null {
     if (short) return Number(short[1]);
   }
   return null;
+}
+
+const LABEL_MICRONUTRIENTS = [
+  { key: 'vitamin_d', label: 'Vitamin D', pattern: 'vit(?:amin)?\\.?\\s*d', unit: 'mcg' },
+  { key: 'calcium', label: 'Calcium', pattern: 'calcium', unit: 'mg' },
+  { key: 'iron', label: 'Iron', pattern: 'iron', unit: 'mg' },
+  { key: 'potassium', label: 'Potassium', pattern: 'potassium|potas\\.?', unit: 'mg' },
+] as const;
+
+/** "Includes 16g Added Sugars" (amount before the name) or "Added Sugars 16g". */
+function readAddedSugars(compact: string): number | null {
+  const match =
+    compact.match(/includes\s*<?\s*(\d+(?:\.\d+)?)\s*g\s*(?:of\s+)?added\s+sugars?/i) ??
+    compact.match(/added\s+sugars?\s*:?\s*<?\s*(\d+(?:\.\d+)?)\s*g\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+/** Amount must carry its own unit so a "%DV" or a neighbouring row is never read as the value. */
+function readMicronutrient(compact: string, pattern: string, unit: 'mcg' | 'mg'): number | null {
+  const unitPattern = unit === 'mcg' ? '(?:mcg|µg|ug)' : 'mg';
+  const match = compact.match(new RegExp(`\\b(?:${pattern})\\b\\s*:?\\s*<?\\s*(\\d+(?:\\.\\d+)?)\\s*${unitPattern}\\b`, 'i'));
+  return match ? Number(match[1]) : null;
 }
 
 function readSugar(compact: string, raw: string): number | null {
