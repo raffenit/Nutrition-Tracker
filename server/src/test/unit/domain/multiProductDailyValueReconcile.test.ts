@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeCellDigits, reconcileAmountWithDailyValue, repairTrailingNineAgainstLabelMath } from '../../../domain/parseMultiProductLabelTable.js';
+import { normalizeCellDigits, realignShiftedColumns, reconcileAmountWithDailyValue, repairTrailingNineAgainstLabelMath } from '../../../domain/parseMultiProductLabelTable.js';
 
 test('a "g" read as a trailing 9 is undone when the printed %DV confirms it', () => {
   assert.equal(reconcileAmountWithDailyValue('459 23%', 20), 4.5);
@@ -53,4 +53,28 @@ test('added sugars cannot exceed total sugars', () => {
   ] };
   repairTrailingNineAgainstLabelMath(n);
   assert.equal(n.extras[1]!.amount, 14);
+});
+
+test('O read for 0 next to digits or a mass unit', () => {
+  assert.equal(normalizeCellDigits('10Omg 4%'), '100mg 4%');
+  assert.equal(normalizeCellDigits('Omg 0%'), '0mg 0%');
+  assert.equal(normalizeCellDigits('Oc 0%'), 'Oc 0%');
+});
+
+test('a column whose lower rows slid by one row is realigned by units and %DV', () => {
+  const labels = ['total fat', 'saturated fat', 'cholesterol', 'sodium', 'total carbohydrate', 'dietary fiber', 'total sugars', 'includes added sugars'];
+  const slidUp = ['9g 12%', '3g 15%', '100mg 4%', '18g 7%', '1g 4%', '16g', '15g 30%', '3g'];
+  const slidDown = ['9g 12%', '7g 35%', '0mg 0%', '-', '45mg 2%', '20g 7%', '1g 4%', '16g'];
+  const aligned = ['4g 5%', '2.5g 13%', '0mg 0%', '55mg 2%', '23g 8%', '0g 0%', '20g', '20g 40%'];
+  const rows = labels.map((row, i) => ({ row, values: [slidUp[i]!, slidDown[i]!, aligned[i]!] }));
+  realignShiftedColumns(rows, 3);
+  const column = (c: number) => Object.fromEntries(rows.map((row) => [row.row, row.values[c]]));
+  assert.deepEqual(column(0), {
+    'total fat': '9g 12%', 'saturated fat': '3g 15%', cholesterol: '', sodium: '100mg 4%', 'total carbohydrate': '18g 7%',
+    'dietary fiber': '1g 4%', 'total sugars': '16g', 'includes added sugars': '15g 30%', protein: '3g',
+  });
+  assert.equal(column(1).sodium, '45mg 2%');
+  assert.equal(column(1)['total carbohydrate'], '20g 7%');
+  assert.equal(column(1)['dietary fiber'], '1g 4%');
+  assert.deepEqual(column(2), Object.fromEntries([...labels.map((row, i) => [row, aligned[i]]), ['protein', '']]));
 });

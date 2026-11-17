@@ -10,6 +10,12 @@ export type MultiProductColumn = {
   preview: string;
 };
 
+export type TableRow = { row: string; values: string[] };
+
+function tableRow(row: string, values: string[]): TableRow {
+  return { row, values };
+}
+
 const TABLE_END = /^(ingredients|distributed by|contains:)/i;
 const SKIP_LINE = /^(serving size|servings per|amount per serving|daily value|\*|%?\s*daily\s*value)/i;
 const NUTRIENT_ROW =
@@ -46,6 +52,7 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
     preview: name,
   }));
 
+  const rows: TableRow[] = [];
   let pendingRow: string | null = null;
   for (const line of window) {
     if (line === header.sourceLine) continue;
@@ -56,22 +63,22 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
       pendingRow = rowLabel;
       const values = cells.length > 1 ? cells.slice(1) : [];
       if (values.length >= columnCount) {
-        applyRowValues(columns, pendingRow, values.slice(0, columnCount));
+        rows.push(tableRow(pendingRow, values.slice(0, columnCount)));
         pendingRow = null;
       } else if (values.length > 0) {
-        applyRowValues(columns, pendingRow, padValues(values, columnCount));
+        rows.push(tableRow(pendingRow, padValues(values, columnCount)));
         pendingRow = null;
       }
       continue;
     }
 
     if (pendingRow && cells.length >= columnCount) {
-      applyRowValues(columns, pendingRow, padValues(cells, columnCount));
+      rows.push(tableRow(pendingRow, padValues(cells, columnCount)));
       pendingRow = null;
       continue;
     }
     if (pendingRow && isValueOnlyLine(cells)) {
-      applyRowValues(columns, pendingRow, padValues(cells, columnCount));
+      rows.push(tableRow(pendingRow, padValues(cells, columnCount)));
       pendingRow = null;
       continue;
     }
@@ -82,9 +89,12 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
 
     const inlineLabel = cells[0] ? matchNutrientRowLabel(cells[0]) : null;
     if (inlineLabel && cells.length > 1) {
-      applyRowValues(columns, inlineLabel, padValues(cells.slice(1), columnCount));
+      rows.push(tableRow(inlineLabel, padValues(cells.slice(1), columnCount)));
     }
   }
+
+  realignShiftedColumns(rows, columnCount);
+  for (const row of rows) applyRowValues(columns, row.row, row.values);
 
   for (const column of columns) repairTrailingNineAgainstLabelMath(column.nutrients);
 
@@ -172,6 +182,8 @@ export function normalizeCellDigits(cell: string): string {
   return cell
     .trim()
     .replace(/^<\s*[Il|](?=\s*(?:m?g)\b)/, '<1')
+    .replace(/^[Oo](?=\s*m?g\b)/, '0')
+    .replace(/(?<=\d)[Oo]+(?=\s*m?g\b)/, (zeros) => '0'.repeat(zeros.length))
     .replace(/^[Il|]+(?=[\d.]|\s*m?g\b)/, (ones) => '1'.repeat(ones.length))
     .replace(/(?<=\d)[Il|]+(?=\s*m?g\b)/, (ones) => '1'.repeat(ones.length));
 }
@@ -216,6 +228,53 @@ export function reconcileAmountWithDailyValue(cell: string, dailyValue: number):
   if (fits(Number(literal))) return Number(literal);
   const matches = [...options].filter((amount) => amount > 0 && fits(amount));
   return matches.length === 1 ? matches[0]! : null;
+}
+
+const MG_ROWS = /^(cholesterol|sodium)/;
+
+/** +: the cell's unit and printed %DV fit this row; -: the unit rules the row out. */
+function cellRowFit(row: string, cell: string): number {
+  const normalized = normalizeCellDigits(cell);
+  if (!normalized || isBlankCellPlaceholder(normalized)) return 0;
+  const mgRow = MG_ROWS.test(row);
+  let score = 0;
+  if (/\d\s*mg\b/i.test(normalized)) score += mgRow ? 2 : -3;
+  else if (/\d\s*g\b/i.test(normalized)) score += mgRow ? -3 : 1;
+  const dailyValue = ROW_DAILY_VALUES.find(([prefix]) => row.startsWith(prefix))?.[1];
+  if (dailyValue && reconcileAmountWithDailyValue(normalized, dailyValue) !== null) score += 2;
+  return score;
+}
+
+/**
+ * On curved packs one column's lower rows can land a row above or below their labels
+ * ("55mg 2%" under Total Carbohydrate). Per column, try shifting every row from some point
+ * down by one row either way and keep the shift when units and %DV fit clearly better.
+ * A missing trailing Protein row is added so a column shifted up can still fill it.
+ */
+export function realignShiftedColumns(rows: TableRow[], columnCount: number): void {
+  const block = rows.filter((row) => !row.row.startsWith('calories'));
+  if (block.length < 4) return;
+  if (!block.some((row) => row.row.startsWith('protein')) && block[block.length - 1]!.row.startsWith('includes')) {
+    const protein = tableRow('protein', Array.from({ length: columnCount }, () => ''));
+    rows.push(protein);
+    block.push(protein);
+  }
+  const fitOf = (cells: string[]) => cells.reduce((sum, cell, i) => sum + cellRowFit(block[i]!.row, cell), 0);
+  for (let c = 0; c < columnCount; c += 1) {
+    const cells = block.map((row) => row.values[c] ?? '');
+    let best = { fit: fitOf(cells) + 2, cells };
+    for (let start = 0; start < cells.length; start += 1) {
+      for (const offset of [-1, 1]) {
+        const shifted = cells.map((cell, i) => {
+          if (i < start) return offset === -1 && i === start - 1 ? '' : cell;
+          return cells[i + offset] ?? '';
+        });
+        const fit = fitOf(shifted);
+        if (fit > best.fit) best = { fit, cells: shifted };
+      }
+    }
+    if (best.cells !== cells) best.cells.forEach((cell, i) => (block[i]!.values[c] = cell));
+  }
 }
 
 function applyRowValues(columns: MultiProductColumn[], row: string, values: string[]): void {
