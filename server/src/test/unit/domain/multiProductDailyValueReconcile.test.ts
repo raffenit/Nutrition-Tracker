@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { reconcileAmountWithDailyValue, repairTrailingNineAgainstLabelMath } from '../../../domain/parseMultiProductLabelTable.js';
+import { normalizeCellDigits, reconcileAmountWithDailyValue, repairTrailingNineAgainstLabelMath } from '../../../domain/parseMultiProductLabelTable.js';
 
 test('a "g" read as a trailing 9 is undone when the printed %DV confirms it', () => {
   assert.equal(reconcileAmountWithDailyValue('459 23%', 20), 4.5);
@@ -24,4 +24,11 @@ test('rows without %DV drop a trailing 9 only when the label math demands it', (
   const ok = { calories: 170, fat: 9, carbs: 19, fiber: 1, protein: 3, sodium: 45, extras: [] };
   repairTrailingNineAgainstLabelMath(ok);
   assert.equal(ok.carbs, 19);
+});
+
+test('I / l read for 1 next to digits or a unit', () => {
+  assert.equal(normalizeCellDigits('Ilg 4%'), '11g 4%');
+  assert.equal(normalizeCellDigits('<lg 3%'), '<1g 3%');
+  assert.equal(normalizeCellDigits('Ig 4%'), '1g 4%');
+  assert.equal(normalizeCellDigits('Iron'), 'Iron');
 });

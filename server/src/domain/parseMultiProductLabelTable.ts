@@ -167,8 +167,17 @@ function padValues(values: string[], columnCount: number): string[] {
   return next.slice(0, columnCount);
 }
 
+/** "Ilg" → "11g", "<lg" → "<1g": I / l / | read for 1 next to digits or a mass unit. */
+export function normalizeCellDigits(cell: string): string {
+  return cell
+    .trim()
+    .replace(/^<\s*[Il|](?=\s*(?:m?g)\b)/, '<1')
+    .replace(/^[Il|]+(?=[\d.]|\s*m?g\b)/, (ones) => '1'.repeat(ones.length))
+    .replace(/(?<=\d)[Il|]+(?=\s*m?g\b)/, (ones) => '1'.repeat(ones.length));
+}
+
 function parseCellAmount(cell: string): number | null {
-  const trimmed = cell.trim();
+  const trimmed = normalizeCellDigits(cell);
   const match = trimmed.match(/^(\d+(?:\.\d+)?)/);
   if (!match) return null;
   const value = Number(match[1]);
@@ -191,7 +200,7 @@ const ROW_DAILY_VALUES: Array<[string, number]> = [
  * reading (raw, without a trailing 9, with a decimal restored) whose %DV matches the printed one.
  */
 export function reconcileAmountWithDailyValue(cell: string, dailyValue: number): number | null {
-  const match = cell.trim().match(/^(\d+(?:\.\d+)?)\D{0,3}?\s+(\d{1,3})\s*%/);
+  const match = normalizeCellDigits(cell).match(/^(\d+(?:\.\d+)?)\D{0,3}?\s+(\d{1,3})\s*%/);
   if (!match) return null;
   const literal = match[1]!;
   const percent = Number(match[2]);
