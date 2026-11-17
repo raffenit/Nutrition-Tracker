@@ -32,3 +32,25 @@ test('I / l read for 1 next to digits or a unit', () => {
   assert.equal(normalizeCellDigits('Ig 4%'), '1g 4%');
   assert.equal(normalizeCellDigits('Iron'), 'Iron');
 });
+
+test('a lost half-gram decimal is restored only when the label math rules out the literal read', () => {
+  const n = { calories: 80, fat: 35, carbs: 11, fiber: 0, protein: 0, sodium: 30, extras: [{ key: 'saturated_fat', label: 'Saturated fat', amount: 259, unit: 'g' }] };
+  repairTrailingNineAgainstLabelMath(n);
+  assert.equal(n.fat, 3.5);
+  assert.equal(n.extras[0]!.amount, 2.5);
+  const ok = { calories: 450, fat: 35, carbs: 10, fiber: 0, protein: 5, sodium: 0, extras: [] };
+  repairTrailingNineAgainstLabelMath(ok);
+  assert.equal(ok.fat, 35);
+  const no = { calories: 80, fat: 34, carbs: 11, fiber: 0, protein: 0, sodium: 0, extras: [] };
+  repairTrailingNineAgainstLabelMath(no);
+  assert.equal(no.fat, 34);
+});
+
+test('added sugars cannot exceed total sugars', () => {
+  const n = { calories: 170, fat: 7, carbs: 25, fiber: 0, protein: 1, sodium: 0, extras: [
+    { key: 'sugar', label: 'Total sugars', amount: 15, unit: 'g' },
+    { key: 'added_sugars', label: 'Added sugars', amount: 149, unit: 'g' },
+  ] };
+  repairTrailingNineAgainstLabelMath(n);
+  assert.equal(n.extras[1]!.amount, 14);
+});

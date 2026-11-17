@@ -244,13 +244,21 @@ function applyRowValues(columns: MultiProductColumn[], row: string, values: stri
   }
 }
 
-/** "12g" read as "129": drop a trailing 9 when only the shorter amount fits the label's own limits. */
+/**
+ * Amount that breaks the label's own limits: try the usual misreads — "g" read as a trailing 9
+ * ("129" for 12g) and a lost half-gram decimal ("35" for 3.5g; labels round small fat/sugar
+ * amounts to 0.5 g, so only a trailing 5 can hide a decimal) — and keep the first that fits.
+ */
 function stripTrailingNineToFit(amount: number, limit: number): number {
   if (!(limit > 0) || amount <= limit) return amount;
   const literal = String(amount);
-  if (!/^\d+9$/.test(literal)) return amount;
-  const shorter = Number(literal.slice(0, -1));
-  return shorter > 0 && shorter <= limit ? shorter : amount;
+  const candidates: number[] = [];
+  const withoutNine = /^\d+9$/.test(literal) ? literal.slice(0, -1) : null;
+  if (withoutNine) candidates.push(Number(withoutNine));
+  for (const digits of [withoutNine, literal]) {
+    if (digits && /^\d+5$/.test(digits)) candidates.push(Number(digits) / 10);
+  }
+  return candidates.find((candidate) => candidate > 0 && candidate <= limit) ?? amount;
 }
 
 export function repairTrailingNineAgainstLabelMath(nutrients: Nutrients): void {
@@ -263,5 +271,9 @@ export function repairTrailingNineAgainstLabelMath(nutrients: Nutrients): void {
   for (const extra of nutrients.extras) {
     if (extra.key === 'sugar') extra.amount = stripTrailingNineToFit(extra.amount, nutrients.carbs);
     if (extra.key === 'saturated_fat') extra.amount = stripTrailingNineToFit(extra.amount, nutrients.fat);
+  }
+  const totalSugars = nutrients.extras.find((extra) => extra.key === 'sugar')?.amount ?? 0;
+  for (const extra of nutrients.extras) {
+    if (extra.key === 'added_sugars') extra.amount = stripTrailingNineToFit(extra.amount, totalSugars || nutrients.carbs);
   }
 }
