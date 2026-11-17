@@ -215,8 +215,11 @@ export function stitchSharedLabelGridFromRowBandSlices(
     labelSliceTexts.length,
     ...valueSliceTextsPerColumn.map((col) => col.length),
   );
+  const bandLabels = fillRowLabelsByCanonicalOrder(
+    Array.from({ length: bandCount }, (_, i) => rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i)),
+  );
   for (let i = 0; i < bandCount; i += 1) {
-    const rowLabel = rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i);
+    const rowLabel = bandLabels[i];
     if (!rowLabel) continue;
     const key = rowLabel.toLowerCase();
     if (seenRows.has(key)) continue;
@@ -449,4 +452,47 @@ function looksLikeProductName(line: string): boolean {
   if (/\b(?:bar|cup|pack|candies|chocolate|wafer)\b/i.test(line)) return true;
   if (/®|™/.test(line)) return true;
   return line.split(/\s+/).length <= 4 && /^[A-Za-z]/.test(line);
+}
+
+/** Nutrition Facts rows always print in this order (FDA format). */
+const CANONICAL_ROW_ORDER = [
+  'Calories',
+  'Total Fat',
+  'Saturated Fat',
+  'Trans Fat',
+  'Cholesterol',
+  'Sodium',
+  'Total Carbohydrate',
+  'Dietary Fiber',
+  'Total Sugars',
+  'Includes Added Sugars',
+  'Protein',
+];
+
+function canonicalRowIndex(label: string | null): number {
+  if (!label) return -1;
+  const key = label.toLowerCase();
+  return CANONICAL_ROW_ORDER.findIndex((name) => key.startsWith(name.toLowerCase().split(' ').slice(0, 2).join(' ')));
+}
+
+/**
+ * Bands whose label OCR failed, sandwiched between two read labels, take the canonical rows in
+ * between when the band count matches exactly (e.g. Trans Fat · ? · ? · Total Carbohydrate).
+ */
+export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Array<string | null> {
+  const out = [...labels];
+  let prev = -1;
+  for (let i = 0; i < out.length; i += 1) {
+    if (canonicalRowIndex(out[i] ?? null) < 0) continue;
+    if (prev >= 0 && i - prev > 1) {
+      const from = canonicalRowIndex(out[prev] ?? null);
+      const to = canonicalRowIndex(out[i] ?? null);
+      const gapBands = out.slice(prev + 1, i);
+      if (to - from - 1 === gapBands.length && gapBands.every((label) => label === null)) {
+        for (let k = 1; k <= gapBands.length; k += 1) out[prev + k] = CANONICAL_ROW_ORDER[from + k]!;
+      }
+    }
+    prev = i;
+  }
+  return out;
 }
