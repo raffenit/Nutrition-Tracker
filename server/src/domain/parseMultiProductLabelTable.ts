@@ -86,6 +86,8 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
     }
   }
 
+  for (const column of columns) repairTrailingNineAgainstLabelMath(column.nutrients);
+
   const withMacros = columns.filter((col) => col.nutrients.calories > 0 || col.nutrients.protein > 0);
   if (withMacros.length < 1) {
     if (names.length >= 2) return columns;
@@ -227,5 +229,27 @@ function applyRowValues(columns: MultiProductColumn[], row: string, values: stri
     else if (key.startsWith('cholesterol')) {
       nutrients.extras.push({ key: 'cholesterol', label: 'Cholesterol', amount, unit: 'mg' });
     }
+  }
+}
+
+/** "12g" read as "129": drop a trailing 9 when only the shorter amount fits the label's own limits. */
+function stripTrailingNineToFit(amount: number, limit: number): number {
+  if (!(limit > 0) || amount <= limit) return amount;
+  const literal = String(amount);
+  if (!/^\d+9$/.test(literal)) return amount;
+  const shorter = Number(literal.slice(0, -1));
+  return shorter > 0 && shorter <= limit ? shorter : amount;
+}
+
+export function repairTrailingNineAgainstLabelMath(nutrients: Nutrients): void {
+  if (nutrients.calories > 0) {
+    nutrients.carbs = stripTrailingNineToFit(nutrients.carbs, nutrients.calories / 4);
+    nutrients.fat = stripTrailingNineToFit(nutrients.fat, nutrients.calories / 9);
+    nutrients.protein = stripTrailingNineToFit(nutrients.protein, nutrients.calories / 4);
+  }
+  nutrients.fiber = stripTrailingNineToFit(nutrients.fiber, nutrients.carbs);
+  for (const extra of nutrients.extras) {
+    if (extra.key === 'sugar') extra.amount = stripTrailingNineToFit(extra.amount, nutrients.carbs);
+    if (extra.key === 'saturated_fat') extra.amount = stripTrailingNineToFit(extra.amount, nutrients.fat);
   }
 }
