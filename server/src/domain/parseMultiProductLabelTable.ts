@@ -173,10 +173,45 @@ function parseCellAmount(cell: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/** FDA daily values for rows whose printed %DV can check the amount. */
+const ROW_DAILY_VALUES: Array<[string, number]> = [
+  ['total fat', 78],
+  ['saturated', 20],
+  ['cholesterol', 300],
+  ['sodium', 2300],
+  ['total carb', 275],
+  ['dietary fiber', 28],
+  ['protein', 50],
+];
+
+/**
+ * "459 23%" is "4.5g 23%" with the "g" read as a trailing 9 and the decimal lost: keep the
+ * reading (raw, without a trailing 9, with a decimal restored) whose %DV matches the printed one.
+ */
+export function reconcileAmountWithDailyValue(cell: string, dailyValue: number): number | null {
+  const match = cell.trim().match(/^(\d+(?:\.\d+)?)\D{0,3}?\s+(\d{1,3})\s*%/);
+  if (!match) return null;
+  const literal = match[1]!;
+  const percent = Number(match[2]);
+  const options = new Set<number>([Number(literal)]);
+  const stripped = /^\d+9$/.test(literal) ? literal.slice(0, -1) : null;
+  for (const base of [literal, stripped]) {
+    if (!base || base.includes('.')) continue;
+    options.add(Number(base));
+    if (base.length >= 2) options.add(Number(`${base.slice(0, -1)}.${base.slice(-1)}`));
+  }
+  const fits = (amount: number) => Math.abs((amount / dailyValue) * 100 - percent) <= Math.max(1.5, percent * 0.1);
+  if (fits(Number(literal))) return Number(literal);
+  const matches = [...options].filter((amount) => amount > 0 && fits(amount));
+  return matches.length === 1 ? matches[0]! : null;
+}
+
 function applyRowValues(columns: MultiProductColumn[], row: string, values: string[]): void {
   const key = row.replace(/\s+/g, ' ').trim();
+  const dailyValue = ROW_DAILY_VALUES.find(([prefix]) => key.startsWith(prefix))?.[1];
   for (let i = 0; i < columns.length; i += 1) {
-    const amount = parseCellAmount(values[i] ?? '');
+    const cell = values[i] ?? '';
+    const amount = (dailyValue ? reconcileAmountWithDailyValue(cell, dailyValue) : null) ?? parseCellAmount(cell);
     if (amount === null) continue;
     const nutrients = columns[i]!.nutrients;
     if (key.startsWith('calories')) nutrients.calories = amount;
