@@ -477,7 +477,8 @@ function canonicalRowIndex(label: string | null): number {
 
 /**
  * Bands whose label OCR failed, sandwiched between two read labels, take the canonical rows in
- * between when the band count matches exactly (e.g. Trans Fat · ? · ? · Total Carbohydrate).
+ * between when the band count matches exactly (e.g. Trans Fat · ? · ? · Total Carbohydrate);
+ * unread bands right after the last read row take the rows that follow it (… Added Sugars · ? → Protein).
  */
 export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Array<string | null> {
   const out = [...labels];
@@ -493,6 +494,12 @@ export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Arr
       }
     }
     prev = i;
+  }
+  if (prev >= 0) {
+    let next = canonicalRowIndex(out[prev] ?? null) + 1;
+    for (let i = prev + 1; i < out.length && out[i] === null && next < CANONICAL_ROW_ORDER.length; i += 1, next += 1) {
+      out[i] = CANONICAL_ROW_ORDER[next]!;
+    }
   }
   return out;
 }
