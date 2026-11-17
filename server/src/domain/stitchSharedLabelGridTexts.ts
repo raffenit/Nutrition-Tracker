@@ -209,15 +209,18 @@ export function stitchSharedLabelGridFromRowBandSlices(
 
   const seenRows = new Set<string>();
   const rowBlocks: Array<{ label: string; values: string[] }> = [];
-  const labelNutrientSliceCount = countParsableLabelNutrientSlices(labelSliceTexts);
   let nutrientRowOrdinal = 0;
   const bandCount = Math.max(
     labelSliceTexts.length,
     ...valueSliceTextsPerColumn.map((col) => col.length),
   );
-  const bandLabels = fillRowLabelsByCanonicalOrder(
-    Array.from({ length: bandCount }, (_, i) => rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i)),
+  const readBandLabels = Array.from({ length: bandCount }, (_, i) =>
+    rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i),
   );
+  const bandLabels = fillRowLabelsByCanonicalOrder(readBandLabels);
+  const labelNutrientSliceCount =
+    countParsableLabelNutrientSlices(labelSliceTexts) +
+    bandLabels.filter((label, i) => label && !readBandLabels[i]).length;
   for (let i = 0; i < bandCount; i += 1) {
     const rowLabel = bandLabels[i];
     if (!rowLabel) continue;
