@@ -193,6 +193,7 @@ const ROW_DAILY_VALUES: Array<[string, number]> = [
   ['total carb', 275],
   ['dietary fiber', 28],
   ['protein', 50],
+  ['includes', 50],
 ];
 
 /**
@@ -232,7 +233,9 @@ function applyRowValues(columns: MultiProductColumn[], row: string, values: stri
     } else if (key.startsWith('sodium')) nutrients.sodium = amount;
     else if (key.startsWith('total carb')) nutrients.carbs = amount;
     else if (key.startsWith('dietary fiber') || key === 'fiber') nutrients.fiber = amount;
-    else if (key.startsWith('total sugar')) {
+    else if (key.startsWith('includes')) {
+      nutrients.extras.push({ key: 'added_sugars', label: 'Added sugars', amount, unit: 'g' });
+    } else if (key.startsWith('total sugar')) {
       nutrients.extras.push({ key: 'sugar', label: 'Total sugars', amount, unit: 'g' });
     } else if (key.startsWith('protein')) nutrients.protein = amount;
     else if (key.startsWith('cholesterol')) {
