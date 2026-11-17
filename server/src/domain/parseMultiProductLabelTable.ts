@@ -322,9 +322,11 @@ function stripTrailingNineToFit(amount: number, limit: number): number {
 
 export function repairTrailingNineAgainstLabelMath(nutrients: Nutrients): void {
   if (nutrients.calories > 0) {
-    nutrients.carbs = stripTrailingNineToFit(nutrients.carbs, nutrients.calories / 4);
-    nutrients.fat = stripTrailingNineToFit(nutrients.fat, nutrients.calories / 9);
-    nutrients.protein = stripTrailingNineToFit(nutrients.protein, nutrients.calories / 4);
+    // Printed calories and grams round independently, and fiber / sugar alcohols carry fewer
+    // than 4 kcal/g, so the calorie ceilings only rule out misreads far above them.
+    nutrients.carbs = stripTrailingNineToFit(nutrients.carbs, (nutrients.calories / 4) * 2);
+    nutrients.fat = stripTrailingNineToFit(nutrients.fat, (nutrients.calories / 9) * 1.25 + 1);
+    nutrients.protein = stripTrailingNineToFit(nutrients.protein, (nutrients.calories / 4) * 1.25 + 1);
   }
   nutrients.fiber = stripTrailingNineToFit(nutrients.fiber, nutrients.carbs);
   for (const extra of nutrients.extras) {

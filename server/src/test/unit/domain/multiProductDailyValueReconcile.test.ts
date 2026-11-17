@@ -78,3 +78,10 @@ test('a column whose lower rows slid by one row is realigned by units and %DV', 
   assert.equal(column(1)['dietary fiber'], '1g 4%');
   assert.deepEqual(column(2), Object.fromEntries([...labels.map((row, i) => [row, aligned[i]]), ['protein', '']]));
 });
+
+test('calorie ceilings leave amounts that only round past them', () => {
+  const n = { calories: 170, fat: 19, carbs: 49, fiber: 0, protein: 9, sodium: 0, extras: [] };
+  repairTrailingNineAgainstLabelMath(n);
+  assert.equal(n.fat, 19);
+  assert.equal(n.carbs, 49);
+});
