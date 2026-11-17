@@ -18,10 +18,21 @@ import type { LabelProductGroundTruth } from '../../../domain/labelNutrientGroun
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const fixturesDir = path.join(repoRoot, 'server/src/test/fixtures');
 
-test('compareNutrientValues: calories within tolerance', () => {
-  assert.equal(compareNutrientValues({ field: 'calories', unit: 'kcal', expected: 140, got: 138 }), 'ok');
+test('compareNutrientValues: calories must match exactly', () => {
+  assert.equal(compareNutrientValues({ field: 'calories', unit: 'kcal', expected: 140, got: 140 }), 'ok');
+  assert.equal(compareNutrientValues({ field: 'calories', unit: 'kcal', expected: 140, got: 138 }), 'off');
   assert.equal(compareNutrientValues({ field: 'calories', unit: 'kcal', expected: 140, got: 130 }), 'off');
   assert.equal(compareNutrientValues({ field: 'calories', unit: 'kcal', expected: 140, got: 19 }), 'unusable');
+});
+
+test('compareNutrientValues: whole grams are exact, decimals get a small allowance', () => {
+  assert.equal(compareNutrientValues({ field: 'sugar', unit: 'g', expected: 16, got: 16 }), 'ok');
+  assert.equal(compareNutrientValues({ field: 'sugar', unit: 'g', expected: 16, got: 15 }), 'off');
+  assert.equal(compareNutrientValues({ field: 'carbs', unit: 'g', expected: 20, got: 21 }), 'off');
+  assert.equal(compareNutrientValues({ field: 'satFat', unit: 'g', expected: 1.5, got: 1.6 }), 'ok');
+  assert.equal(compareNutrientValues({ field: 'satFat', unit: 'g', expected: 1.5, got: 2 }), 'off');
+  assert.equal(compareNutrientValues({ field: 'sodium', unit: 'mg', expected: 90, got: 95 }), 'off');
+  assert.equal(compareNutrientValues({ field: 'carbs', unit: 'g', expected: 12, got: 129 }), 'unusable');
 });
 
 test('compareNutrientValues: less-than fiber', () => {
