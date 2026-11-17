@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeCellDigits, realignShiftedColumns, reconcileAmountWithDailyValue, repairTrailingNineAgainstLabelMath } from '../../../domain/parseMultiProductLabelTable.js';
+import { normalizeCellDigits, parseMultiProductLabelTable, realignShiftedColumns, reconcileAmountWithDailyValue, repairTrailingNineAgainstLabelMath } from '../../../domain/parseMultiProductLabelTable.js';
 
 test('a "g" read as a trailing 9 is undone when the printed %DV confirms it', () => {
   assert.equal(reconcileAmountWithDailyValue('459 23%', 20), 4.5);
@@ -84,4 +84,21 @@ test('calorie ceilings leave amounts that only round past them', () => {
   repairTrailingNineAgainstLabelMath(n);
   assert.equal(n.fat, 19);
   assert.equal(n.carbs, 49);
+});
+
+test('protein %DV does not rewrite the gram amount', () => {
+  const text = [
+    'Nutrition Facts',
+    'ALPHA BAR    BETA BAR',
+    'Calories',
+    '200  210',
+    'Total Fat',
+    '5g 6%  6g 8%',
+    'Protein',
+    '15g 3%  10g 20%',
+  ].join('\n');
+  const columns = parseMultiProductLabelTable(text);
+  assert.ok(columns);
+  assert.equal(columns[0]!.nutrients.protein, 15);
+  assert.equal(columns[1]!.nutrients.protein, 10);
 });

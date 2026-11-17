@@ -196,7 +196,7 @@ function parseCellAmount(cell: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** FDA daily values for rows whose printed %DV can check the amount. */
+/** FDA daily values for rows whose printed %DV can check the amount (protein %DV is quality-adjusted, so it can't). */
 const ROW_DAILY_VALUES: Array<[string, number]> = [
   ['total fat', 78],
   ['saturated', 20],
@@ -204,7 +204,6 @@ const ROW_DAILY_VALUES: Array<[string, number]> = [
   ['sodium', 2300],
   ['total carb', 275],
   ['dietary fiber', 28],
-  ['protein', 50],
   ['includes', 50],
 ];
 
