@@ -199,10 +199,15 @@ function readGot(col: ParsedLabelProduct | undefined, row: NutrientRowSpec): num
   return null;
 }
 
+/** Labels print rounded values, so a correct read matches exactly; only decimals get a hair of slack (1.5 vs 1.6). */
 function toleranceFor(field: string, unit: string, expected: number): number {
-  if (field === 'calories') return Math.max(2, Math.round(expected * 0.05));
-  if (unit === 'mg') return Math.max(5, Math.round(Math.max(expected, 1) * 0.12));
-  return Math.max(0.25, Math.max(expected, 0.5) * 0.15);
+  if (field === 'calories' || unit === 'mg') return 0.5;
+  return Number.isInteger(expected) ? 0.05 : 0.15;
+}
+
+/** Parsed but wrong (e.g. 15g for 16g), as opposed to unusable (wrong row, garbage). */
+function offToleranceFor(expected: number, tol: number): number {
+  return Math.max(tol * 2.5, Math.max(expected, 2) * 0.25);
 }
 
 export function compareNutrientValues(input: {
@@ -228,7 +233,7 @@ export function compareNutrientValues(input: {
   const tol = toleranceFor(field, unit, expected);
   const delta = Math.abs(got - expected);
   if (delta <= tol) return 'ok';
-  if (delta <= tol * 2.5) return 'off';
+  if (delta <= offToleranceFor(expected, tol)) return 'off';
   return 'unusable';
 }
 
