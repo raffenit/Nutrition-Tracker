@@ -886,6 +886,130 @@ export function columnRowBandSlicesOnConsensusMesh(
   });
 }
 
+/** Row-boundary ys for one column's slices: each slice top plus the final bottom edge. */
+function rowBandBoundaryYs(slices: SharedLabelRowBandSlice[], edge: 'left' | 'right'): number[] {
+  if (slices.length === 0) return [];
+  const skew = (s: SharedLabelRowBandSlice) => (edge === 'right' ? (s.topSkewPx ?? 0) : 0);
+  const bounds = slices.map((s) => s.top + skew(s));
+  const last = slices[slices.length - 1]!;
+  const bottomSkew = edge === 'right' ? (last.bottomSkewPx ?? 0) : 0;
+  bounds.push(last.top + last.height + bottomSkew);
+  return bounds;
+}
+
+/**
+ * Re-fit a column's row boundaries to its own detected rule positions.
+ *
+ * Upstream mesh/consensus alignment can leave a column's slices anchored to
+ * the shared row mesh even when the physical table slopes or the column's
+ * local rules sit offset (curved packs, glare-eroded rule detection). The
+ * column's own rule ys are the ground truth for where its rows actually are:
+ * interior boundaries are aligned to local rules monotonically (glare-eroded
+ * or curved columns can sit ~half a pitch off the consensus mesh, beyond
+ * snap tolerances), unmatched boundaries take the interpolated offset, and
+ * table-edge anchors stay fixed. Row count and order are preserved.
+ */
+export function fitColumnSlicesToLocalRules(
+  slices: SharedLabelRowBandSlice[],
+  localRuleYs: number[],
+  snapTol: number,
+  pooledPitch: number,
+  grid: Pick<
+    typeof DEFAULT_SHARED_LABEL_GRID_PARAMS,
+    'rowSurfaceWarpMaxDriftPitchFraction'
+  > = DEFAULT_SHARED_LABEL_GRID_PARAMS,
+): SharedLabelRowBandSlice[] {
+  if (slices.length === 0 || localRuleYs.length === 0) return slices;
+  const bounds = rowBandBoundaryYs(slices, 'left');
+  if (bounds.length < 4) return slices;
+  const maxDevPx = Math.max(snapTol, Math.round(pooledPitch * 0.66));
+  const maxDriftPx = Math.max(2, Math.round(pooledPitch * grid.rowSurfaceWarpMaxDriftPitchFraction * 1.4));
+  const interior = bounds.slice(1, -1);
+  const rules = [...new Set(localRuleYs)].sort((a, b) => a - b);
+  const matched = alignInteriorBoundsToRules(interior, rules, maxDevPx);
+  const matchCount = matched.filter((y) => y !== null).length;
+  if (matchCount < Math.max(4, Math.ceil(interior.length * 0.5))) return slices;
+  const samples: RuleOffsetSample[] = [];
+  matched.forEach((ruleY, idx) => {
+    if (ruleY !== null) samples.push({ meshY: interior[idx]!, offset: ruleY - interior[idx]! });
+  });
+  const fitted = bounds.map((b, idx) => {
+    if (idx === 0 || idx === bounds.length - 1) return b;
+    return b + clampPx(Math.round(interpolatedRuleOffset(b, samples)), maxDriftPx);
+  });
+  const minStep = Math.max(4, Math.round(pooledPitch * 0.15));
+  for (let j = 1; j < fitted.length; j += 1) {
+    fitted[j] = Math.max(fitted[j]!, fitted[j - 1]! + minStep);
+  }
+  return slices.map((slice, rowIndex) => ({
+    ...slice,
+    rowIndex,
+    top: fitted[rowIndex]!,
+    height: Math.max(1, fitted[rowIndex + 1]! - fitted[rowIndex]!),
+  }));
+}
+
+/**
+ * Monotonic alignment of interior row boundaries to a column's detected rules.
+ *
+ * Both sequences are y-sorted and roughly pitch-spaced, but counts differ
+ * (glare erases rules; the mesh may merge/split rows). A small DP finds the
+ * cheapest order-preserving pairing where a boundary may match a rule within
+ * `maxDevPx`, be skipped (paying a penalty), or leave a rule unused. This
+ * tolerates ~half-pitch surface drift on curved columns without letting a
+ * boundary jump a full row onto a neighbouring rule.
+ */
+function alignInteriorBoundsToRules(
+  bounds: number[],
+  ruleYs: number[],
+  maxDevPx: number,
+): Array<number | null> {
+  const n = bounds.length;
+  const m = ruleYs.length;
+  const out: Array<number | null> = bounds.map(() => null);
+  if (n === 0 || m === 0) return out;
+  const skipBoundCost = maxDevPx + 1;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(Infinity));
+  const parent: Uint8Array[] = Array.from({ length: n + 1 }, () => new Uint8Array(m + 1));
+  for (let j = 0; j <= m; j += 1) dp[0]![j] = 0;
+  for (let i = 1; i <= n; i += 1) dp[i]![0] = i * skipBoundCost;
+  for (let i = 1; i <= n; i += 1) {
+    for (let j = 1; j <= m; j += 1) {
+      let best = dp[i - 1]![j]! + skipBoundCost;
+      let choice = 0;
+      if (dp[i]![j - 1]! < best) {
+        best = dp[i]![j - 1]!;
+        choice = 1;
+      }
+      const dev = Math.abs(bounds[i - 1]! - ruleYs[j - 1]!);
+      if (dev <= maxDevPx) {
+        const matched = dp[i - 1]![j - 1]! + dev;
+        if (matched <= best) {
+          best = matched;
+          choice = 2;
+        }
+      }
+      dp[i]![j] = best;
+      parent[i]![j] = choice;
+    }
+  }
+  let i = n;
+  let j = m;
+  while (i > 0 || j > 0) {
+    const choice = i > 0 && j > 0 ? parent[i]![j]! : i > 0 ? 0 : 1;
+    if (choice === 2) {
+      out[i - 1] = ruleYs[j - 1]!;
+      i -= 1;
+      j -= 1;
+    } else if (choice === 1) {
+      j -= 1;
+    } else {
+      i -= 1;
+    }
+  }
+  return out;
+}
+
 export type ValueColumnWarpProbe = {
   warp: boolean;
   glareMask: ColumnBodyGlareMask;
@@ -3529,6 +3653,21 @@ export function buildPerColumnRowBandSlicePlan(input: {
         pooledPitch,
         Boolean(probe?.warp),
       );
+    });
+    // Final geometry pass: every column's slices must sit on its own detected
+    // row rules, not just the consensus count. Columns whose local detection
+    // was glare-eroded keep consensus positions (too few rule matches to fit).
+    valueRowBandSlicesPerColumn = valueRowBandSlicesPerColumn.map((colSlices, colIndex) => {
+      const rules = valueColumnWarpProbes[colIndex]?.fullRuleYs ?? [];
+      const fitted = fitColumnSlicesToLocalRules(colSlices, rules, snapTol, pooledPitch);
+      if (process.env.NT_DEBUG_ROW_FIT === '1') {
+        console.error(
+          `[row-fit] col${colIndex} rules=${rules.length} ` +
+            `before=${colSlices.slice(0, 4).map((s) => s.top).join('/')}` +
+            ` after=${fitted.slice(0, 4).map((s) => s.top).join('/')}`,
+        );
+      }
+      return fitted;
     });
     if (labelRowBandSlices.length !== referenceRowCount) {
       labelRowBandSlices = columnRowBandSlicesOnConsensusMesh(

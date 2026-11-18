@@ -93,7 +93,9 @@ export function parseMultiProductLabelTable(text: string): MultiProductColumn[] 
     }
   }
 
-  realignShiftedColumns(rows, columnCount);
+  if (process.env.NT_DISABLE_ROW_REALIGN !== '1') {
+    realignShiftedColumns(rows, columnCount);
+  }
   for (const row of rows) applyRowValues(columns, row.row, row.values);
 
   for (const column of columns) repairTrailingNineAgainstLabelMath(column.nutrients);
