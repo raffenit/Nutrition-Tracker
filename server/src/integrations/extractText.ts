@@ -65,6 +65,7 @@ import {
   extractSharedLabelColumnPngsByRowBands,
   extractSharedLabelGridBuffers,
   rowBandMinExtractSize,
+  stripRowBandSliceEdgeRules,
   useRowBandSliceOcrForPlan,
   type SharedLabelValueGridPlan,
 } from './sharedLabelValueGrid.js';
@@ -776,12 +777,11 @@ async function extractDewarpedRowPngs(
   const width = meta.width ?? 0;
   const buffers: Buffer[] = [];
   for (let i = 0; i < rowTops.length; i += 1) {
-    buffers.push(
-      await sharp(png)
-        .extract({ left: 0, top: rowTops[i]!, width, height: Math.max(1, rowHeights[i]!) })
-        .png()
-        .toBuffer(),
-    );
+    const rowPng = await sharp(png)
+      .extract({ left: 0, top: rowTops[i]!, width, height: Math.max(1, rowHeights[i]!) })
+      .png()
+      .toBuffer();
+    buffers.push(await stripRowBandSliceEdgeRules(rowPng));
   }
   return buffers;
 }
