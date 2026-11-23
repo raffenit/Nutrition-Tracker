@@ -542,7 +542,10 @@ export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: 
     // (a "5%" that lost its sign) needs a unit or a printed %DV beside it to count.
     const normalized = normalizeCellDigits(candidate);
     if (!READABLE_AMOUNT.test(normalized) || dailyValueTextInSlice(candidate)) return slice;
-    if (!/^<?\s*[\d.]+\s*(?:m?c?g\b|\S*\s+\d{1,3}\s*%)/i.test(normalized)) return slice;
+    // A calorie count (rounded to 10 from 50 up) is the one amount printed without a unit.
+    const calorieCount = /^(\d{2,4})\s*(?:k?cal)?$/i.exec(normalized);
+    const caloriesRead = calorieCount && Number(calorieCount[1]) >= 50 && Number(calorieCount[1]) % 10 === 0;
+    if (!caloriesRead && !/^<?\s*[\d.]+\s*(?:m?c?g\b|\S*\s+\d{1,3}\s*%)/i.test(normalized)) return slice;
     return agrees(i - 1) || agrees(i + 1) ? candidate : slice;
   });
 }

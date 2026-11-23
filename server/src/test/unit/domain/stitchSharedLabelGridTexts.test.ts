@@ -284,3 +284,22 @@ test('the band below an inferred Protein row is kept for a column read one row l
   assert.match(stitched!, /^Protein\b/im);
   assert.match(stitched!, /^next band\n.*3g/im);
 });
+
+test('an alternate calorie count without a unit still fills an unread calorie slice', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '% Daily Value*', '9g 12%'], ['140', '% Daily Value*', '9g 12%']),
+    ['Sl', '% Daily Value*', '9g 12%'],
+  );
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '9g 12%', '3g 15%'], ['140', '9g 12%', '3g 15%']),
+    ['140', '9g 12%', '3g 15%'],
+  );
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '9g 12%', '3g 15%'], ['140 kcal', '9g 12%', '3g 15%']),
+    ['140 kcal', '9g 12%', '3g 15%'],
+  );
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '9g 12%', '3g 15%'], ['25', '9g 12%', '3g 15%']),
+    ['Sl', '9g 12%', '3g 15%'],
+  );
+});
