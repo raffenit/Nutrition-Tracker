@@ -99,6 +99,12 @@ function guessTitle(lines: string[], ingStart: number, dirStart: number, nutStar
   return null;
 }
 
+/** Known meal-kit brand named anywhere in the text (title-cased), or null. */
+export function detectMealKitBrand(text: string): string | null {
+  const match = text.match(MEAL_KIT_BRAND);
+  return match ? titleCase(match[1].toLowerCase().replace(/\s+/g, ' ')) : null;
+}
+
 function guessBrand(text: string, lines: string[]): string | null {
   const match = text.match(MEAL_KIT_BRAND);
   if (match) return titleCase(match[1].replace(/\s+/g, ' '));

@@ -6,6 +6,7 @@ import { attachUpload, findUpload, insertUpload } from '../db/uploads.js';
 import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood, type FoodShelf } from '../db/foods.js';
 import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
+import type { RecipePageLayout } from '../domain/recipeCardLayout.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readComponentRole, readProteinTags } from '../domain/proteinTags.js';
@@ -215,6 +216,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       reportImportJobStep('Draft', 'Building your draft…', 'Applying parsers and import panels.');
       const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts, {
         varietyPackExpectedColumns: extracted.varietyPackExpectedColumns,
+        recipePageLayouts: extracted.pageLayouts,
       });
       const varietyPackPanels =
         (extracted.varietyPackExpectedColumns ?? 0) >= 2 && built.labelPanels.length > 0;
@@ -344,6 +346,7 @@ function sendImportJson(
     menuItems: body.built.menuItems,
     fieldReview: body.built.fieldReview,
     recipeCard: body.built.recipeCard,
+    recipeCards: body.built.recipeCards ?? (body.built.recipeCard ? [body.built.recipeCard] : []),
     labelPanels: body.built.labelPanels,
     usedOcr: body.usedOcr,
   });
@@ -479,13 +482,14 @@ async function readExtractedText(
   slotMergedNutrients: Nutrients | null;
   usedOcr?: boolean;
   pageTexts: string[] | null;
+  pageLayouts?: Array<RecipePageLayout | null> | null;
   varietyPackExpectedColumns?: number;
   serving?: LabelServingFields;
 }> {
   try {
     if (kind === 'pdf') {
       const { extractPdfTextWithOcrFallback } = await import('../integrations/ocrScannedPdf.js');
-      const { text, usedOcr, pageTexts } = await extractPdfTextWithOcrFallback(
+      const { text, usedOcr, pageTexts, pageLayouts } = await extractPdfTextWithOcrFallback(
         bytes,
         config.tessdataDir,
         config.easyocrEnabled ? config.easyocrModelDir : undefined,
@@ -493,7 +497,7 @@ async function readExtractedText(
       let warning: string | null = null;
       if (!text.trim()) warning = 'No text was found. Enter the nutrition facts yourself.';
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
-      return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts };
+      return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts, pageLayouts };
     }
     const { text, slotMergedNutrients, varietyPackExpectedColumns, serving } = await extractImageLabel(
       bytes,
