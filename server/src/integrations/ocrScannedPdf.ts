@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { PSM } from 'tesseract.js';
 import { splitEmbeddedPdfPages } from '../domain/labelTextBlocks.js';
 import { reconstructRecipePageLayout, type RecipePageLayout } from '../domain/recipeCardLayout.js';
-import { appendImportJobDebug, reportImportJobStep } from '../import/importJobProgress.js';
+import { appendImportJobDebug, reportImportJobProgress, reportImportJobStep } from '../import/importJobProgress.js';
 import { extractImageText } from './extractText.js';
 import type { Worker } from 'tesseract.js';
 import { openTesseractWorker, recognizeImagesOnWorker } from './tesseractOcr.js';
@@ -72,6 +72,28 @@ export function pdfOcrWorkerCount(pageCount: number): number {
 }
 
 type FastPage = { text: string; layout: RecipePageLayout | null };
+
+function isRecipeFront(page: FastPage | undefined): boolean {
+  return Boolean(page?.layout && page.layout.ingredients.length >= 2);
+}
+
+/**
+ * Pages per recipe card from the probe pages (front, back, front → 2), or null
+ * when the probe does not show a repeating card pattern.
+ */
+export function pagesPerRecipeCard(probe: Array<{ layout: RecipePageLayout | null }>): number | null {
+  const fronts = probe.flatMap((page, index) => (isRecipeFront(page as FastPage) ? [index] : []));
+  if (fronts.length >= 2 && fronts[0] === 0) return fronts[1]! - fronts[0]!;
+  return null;
+}
+
+/** "Importing recipe 3/9" (or "Importing recipe 3" without an estimate) as OCR finishes pages. */
+export function recipeImportProgressMessage(pagesDone: number, pageCount: number, perCard: number | null): string {
+  if (!perCard) return `Reading PDF pages… ${pagesDone}/${pageCount}`;
+  const total = Math.max(1, Math.ceil(pageCount / perCard));
+  const current = Math.min(total, Math.floor(Math.max(0, pagesDone - 1) / perCard) + 1);
+  return `Importing recipe ${current}/${total}`;
+}
 
 type TesseractPool = { workers: Worker[]; terminate: () => Promise<void> };
 
@@ -167,9 +189,12 @@ async function ocrPdfPageTexts(
 
     // Cheap plain-text pass on the first pages decides the document mode.
     const classifyCount = Math.min(CLASSIFY_PAGE_COUNT, pageCount);
-    reportImportJobStep('OCR', `Reading PDF text… 0/${pageCount} pages`, 'Fast text pass to detect document type.');
-    const reportFast = (offset: number) => (done: number) =>
-      reportImportJobStep('OCR', `Reading PDF text… ${offset + done}/${pageCount} pages`, 'Plain text OCR.');
+    reportImportJobProgress('OCR', `Reading PDF pages… 0/${pageCount}`, 'Checking what kind of document this is', 0, pageCount);
+    let perCard: number | null = null;
+    const reportFast = (offset: number) => (done: number) => {
+      const pagesDone = offset + done;
+      reportImportJobProgress('OCR', recipeImportProgressMessage(pagesDone, pageCount, perCard), `Page ${pagesDone} of ${pageCount}`, pagesDone, pageCount);
+    };
     const pool = await openTesseractPool(tessdataDir, pdfOcrWorkerCount(pageCount), 'pdf-doc-text');
     let probe: FastPage[];
     let rest: FastPage[] = [];
@@ -177,6 +202,7 @@ async function ocrPdfPageTexts(
     try {
       probe = await fastOcrPdfPages(pool, images.slice(0, classifyCount), 'pdf-doc-probe', reportFast(0));
       mode = classifyPdfPages(probe.map((page) => page.text));
+      perCard = mode === 'text' ? pagesPerRecipeCard(probe) : null;
       if (mode === 'text' && pageCount > classifyCount) {
         rest = await fastOcrPdfPages(pool, images.slice(classifyCount), 'pdf-doc-text', reportFast(classifyCount));
       }

@@ -26,6 +26,8 @@ export type ImportJobSnapshot = {
   activityLog: string[];
   /** Per-stage wall times for the last OCR pass (ms). */
   pipelineStages?: PipelineStageTiming[];
+  /** 0–100 when the current step has a known count (e.g. PDF pages read). */
+  percent?: number;
 };
 
 type ImportJobRecord = {
@@ -42,6 +44,9 @@ type ImportJobRecord = {
   debugLog: string[];
   activityLog: string[];
   pipelineStages: PipelineStageTiming[];
+  percent?: number;
+  /** Counted progress owns message/detail; low-level OCR telegraph lines must not overwrite it. */
+  pinned: boolean;
 };
 
 // Multi-page scanned recipe PDFs can OCR for tens of minutes; keep job
@@ -93,6 +98,7 @@ export function beginImportJob(jobId: string, userId: string, flow: ImportJobFlo
     debugLog: [],
     activityLog: [],
     pipelineStages: [],
+    pinned: false,
   });
 }
 
@@ -147,7 +153,7 @@ function telegraphDebugToImportJob(record: ImportJobRecord, raw: string): void {
   }
 
   pushActivity(record, human);
-  if (record.stepShorts[record.activeIndex] === 'OCR') {
+  if (record.stepShorts[record.activeIndex] === 'OCR' && !record.pinned) {
     record.detail = human;
   }
 }
@@ -177,7 +183,19 @@ export function reportImportJobStep(short: string, message: string, detail?: str
   record.activeIndex = activeIndex;
   record.message = message;
   record.detail = detail;
+  record.percent = undefined;
+  record.pinned = false;
   record.updatedAt = Date.now();
+}
+
+/** Counted progress for a step ("Importing recipe 3/9", page 7 of 18) with a determinate bar. */
+export function reportImportJobProgress(short: string, message: string, detail: string | undefined, done: number, total: number): void {
+  reportImportJobStep(short, message, detail);
+  const ctx = jobContext.getStore();
+  const record = ctx ? jobs.get(ctx.jobId) : undefined;
+  if (!record || record.done || total <= 0) return;
+  record.percent = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+  record.pinned = true;
 }
 
 export function finishImportJob(jobId: string | null): void {
@@ -187,6 +205,7 @@ export function finishImportJob(jobId: string | null): void {
   record.done = true;
   record.activeIndex = Math.max(0, record.stepShorts.length - 1);
   record.message = 'Import complete';
+  record.percent = 100;
   const stageSummary = record.pipelineStages.filter((s) => s.id !== 'total');
   record.detail =
     stageSummary.length > 0 ? formatPipelineStageSummary(stageSummary) : undefined;
@@ -223,6 +242,7 @@ function snapshotFromRecord(id: string, record: ImportJobRecord): ImportJobSnaps
     debugLog: [...record.debugLog],
     activityLog: [...record.activityLog],
     pipelineStages: record.pipelineStages.length ? [...record.pipelineStages] : undefined,
+    ...(record.percent != null ? { percent: record.percent } : {}),
     steps: record.stepShorts.map((short, index) => {
       let status: ImportJobStepStatus = 'pending';
       if (index < record.activeIndex) status = 'done';

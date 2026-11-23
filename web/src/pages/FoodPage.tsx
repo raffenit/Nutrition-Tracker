@@ -920,7 +920,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         >
           {recipeImportBusy ? 'Importing…' : 'Choose PDF or photo…'}
         </button>
-        {importProgress && <ImportProgress progress={importProgress} />}
+        {importProgress && <ImportProgress progress={importProgress} compact />}
         {importStatus && !importProgress && <p className="muted">{importStatus}</p>}
         {bookletCards.length > 1 && !importProgress && (
           <label className="recipe-booklet-picker">

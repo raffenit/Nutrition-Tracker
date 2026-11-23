@@ -20,10 +20,15 @@ export type ImportProgressState = {
 
 type ImportProgressProps = {
   progress: ImportProgressState;
+  /** Current step only: headline, one detail line, bar — no step list or OCR activity feed. */
+  compact?: boolean;
 };
 
-export function ImportProgress({ progress }: ImportProgressProps) {
-  const { phase, percent, message, detail, steps, elapsedSec, activity, pipelineStages } = progress;
+export function ImportProgress({ progress, compact = false }: ImportProgressProps) {
+  const { phase, percent, message, detail, elapsedSec } = progress;
+  const activity = compact ? undefined : progress.activity;
+  const pipelineStages = compact ? undefined : progress.pipelineStages;
+  const steps = compact ? undefined : progress.steps;
   return (
     <div className="import-progress" aria-busy="true">
       <div className="import-progress-head">
