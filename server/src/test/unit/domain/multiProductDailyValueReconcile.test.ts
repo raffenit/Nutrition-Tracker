@@ -107,6 +107,7 @@ test('a "g" read as a trailing 0 is undone when the printed %DV confirms it', ()
   assert.equal(reconcileAmountWithDailyValue('150 8%', 20), 1.5);
   assert.equal(reconcileAmountWithDailyValue('10g 4%', 275), 10);
   assert.equal(reconcileAmountWithDailyValue('40mg 2%', 2300), 40);
+  assert.equal(reconcileAmountWithDailyValue('250 1%', 2300), 25);
 });
 
 test('T beside a 1-glyph before a unit reads as 11', () => {

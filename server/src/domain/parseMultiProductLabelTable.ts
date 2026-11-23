@@ -222,10 +222,12 @@ export function reconcileAmountWithDailyValue(cell: string, dailyValue: number):
   const options = new Set<number>([Number(literal)]);
   // "g" read as a trailing 9 or 0 ("150 8%" is "1.5g 8%").
   const stripped = /^\d+[90]$/.test(literal) ? literal.slice(0, -1) : null;
+  // Milligram rows (sodium, cholesterol) print whole numbers, so no decimal is ever lost there.
+  const gramRow = dailyValue < 300;
   for (const base of [literal, stripped]) {
     if (!base || base.includes('.')) continue;
     options.add(Number(base));
-    if (base.length >= 2) options.add(Number(`${base.slice(0, -1)}.${base.slice(-1)}`));
+    if (gramRow && base.length >= 2) options.add(Number(`${base.slice(0, -1)}.${base.slice(-1)}`));
   }
   const fits = (amount: number) => Math.abs((amount / dailyValue) * 100 - percent) <= Math.max(1.5, percent * 0.1);
   if (fits(Number(literal))) return Number(literal);
