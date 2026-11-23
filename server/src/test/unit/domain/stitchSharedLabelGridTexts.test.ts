@@ -201,6 +201,11 @@ test('alternate row read fills only digitless slices next to an agreeing neighbo
   ]);
 });
 
+test('alternate row read keeps 1-glyph amounts and never fills a bare percent', () => {
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(['3g 4%', 'Ig', '0g'], ['3g 4%', '7g', '0g']), ['3g 4%', 'Ig', '0g']);
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(['3g 4%', 'A', '0g'], ['3g 4%', '2%', '0g']), ['3g 4%', 'A', '0g']);
+});
+
 test('alternate row read is ignored where neighbours disagree or it is shorter', () => {
   const primary = ['A', '3g 15%', '0g'];
   assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%', '0g', '<5mg 0%']), primary);

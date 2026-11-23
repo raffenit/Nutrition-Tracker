@@ -2,6 +2,7 @@ import {
   buildCalorieRowCellsForStitch,
   shouldInjectCalorieRowOverride,
 } from './sharedLabelHeaderCalories.js';
+import { normalizeCellDigits } from './parseMultiProductLabelTable.js';
 import { SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN } from './splitSingleLabelParams.js';
 
 export type SharedLabelStitchOptions = {
@@ -508,6 +509,8 @@ export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Arr
   return out;
 }
 
+const READABLE_AMOUNT = /^<?\s*\d+(?:\.\d+)?(?!\d|\.|\s*%)/;
+
 function leadingNumber(text: string): string | null {
   return text.match(/\d+(?:\.\d+)?/)?.[0] ?? null;
 }
@@ -523,9 +526,10 @@ export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: 
     i >= 0 && i < primary.length && leadingNumber(primary[i]!) !== null &&
     leadingNumber(primary[i]!) === leadingNumber(alternate[i]!);
   return primary.map((slice, i) => {
-    if (/\d/.test(slice) || dailyValueTextInSlice(slice)) return slice;
+    if (/\d/.test(normalizeCellDigits(slice)) || dailyValueTextInSlice(slice)) return slice;
     const candidate = alternate[i]!.trim();
-    if (!/\d/.test(candidate) || dailyValueTextInSlice(candidate)) return slice;
+    // Only an amount fills the cell; a lone "2%" is a daily value, not a mass.
+    if (!READABLE_AMOUNT.test(normalizeCellDigits(candidate)) || dailyValueTextInSlice(candidate)) return slice;
     return agrees(i - 1) || agrees(i + 1) ? candidate : slice;
   });
 }
