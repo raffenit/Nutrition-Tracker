@@ -6,6 +6,7 @@ import { attachUpload, findUpload, insertUpload } from '../db/uploads.js';
 import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood, type FoodShelf } from '../db/foods.js';
 import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
+import type { RecipePageLayout } from '../domain/recipeCardLayout.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readComponentRole, readProteinTags } from '../domain/proteinTags.js';
@@ -33,7 +34,10 @@ import { route, type Ctx, type Route } from '../http/router.js';
 import type { Food, Nutrients, SearchHit } from '../types.js';
 import type { LabelServingFields } from '../domain/labelServingVote.js';
 
-const MAX_UPLOAD = 12 * 1024 * 1024;
+// Scanned recipe-card PDFs (multi-page, no text layer) legitimately reach
+// ~40 MB per file; 64 MB covers those while still bounding memory (busboy
+// buffers the upload in RAM).
+const MAX_UPLOAD = 64 * 1024 * 1024;
 
 export function foodRoutes(): Route[] {
   return [
@@ -212,6 +216,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       reportImportJobStep('Draft', 'Building your draft…', 'Applying parsers and import panels.');
       const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts, {
         varietyPackExpectedColumns: extracted.varietyPackExpectedColumns,
+        recipePageLayouts: extracted.pageLayouts,
       });
       const varietyPackPanels =
         (extracted.varietyPackExpectedColumns ?? 0) >= 2 && built.labelPanels.length > 0;
@@ -341,6 +346,7 @@ function sendImportJson(
     menuItems: body.built.menuItems,
     fieldReview: body.built.fieldReview,
     recipeCard: body.built.recipeCard,
+    recipeCards: body.built.recipeCards ?? (body.built.recipeCard ? [body.built.recipeCard] : []),
     labelPanels: body.built.labelPanels,
     usedOcr: body.usedOcr,
   });
@@ -476,13 +482,14 @@ async function readExtractedText(
   slotMergedNutrients: Nutrients | null;
   usedOcr?: boolean;
   pageTexts: string[] | null;
+  pageLayouts?: Array<RecipePageLayout | null> | null;
   varietyPackExpectedColumns?: number;
   serving?: LabelServingFields;
 }> {
   try {
     if (kind === 'pdf') {
       const { extractPdfTextWithOcrFallback } = await import('../integrations/ocrScannedPdf.js');
-      const { text, usedOcr, pageTexts } = await extractPdfTextWithOcrFallback(
+      const { text, usedOcr, pageTexts, pageLayouts } = await extractPdfTextWithOcrFallback(
         bytes,
         config.tessdataDir,
         config.easyocrEnabled ? config.easyocrModelDir : undefined,
@@ -490,7 +497,7 @@ async function readExtractedText(
       let warning: string | null = null;
       if (!text.trim()) warning = 'No text was found. Enter the nutrition facts yourself.';
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
-      return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts };
+      return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts, pageLayouts };
     }
     const { text, slotMergedNutrients, varietyPackExpectedColumns, serving } = await extractImageLabel(
       bytes,
@@ -544,7 +551,7 @@ function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; bytes: 
     });
     parser.on('error', reject);
     parser.on('finish', () => {
-      if (tooBig) reject(new HttpError(413, 'File is larger than 12 MB'));
+      if (tooBig) reject(new HttpError(413, 'File is larger than 64 MB'));
       else if (!file) reject(new HttpError(400, 'Choose a file'));
       else resolve(file);
     });

@@ -63,6 +63,10 @@ log "Summary (quick)"
 log "  Server typecheck: $([ "$server_typecheck_ok" = true ] && echo PASS || echo FAIL)"
 log "  Server tests:     $([ "$server_tests_ok" = true ] && echo PASS || echo FAIL)"
 log "  Web typecheck:    $([ "$web_typecheck_ok" = true ] && echo PASS || echo FAIL)"
+skipped_tests="$(grep -oE '^# skipped [0-9]+' "$LOG" | tail -1 | awk '{print $3}')"
+if [ -n "${skipped_tests:-}" ] && [ "$skipped_tests" -gt 0 ] 2>/dev/null; then
+  log "  Skipped tests:    $skipped_tests (photo-fixture tests self-skip when local/test-images/ is absent — host-specific, gitignored)"
+fi
 if $server_typecheck_ok && $server_tests_ok && $web_typecheck_ok; then
   log "  Overall:          PASS"
   log "Finished: $(date -Iseconds)"

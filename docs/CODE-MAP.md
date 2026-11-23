@@ -67,6 +67,9 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Import field confidence (UI) | `server/src/domain/labelFieldReview.ts` | review map for draft fields |
 | Candidate scoring | `server/src/domain/labelSlots.ts`, `labelSlotExtract.ts` | `scoreLabelExtraction`; `primaryCandidateIndex` |
 | URL / PDF text import | `server/src/integrations/importUrl.ts`, `htmlText.ts` | `importNutritionFromUrl` |
+| Scanned PDF OCR (text vs label mode, worker pool) | `server/src/integrations/ocrScannedPdf.ts` | `extractPdfTextWithOcrFallback`, `classifyPdfPages`, `stripPdfPageMarkers`, `pdfOcrWorkerCount` |
+| Recipe-card front geometry (ingredient table from word boxes) | `server/src/domain/recipeCardLayout.ts` | `reconstructRecipePageLayout`, `findPageTitle` |
+| Recipe booklets (front/back cards → one draft each) | `server/src/domain/recipeBooklet.ts`, `nutritionImport.ts` | `groupRecipeBookletCards`, `buildRecipeBookletDraft`, `cleanRecipeStepText`, `normalizeKitQuantity` |
 | URL label-image OCR fallback | `server/src/integrations/urlLabelImages.ts` | `extractLabelImageCandidates`, `importNutritionFromUrlWithImageFallback` |
 | Menu tables (non-label HTML) | `server/src/domain/parseMenuTable.ts`, `menuTableSchema.ts` | table-driven columns |
 | Sectioned PDF nutrition guides (stacked headers, size/portion variants) | `server/src/domain/parseMenuTextSections.ts` | `parseMenuTextSections` |
@@ -184,7 +187,7 @@ See [server/src/test/README.md](../server/src/test/README.md) and [testing-stand
 | **4a** Goal alerts | `domain/alerts.ts`, `db/alerts.ts`, `database.ts`, `boardRoutes.ts`, `alertRoutes.ts` |
 | **5** PDF workflow | `foodRoutes.ts`, `FoodPage.tsx`, `parseLabel.ts`, `nutritionImport.ts` |
 | **7** Plan extras | `mealPlanRoutes.ts`, `PlanPage.tsx`, `groceryList.ts`, `parseIngredientLine.ts` |
-| **10** Meal-kit | `parseRecipeCard.ts`, `mealKitEcosystems.ts`, `mealKitRoutes.ts`, `MealKitsPage.tsx`, `FoodPage.tsx` (`RecipeEditor`), `groceryList` + `kitLineKey` |
+| **10** Meal-kit | `parseRecipeCard.ts`, `recipeBooklet.ts`, `recipeCardLayout.ts`, `mealKitEcosystems.ts`, `mealKitRoutes.ts`, `MealKitsPage.tsx`, `FoodPage.tsx` (`RecipeEditor`), `groceryList` + `kitLineKey` |
 | **11** Data / backup | `db/backup.ts`, `db/persistence.ts`, `log/startupFailure.ts`, `deploy.sh`, `scripts/backup-data.sh`, playbook |
 | **12** Multi-label import | `nutritionImport.ts`, `focusCrop.ts`, `foodRoutes.ts`, `FoodPage.tsx`, `ocrScannedPdf.ts` |
 | **13** Tags | `database.ts`, `db/foods.ts`, `foodRoutes.ts`, library search UI |

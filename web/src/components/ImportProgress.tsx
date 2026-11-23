@@ -37,8 +37,8 @@ export function ImportProgress({ progress }: ImportProgressProps) {
       {detail && <p className="muted import-progress-detail">{detail}</p>}
       {activity && activity.length > 0 && (
         <ul className="import-progress-activity" aria-label="Current pipeline activity">
-          {activity.slice(-4).map((line, index) => (
-            <li key={`${index}-${line}`}>{line}</li>
+          {activity.slice(-4).map((line) => (
+            <li key={line}>{line}</li>
           ))}
         </ul>
       )}

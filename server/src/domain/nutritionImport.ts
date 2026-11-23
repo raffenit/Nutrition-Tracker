@@ -3,6 +3,8 @@ import { blocksLookLikeSeparateLabels, collectLabelPanelBlocks, splitNutritionLa
 import { menuCandidates, parseNutritionLabel } from './parseLabel.js';
 import { multiProductColumnsToFieldReview, parseMultiProductLabelTable } from './parseMultiProductLabelTable.js';
 import { parseRecipeCard } from './parseRecipeCard.js';
+import { buildRecipeBookletDraft, groupRecipeBookletCards, looksLikeRecipeBooklet } from './recipeBooklet.js';
+import type { RecipePageLayout } from './recipeCardLayout.js';
 import { parseMenuFromSource, type MenuItemDraft } from './parseMenuTable.js';
 import { emptyNutrients } from './nutrients.js';
 import type { Nutrients } from '../types.js';
@@ -10,6 +12,8 @@ import type { Nutrients } from '../types.js';
 export type NutritionImportBuildOptions = {
   /** Variety-pack geometry column count when OCR stitched fewer parseable products. */
   varietyPackExpectedColumns?: number;
+  /** Per-page recipe-card geometry from scanned-PDF OCR (aligned with `pageTexts`). */
+  recipePageLayouts?: Array<RecipePageLayout | null> | null;
 };
 
 export type RecipeCardImportDraft = {
@@ -49,6 +53,8 @@ export type NutritionImportDraft = {
   warning: string | null;
   fieldReview: LabelFieldReviewMap;
   recipeCard: RecipeCardImportDraft | null;
+  /** Every recipe in a multi-card booklet PDF (`recipeCard` is the first). */
+  recipeCards?: RecipeCardImportDraft[];
   labelPanels: LabelPanelImport[];
 };
 
@@ -66,6 +72,10 @@ export function buildNutritionImportWithPanels(
   options?: NutritionImportBuildOptions,
 ): NutritionImportDraft {
   const expectedCols = options?.varietyPackExpectedColumns ?? 0;
+  if (kind === 'pdf' && pageTexts && pageTexts.length > 0 && expectedCols < 2) {
+    const booklet = buildRecipeBookletImport(text, pageTexts, options?.recipePageLayouts ?? null);
+    if (booklet) return booklet;
+  }
   const multiProductEarly = parseMultiProductLabelTable(text);
 
   /** Geometry-confirmed variety pack: always surface partial panels (parsed + placeholders). */
@@ -102,6 +112,43 @@ export function buildNutritionImportWithPanels(
     return panelsFromBlocks(fallbackBlocks, text, kind, html, primary.warning);
   }
   return { ...primary, labelPanels: [] };
+}
+
+/**
+ * Recipe-card PDFs (one or many front/back cards) skip the label parser — it is
+ * built for Nutrition Facts panels and is very slow on long booklet text.
+ */
+function buildRecipeBookletImport(
+  text: string,
+  pageTexts: string[],
+  layouts: Array<RecipePageLayout | null> | null,
+): NutritionImportDraft | null {
+  const cards = groupRecipeBookletCards(pageTexts, layouts);
+  if (!looksLikeRecipeBooklet(cards)) return null;
+  const recipeCards = cards.map(buildRecipeBookletDraft);
+  const first = recipeCards[0]!;
+  return {
+    draft: {
+      name: '',
+      brand: first.brand,
+      kind: 'restaurant',
+      servingLabel: '1 serving',
+      servingsPerContainer: null,
+      nutrients: emptyNutrients(),
+      isDrink: false,
+      drinkMl: null,
+      source: 'pdf',
+    },
+    candidates: [],
+    menuItems: [],
+    warning: recipeCards.length > 1
+      ? `Found ${recipeCards.length} recipe cards. Review each one, then save it as a recipe.`
+      : 'Found a recipe card with ingredients and instructions. Review below, then save as a recipe.',
+    fieldReview: {},
+    recipeCard: first,
+    recipeCards,
+    labelPanels: [],
+  };
 }
 
 function columnHasMacroNutrients(nutrients: Nutrients): boolean {

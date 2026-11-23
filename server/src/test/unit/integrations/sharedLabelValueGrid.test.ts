@@ -86,7 +86,7 @@ const sharedLabelMultiValueFixture = path.join(repoRoot, 'local', 'test-images',
 
 test(
   'local shared-label multi-value fixture runs ruled grid step 1',
-  { skip: !existsSync(sharedLabelMultiValueFixture) },
+  { skip: !existsSync(sharedLabelMultiValueFixture) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(sharedLabelMultiValueFixture);
     const pipeline = await runVarietyPackGridPipeline(bytes, {

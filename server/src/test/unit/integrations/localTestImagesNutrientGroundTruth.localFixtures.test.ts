@@ -43,7 +43,7 @@ const DEFAULT_REGRESSION: Record<string, NutrientGroundTruthRegressionSpec> = {
 
 test(
   'local test-images: nutrient ground truth compare (score % per label)',
-  { skip: !existsSync(imageDir) },
+  { skip: !existsSync(imageDir) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async (t) => {
     let fixtures: ManifestFixture[] = [];
     try {

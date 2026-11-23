@@ -17,7 +17,7 @@ const imagesDir = path.join(repoRoot, 'local', 'test-images');
 
 test(
   'resolveLabelOcrSources: portrait uses panel bytes, wide keeps geometry',
-  { skip: !existsSync(path.join(imagesDir, LOCAL_SINGLE_PANEL_JPG)) },
+  { skip: !existsSync(path.join(imagesDir, LOCAL_SINGLE_PANEL_JPG)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const portrait = await readFile(path.join(imagesDir, LOCAL_SINGLE_PANEL_JPG));
     const resolvedP = await resolveLabelProcessingImage(portrait);
