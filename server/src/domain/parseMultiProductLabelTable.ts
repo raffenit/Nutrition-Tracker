@@ -274,9 +274,10 @@ export function realignShiftedColumns(rows: TableRow[], columnCount: number): vo
   const fitOf = (cells: string[]) => cells.reduce((sum, cell, i) => sum + cellRowFit(block[i]!.row, cell), 0);
   for (let c = 0; c < columnCount; c += 1) {
     const cells = block.map((row) => row.values[c] ?? '');
-    // The band below Protein can hold the first micronutrient or a stray %DV; only a gram amount can be Protein.
+    // The band below Protein can hold the first micronutrient or a stray %DV; only a gram amount
+    // can be Protein, including one whose "g" was read as a trailing 9 ("109"), which label math repairs later.
     const below = normalizeCellDigits(nextBand?.values[c] ?? '');
-    const source = [...cells, /^<?\s*\d+(?:\.\d+)?\s*g\b/i.test(below) ? below : ''];
+    const source = [...cells, /^<?\s*(?:\d+(?:\.\d+)?\s*g\b|\d+9$)/i.test(below) ? below : ''];
     let best = { fit: fitOf(cells) + 2, cells };
     for (let start = 0; start < cells.length; start += 1) {
       for (const offset of [-1, 1]) {
