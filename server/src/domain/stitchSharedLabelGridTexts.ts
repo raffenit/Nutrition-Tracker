@@ -521,9 +521,9 @@ export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Arr
 const READABLE_AMOUNT = /^<?\s*\d+(?:\.\d+)?(?!\d|\.|\s*%)/;
 /**
  * A slice that is only the "Daily Value" header, even when OCR garbles it or reads the % as a
- * digit ("1 Dally Walue"); a slice with an amount before it ("140 % Daily Value") is not.
+ * digit ("1 Dally Walue", "% Daily Va1ue"); a slice with an amount before it ("140 % Daily Value") is not.
  */
-const DAILY_VALUE_HEADER_ONLY = /^\W*[\d%]?\s*d[a-z]{2,4}\s*[vw][a-z]{2,4}/i;
+const DAILY_VALUE_HEADER_ONLY = /^\W*[\d%]?\s*d[a-z]{2,4}\s*[vw]/i;
 
 function leadingNumber(text: string): string | null {
   return text.match(/\d+(?:\.\d+)?/)?.[0] ?? null;

@@ -324,3 +324,10 @@ test('a calorie crop that also holds the Daily Value header still counts as the 
     ['140 % Daily Value', 'A', '3g 15%'],
   );
 });
+
+test('a Daily Value header with a digit misread inside it does not block a unitless calorie count', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['% Daily Va1ue', 'Sl', '9g 12%'], ['% Daily Value', '140', '9g 12%']),
+    ['% Daily Va1ue', '140', '9g 12%'],
+  );
+});
