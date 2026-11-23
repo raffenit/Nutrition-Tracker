@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { easyOcrPassEnvironments, easyOcrScriptPath, isEasyOcrEnabled } from '../../../integrations/easyOcr.js';
+import {
+  easyOcrPassEnvironments,
+  easyOcrScriptPath,
+  isEasyOcrEnabled,
+  parseBatchStdout,
+} from '../../../integrations/easyOcr.js';
 
 test('EasyOCR script path resolves under server/python', () => {
   const script = easyOcrScriptPath();
@@ -27,4 +32,9 @@ test('EasyOCR defaults to one pass; A/B pass when EASYOCR_AB=1', () => {
   if (ab !== undefined) process.env.EASYOCR_AB = ab;
   else delete process.env.EASYOCR_AB;
   if (abContrast !== undefined) process.env.EASYOCR_AB_ADJUST_CONTRAST = abContrast;
+});
+
+test('batch row reads keep leading blank bands so line N stays band N', () => {
+  const stdout = `${JSON.stringify({ i: 0, text: '\n\n3g 4%\n0g\n' })}\n${JSON.stringify({ i: 1, text: '  \n' })}\n`;
+  assert.deepEqual(parseBatchStdout(stdout, 2), ['\n\n3g 4%\n0g', null]);
 });
