@@ -213,7 +213,11 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
       await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
       const extracted = await readExtractedText(kind, file.bytes, ctx.config);
-      reportImportJobStep('Draft', 'Building your draft…', 'Applying parsers and import panels.');
+      reportImportJobStep(
+        'Draft',
+        extracted.pageLayouts?.some((layout) => layout && layout.ingredients.length >= 2) ? 'Building recipe drafts…' : 'Building your draft…',
+        extracted.pageLayouts ? undefined : 'Applying parsers and import panels.',
+      );
       const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts, {
         varietyPackExpectedColumns: extracted.varietyPackExpectedColumns,
         recipePageLayouts: extracted.pageLayouts,
