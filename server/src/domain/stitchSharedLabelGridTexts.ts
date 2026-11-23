@@ -521,13 +521,13 @@ function leadingNumber(text: string): string | null {
  * between the two reads, so a misaligned alternate can't move values between rows.
  */
 export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: string[]): string[] {
-  if (alternate.length < primary.length) return primary;
   const agrees = (i: number) =>
     i >= 0 && i < primary.length && leadingNumber(primary[i]!) !== null &&
-    leadingNumber(primary[i]!) === leadingNumber(alternate[i]!);
+    leadingNumber(primary[i]!) === leadingNumber(alternate[i] ?? '');
   return primary.map((slice, i) => {
     if (/\d/.test(normalizeCellDigits(slice)) || dailyValueTextInSlice(slice)) return slice;
-    const candidate = alternate[i]!.trim();
+    // EasyOCR drops empty bands at the column ends, so a short alternate is padded, not refused.
+    const candidate = (alternate[i] ?? '').trim();
     // Only an amount fills the cell; a lone "2%" is a daily value, not a mass.
     if (!READABLE_AMOUNT.test(normalizeCellDigits(candidate)) || dailyValueTextInSlice(candidate)) return slice;
     return agrees(i - 1) || agrees(i + 1) ? candidate : slice;

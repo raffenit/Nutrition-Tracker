@@ -206,10 +206,17 @@ test('alternate row read keeps 1-glyph amounts and never fills a bare percent', 
   assert.deepEqual(fillUnreadSlicesFromAlternateRead(['3g 4%', 'A', '0g'], ['3g 4%', '2%', '0g']), ['3g 4%', 'A', '0g']);
 });
 
-test('alternate row read is ignored where neighbours disagree or it is shorter', () => {
+test('alternate row read is ignored where neighbours disagree', () => {
   const primary = ['A', '3g 15%', '0g'];
   assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%', '0g', '<5mg 0%']), primary);
   assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%']), primary);
+});
+
+test('alternate row read missing its empty end bands still fills interior slices', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['80', '3g 4%', 'A', '0g', ''], ['80', '3g 4%', '2g 10%', '0g']),
+    ['80', '3g 4%', '2g 10%', '0g', ''],
+  );
 });
 
 test('a Fat amount merged into the % Daily Value band moves down and shifts its column', () => {
