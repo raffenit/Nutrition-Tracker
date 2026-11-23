@@ -150,12 +150,14 @@ test('a column read one row low shifts up into the band below Protein', () => {
 
 test('a Protein amount whose g was read as 9 still shifts up from the band below Protein', () => {
   const labels = ['total fat', 'saturated fat', 'cholesterol', 'sodium', 'total carbohydrate', 'dietary fiber', 'total sugars', 'includes added sugars', 'protein', 'next band'];
-  const slidDown = ['9g 12%', '7g 35%', '0mg 0%', '-', '45mg 2%', '20g 7%', '1g 4%', '16g', '14g 28%', '109'];
-  const rows = labels.map((row, i) => ({ row, values: [slidDown[i]!] }));
-  realignShiftedColumns(rows, 1);
-  const column = Object.fromEntries(rows.map((row) => [row.row, row.values[0]]));
-  assert.equal(column.sodium, '45mg 2%');
-  assert.equal(column.protein, '109');
+  for (const [below, protein] of [['109', '10g'], ['19', '1g']]) {
+    const slidDown = ['9g 12%', '7g 35%', '0mg 0%', '-', '45mg 2%', '20g 7%', '1g 4%', '16g', '14g 28%', below];
+    const rows = labels.map((row, i) => ({ row, values: [slidDown[i]!] }));
+    realignShiftedColumns(rows, 1);
+    const column = Object.fromEntries(rows.map((row) => [row.row, row.values[0]]));
+    assert.equal(column.sodium, '45mg 2%');
+    assert.equal(column.protein, protein, below);
+  }
 });
 
 test('a stray %DV or micronutrient in the band below Protein never becomes Protein', () => {
