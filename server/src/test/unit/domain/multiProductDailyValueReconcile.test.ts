@@ -124,11 +124,26 @@ test('%DV restores a lost leading 1 only when the read amount does not fit', () 
 
 test('row realignment does not take a guessed lost 1 as evidence for a row', () => {
   assert.equal(reconcileAmountWithDailyValue('1g 4%', 275, false), null);
-  const labels = ['total fat', 'saturated fat', 'cholesterol', 'sodium', 'total carbohydrate', 'dietary fiber', 'total sugars', 'includes added sugars'];
-  const slidUp = ['9g 12%', '3g 15%', '100mg 4%', '1g 4%', '16g', '15g 30%', '3g', '-'];
+  // Carbs were never read, so fiber..protein sit one row high: "1g 4%" under Total Carbohydrate.
+  const labels = ['total fat', 'saturated fat', 'cholesterol', 'sodium', 'total carbohydrate', 'dietary fiber', 'total sugars', 'includes added sugars', 'protein'];
+  const slidUp = ['9g 12%', '3g 15%', '0mg 0%', '100mg 4%', '1g 4%', '16g', '15g 30%', '3g', ''];
   const rows = labels.map((row, i) => ({ row, values: [slidUp[i]!] }));
   realignShiftedColumns(rows, 1);
   const column = Object.fromEntries(rows.map((row) => [row.row, row.values[0]]));
   assert.equal(column['dietary fiber'], '1g 4%');
-  assert.equal(column.sodium, '100mg 4%');
+  assert.equal(column['includes added sugars'], '15g 30%');
+  assert.equal(column.protein, '3g');
+});
+
+test('a column read one row low shifts up into the band below Protein', () => {
+  const labels = ['total fat', 'saturated fat', 'cholesterol', 'sodium', 'total carbohydrate', 'dietary fiber', 'total sugars', 'includes added sugars', 'protein', 'next band'];
+  const slidDown = ['9g 12%', '7g 35%', '0mg 0%', '-', '45mg 2%', '20g 7%', '1g 4%', '16g', '14g 28%', '1g'];
+  const aligned = ['4g 5%', '2.5g 13%', '0mg 0%', '55mg 2%', '23g 8%', '0g 0%', '20g', '20g 40%', '1g', ''];
+  const rows = labels.map((row, i) => ({ row, values: [slidDown[i]!, aligned[i]!] }));
+  realignShiftedColumns(rows, 2);
+  const column = (c: number) => Object.fromEntries(rows.map((row) => [row.row, row.values[c]]));
+  assert.equal(column(0).sodium, '45mg 2%');
+  assert.equal(column(0)['includes added sugars'], '14g 28%');
+  assert.equal(column(0).protein, '1g');
+  assert.equal(column(1).protein, '1g');
 });

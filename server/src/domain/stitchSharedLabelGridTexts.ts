@@ -2,7 +2,7 @@ import {
   buildCalorieRowCellsForStitch,
   shouldInjectCalorieRowOverride,
 } from './sharedLabelHeaderCalories.js';
-import { normalizeCellDigits } from './parseMultiProductLabelTable.js';
+import { NEXT_BAND_ROW, normalizeCellDigits } from './parseMultiProductLabelTable.js';
 import { SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN } from './splitSingleLabelParams.js';
 
 export type SharedLabelStitchOptions = {
@@ -212,6 +212,7 @@ export function stitchSharedLabelGridFromRowBandSlices(
   const seenRows = new Set<string>();
   const rowBlocks: Array<{ label: string; values: string[] }> = [];
   let nutrientRowOrdinal = 0;
+  let proteinBand = -1;
   const bandCount = Math.max(
     labelSliceTexts.length,
     ...valueSliceTextsPerColumn.map((col) => col.length),
@@ -250,6 +251,14 @@ export function stitchSharedLabelGridFromRowBandSlices(
 
     seenRows.add(key);
     rowBlocks.push({ label: rowLabel, values });
+    proteinBand = rowLabel === 'protein' ? i : proteinBand;
+  }
+  const nextBand = proteinBand + 1;
+  if (proteinBand >= 0 && nextBand < bandCount && !bandLabels[nextBand]) {
+    const values = valueSliceTextsPerColumn.map((col) => cleanValue(col[nextBand] ?? ''));
+    if (values.some((v) => READABLE_AMOUNT.test(normalizeCellDigits(v)))) {
+      rowBlocks.push({ label: NEXT_BAND_ROW, values });
+    }
   }
 
   const valueTextsForCalories =

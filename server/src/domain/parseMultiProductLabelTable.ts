@@ -19,7 +19,10 @@ function tableRow(row: string, values: string[]): TableRow {
 const TABLE_END = /^(ingredients|distributed by|contains:)/i;
 const SKIP_LINE = /^(serving size|servings per|amount per serving|daily value|\*|%?\s*daily\s*value)/i;
 const NUTRIENT_ROW =
-  /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|includes.+added sugars|protein)\b/i;
+  /^(calories|total fat|saturated fat|trans fat|cholesterol|sodium|total carbohydrate|total carb|dietary fiber|fiber|total sugars?|includes.+added sugars|protein|next band)\b/i;
+
+/** Stitched grids add the unlabeled band below Protein so a column read one row low can shift up into it. */
+export const NEXT_BAND_ROW = 'next band';
 
 /** Variety-pack style panel: one Nutrition Facts heading, product names across columns. */
 export function parseMultiProductLabelTable(text: string): MultiProductColumn[] | null {
@@ -261,6 +264,7 @@ function cellRowFit(row: string, cell: string): number {
  */
 export function realignShiftedColumns(rows: TableRow[], columnCount: number): void {
   const block = rows.filter((row) => !row.row.startsWith('calories'));
+  const nextBand = block[block.length - 1]?.row === NEXT_BAND_ROW ? block.pop()! : null;
   if (block.length < 4) return;
   if (!block.some((row) => row.row.startsWith('protein')) && block[block.length - 1]!.row.startsWith('includes')) {
     const protein = tableRow('protein', Array.from({ length: columnCount }, () => ''));
@@ -270,12 +274,13 @@ export function realignShiftedColumns(rows: TableRow[], columnCount: number): vo
   const fitOf = (cells: string[]) => cells.reduce((sum, cell, i) => sum + cellRowFit(block[i]!.row, cell), 0);
   for (let c = 0; c < columnCount; c += 1) {
     const cells = block.map((row) => row.values[c] ?? '');
+    const source = [...cells, nextBand?.values[c] ?? ''];
     let best = { fit: fitOf(cells) + 2, cells };
     for (let start = 0; start < cells.length; start += 1) {
       for (const offset of [-1, 1]) {
         const shifted = cells.map((cell, i) => {
           if (i < start) return offset === -1 && i === start - 1 ? '' : cell;
-          return cells[i + offset] ?? '';
+          return source[i + offset] ?? '';
         });
         const fit = fitOf(shifted);
         if (fit > best.fit) best = { fit, cells: shifted };
