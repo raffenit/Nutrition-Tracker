@@ -266,3 +266,10 @@ test('a slice with digits but no readable amount takes the agreeing alternate am
     ['Omg 0', '110mg 5%', '25g 9%'],
   );
 });
+
+test('a bare number with no unit or %DV does not fill an unread slice', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['0mg 0%', 'lOmg', '25g 9%'], ['0mg 0%', '5', '25g 9%']),
+    ['0mg 0%', 'lOmg', '25g 9%'],
+  );
+});

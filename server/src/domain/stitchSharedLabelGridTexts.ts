@@ -529,8 +529,11 @@ export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: 
     if (READABLE_AMOUNT.test(normalizeCellDigits(slice)) || dailyValueTextInSlice(slice)) return slice;
     // EasyOCR drops empty bands at the column ends, so a short alternate is padded, not refused.
     const candidate = (alternate[i] ?? '').trim();
-    // Only an amount fills the cell; a lone "2%" is a daily value, not a mass.
-    if (!READABLE_AMOUNT.test(normalizeCellDigits(candidate)) || dailyValueTextInSlice(candidate)) return slice;
+    // Only an amount fills the cell; a lone "2%" is a daily value, not a mass, and a bare "5"
+    // (a "5%" that lost its sign) needs a unit or a printed %DV beside it to count.
+    const normalized = normalizeCellDigits(candidate);
+    if (!READABLE_AMOUNT.test(normalized) || dailyValueTextInSlice(candidate)) return slice;
+    if (!/^<?\s*[\d.]+\s*(?:m?c?g\b|\S*\s+\d{1,3}\s*%)/i.test(normalized)) return slice;
     return agrees(i - 1) || agrees(i + 1) ? candidate : slice;
   });
 }
