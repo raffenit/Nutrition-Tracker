@@ -13,8 +13,8 @@ function newImportJobId(): string {
 function snapshotToProgress(snapshot: ImportJobSnapshot): ImportProgressState {
   return {
     phase: 'process',
-    percent: null,
-    message: snapshot.error ? snapshot.message : snapshot.message,
+    percent: snapshot.percent ?? null,
+    message: snapshot.message,
     detail: snapshot.detail,
     elapsedSec: Math.floor(snapshot.elapsedMs / 1000),
     steps: snapshot.steps.map((step) => ({

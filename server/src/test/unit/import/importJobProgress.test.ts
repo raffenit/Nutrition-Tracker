@@ -7,6 +7,7 @@ import {
   finishImportJob,
   getImportJobForUser,
   isImportJobId,
+  reportImportJobProgress,
   reportImportJobStep,
   runWithImportJob,
 } from '../../../import/importJobProgress.js';
@@ -60,4 +61,21 @@ test('import job is isolated per user', () => {
   beginImportJob(id, 'owner', 'url');
   assert.equal(getImportJobForUser(id, 'other'), null);
   assert.ok(getImportJobForUser(id, 'owner'));
+});
+
+test('counted progress sets percent and is not overwritten by OCR telegraph lines', async () => {
+  clearImportJobsForTest();
+  const id = '55555555-5555-4555-8555-555555555555';
+  await runWithImportJob(id, 'user-1', 'pdf', async () => {
+    reportImportJobProgress('OCR', 'Importing recipe 2/9', 'Page 3 of 18', 3, 18);
+    appendImportJobDebug('Tesseract run 7: done — 2100 characters');
+    const mid = getImportJobForUser(id, 'user-1');
+    assert.equal(mid?.message, 'Importing recipe 2/9');
+    assert.equal(mid?.detail, 'Page 3 of 18');
+    assert.equal(mid?.percent, 17);
+    reportImportJobStep('Draft', 'Building recipe drafts…');
+    assert.equal(getImportJobForUser(id, 'user-1')?.percent, undefined);
+    finishImportJob(id);
+  });
+  assert.equal(getImportJobForUser(id, 'user-1')?.percent, 100);
 });

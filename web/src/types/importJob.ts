@@ -19,4 +19,6 @@ export type ImportJobSnapshot = {
   debugLog?: string[];
   activityLog?: string[];
   pipelineStages?: ImportPipelineStage[];
+  /** 0–100 when the server knows the count for the current step. */
+  percent?: number;
 };
