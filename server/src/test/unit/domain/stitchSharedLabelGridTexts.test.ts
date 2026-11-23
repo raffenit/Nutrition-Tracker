@@ -239,3 +239,13 @@ test('header split needs most columns to agree on the header band', () => {
   ];
   assert.deepEqual(splitMergedDailyValueHeaderSlices(columns), columns);
 });
+
+test('header split leaves a column alone when its Fat band already read the same amount', () => {
+  const columns = [
+    ['80', '% Daily Value*', '3g 4%', '2g 10%', '1g'],
+    ['160', '9g %Dally Value _ 12%', '9g 12%', '3g 15%', '2g'],
+    ['130', '% Daily Valuer', '4g 5%', '2.5g 13%', '1g'],
+  ];
+  const out = splitMergedDailyValueHeaderSlices(columns);
+  assert.deepEqual(out[1], ['160', '%Dally Value _ 12%', '9g 12%', '3g 15%', '2g']);
+});
