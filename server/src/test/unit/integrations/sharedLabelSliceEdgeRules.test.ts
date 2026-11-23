@@ -31,3 +31,17 @@ test('a separator broken midway by glare is still whitened', async () => {
   const out = await stripRowBandSliceEdgeRules(await slice((x, y) => (x === 3 || x === 4) && (y < 12 || y >= 16)));
   assert.equal(await darkAt(out, 3, 5), false);
 });
+
+test('a tall digit stroke between kept row borders is kept', async () => {
+  const out = await stripRowBandSliceEdgeRules(
+    await slice((x, y) => y <= 1 || y >= H - 2 || ((x === 10 || x === 11) && y >= 5 && y < 25)),
+  );
+  assert.equal(await darkAt(out, 10, 15), true);
+});
+
+test('a separator between kept row borders is still whitened', async () => {
+  const out = await stripRowBandSliceEdgeRules(
+    await slice((x, y) => y <= 1 || y >= H - 2 || x === 3 || x === 4),
+  );
+  assert.equal(await darkAt(out, 3, 15), false);
+});

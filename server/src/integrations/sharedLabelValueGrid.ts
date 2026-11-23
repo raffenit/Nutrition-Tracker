@@ -249,19 +249,28 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
   const pixels = Buffer.from(data);
   let changed = false;
 
+  // Horizontal row borders kept in the crop would otherwise count as the ends of a digit stroke.
+  const contentRows: number[] = [];
+  for (let y = 0; y < height; y += 1) {
+    let dark = 0;
+    for (let x = 0; x < width; x += 1) if (data[y * width + x]! < darkLevel) dark += 1;
+    if (dark < width * 0.5) contentRows.push(y);
+  }
+  if (contentRows.length < 8) return png;
+
   const darkFracAt = (x: number): number => {
     let dark = 0;
-    for (let y = 0; y < height; y += 1) {
+    for (const y of contentRows) {
       if (data[y * width + x]! < darkLevel) dark += 1;
     }
-    return dark / height;
+    return dark / contentRows.length;
   };
-  // A printed separator reaches both slice edges (glare may break it midway); a tall digit
-  // near the edge ("1g") leaves margin above and below.
+  // A printed separator reaches both ends of the content rows (glare may break it midway);
+  // a tall digit near the edge ("1g") leaves margin above and below.
   const reachesEnds = (x: number): boolean => {
-    const edgeRows = Math.max(1, Math.round(height * 0.1));
-    const darkInRows = (y0: number, y1: number) => {
-      for (let y = y0; y < y1; y += 1) {
+    const edgeRows = Math.max(1, Math.round(contentRows.length * 0.1));
+    const darkInRows = (rows: number[]) => {
+      for (const y of rows) {
         for (let dx = -1; dx <= 1; dx += 1) {
           const xx = x + dx;
           if (xx >= 0 && xx < width && data[y * width + xx]! < darkLevel) return true;
@@ -269,7 +278,7 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
       }
       return false;
     };
-    return darkInRows(0, edgeRows) && darkInRows(height - edgeRows, height);
+    return darkInRows(contentRows.slice(0, edgeRows)) && darkInRows(contentRows.slice(-edgeRows));
   };
 
   for (const [zoneStart, zoneEnd, step] of [
