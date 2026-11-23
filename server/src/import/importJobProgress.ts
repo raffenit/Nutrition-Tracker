@@ -44,7 +44,9 @@ type ImportJobRecord = {
   pipelineStages: PipelineStageTiming[];
 };
 
-const JOB_TTL_MS = 15 * 60 * 1000;
+// Multi-page scanned recipe PDFs can OCR for tens of minutes; keep job
+// records alive long enough for the client poll to see the finish.
+const JOB_TTL_MS = 45 * 60 * 1000;
 const jobs = new Map<string, ImportJobRecord>();
 
 const jobContext = new AsyncLocalStorage<{ jobId: string; userId: string }>();

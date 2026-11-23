@@ -33,7 +33,10 @@ import { route, type Ctx, type Route } from '../http/router.js';
 import type { Food, Nutrients, SearchHit } from '../types.js';
 import type { LabelServingFields } from '../domain/labelServingVote.js';
 
-const MAX_UPLOAD = 12 * 1024 * 1024;
+// Scanned recipe-card PDFs (multi-page, no text layer) legitimately reach
+// ~40 MB per file; 64 MB covers those while still bounding memory (busboy
+// buffers the upload in RAM).
+const MAX_UPLOAD = 64 * 1024 * 1024;
 
 export function foodRoutes(): Route[] {
   return [
@@ -544,7 +547,7 @@ function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; bytes: 
     });
     parser.on('error', reject);
     parser.on('finish', () => {
-      if (tooBig) reject(new HttpError(413, 'File is larger than 12 MB'));
+      if (tooBig) reject(new HttpError(413, 'File is larger than 64 MB'));
       else if (!file) reject(new HttpError(400, 'Choose a file'));
       else resolve(file);
     });
