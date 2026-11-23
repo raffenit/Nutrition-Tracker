@@ -256,20 +256,20 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
     }
     return dark / height;
   };
-  // A printed separator runs the full slice height; a tall digit near the edge ("1g") does not.
-  const spansHeight = (x: number): boolean => {
-    let longest = 0;
-    let run = 0;
-    for (let y = 0; y < height; y += 1) {
-      let dark = false;
-      for (let dx = -1; dx <= 1 && !dark; dx += 1) {
-        const xx = x + dx;
-        if (xx >= 0 && xx < width && data[y * width + xx]! < darkLevel) dark = true;
+  // A printed separator reaches both slice edges (glare may break it midway); a tall digit
+  // near the edge ("1g") leaves margin above and below.
+  const reachesEnds = (x: number): boolean => {
+    const edgeRows = Math.max(1, Math.round(height * 0.1));
+    const darkInRows = (y0: number, y1: number) => {
+      for (let y = y0; y < y1; y += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const xx = x + dx;
+          if (xx >= 0 && xx < width && data[y * width + xx]! < darkLevel) return true;
+        }
       }
-      run = dark ? run + 1 : 0;
-      longest = Math.max(longest, run);
-    }
-    return longest >= height * 0.9;
+      return false;
+    };
+    return darkInRows(0, edgeRows) && darkInRows(height - edgeRows, height);
   };
 
   for (const [zoneStart, zoneEnd, step] of [
@@ -290,7 +290,7 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
       runLength = 0;
     };
     for (let x = zoneStart; step === 1 ? x < zoneEnd : x > zoneEnd; x += step) {
-      if (darkFracAt(x) >= minDarkFrac && spansHeight(x)) {
+      if (darkFracAt(x) >= minDarkFrac && reachesEnds(x)) {
         if (runStart < 0) runStart = x;
         runLength += 1;
       } else {

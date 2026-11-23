@@ -26,3 +26,8 @@ test('a tall digit stroke near the edge is kept', async () => {
   const out = await stripRowBandSliceEdgeRules(await slice((x, y) => (x === 10 || x === 11) && y >= 3 && y < 26));
   assert.equal(await darkAt(out, 10, 15), true);
 });
+
+test('a separator broken midway by glare is still whitened', async () => {
+  const out = await stripRowBandSliceEdgeRules(await slice((x, y) => (x === 3 || x === 4) && (y < 12 || y >= 16)));
+  assert.equal(await darkAt(out, 3, 5), false);
+});
