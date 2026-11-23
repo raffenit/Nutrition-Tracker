@@ -256,7 +256,7 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
     for (let x = 0; x < width; x += 1) if (data[y * width + x]! < darkLevel) dark += 1;
     if (dark < width * 0.5) contentRows.push(y);
   }
-  if (contentRows.length < 8) return png;
+  if (contentRows.length === 0) return png;
 
   const darkFracAt = (x: number): number => {
     let dark = 0;

@@ -45,3 +45,10 @@ test('a separator between kept row borders is still whitened', async () => {
   );
   assert.equal(await darkAt(out, 3, 15), false);
 });
+
+test('a separator is whitened even when thick borders leave few content rows', async () => {
+  const out = await stripRowBandSliceEdgeRules(
+    await slice((x, y) => y < 14 || y >= H - 14 || x === 3 || x === 4),
+  );
+  assert.equal(await darkAt(out, 3, 15), false);
+});
