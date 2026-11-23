@@ -24,6 +24,7 @@ import { scoreLabelExtraction } from '../domain/labelSlots.js';
 import { stitchColumnStripOcrTexts } from '../domain/stitchColumnStripTexts.js';
 import {
   diagnoseSharedLabelGridStitch,
+  fillUnreadSlicesFromAlternateRead,
   formatSharedLabelStitchFailure,
   stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
@@ -65,6 +66,7 @@ import {
   extractSharedLabelColumnPngsByRowBands,
   extractSharedLabelGridBuffers,
   rowBandMinExtractSize,
+  stripRowBandSliceEdgeRules,
   useRowBandSliceOcrForPlan,
   type SharedLabelValueGridPlan,
 } from './sharedLabelValueGrid.js';
@@ -776,12 +778,11 @@ async function extractDewarpedRowPngs(
   const width = meta.width ?? 0;
   const buffers: Buffer[] = [];
   for (let i = 0; i < rowTops.length; i += 1) {
-    buffers.push(
-      await sharp(png)
-        .extract({ left: 0, top: rowTops[i]!, width, height: Math.max(1, rowHeights[i]!) })
-        .png()
-        .toBuffer(),
-    );
+    const rowPng = await sharp(png)
+      .extract({ left: 0, top: rowTops[i]!, width, height: Math.max(1, rowHeights[i]!) })
+      .png()
+      .toBuffer();
+    buffers.push(await stripRowBandSliceEdgeRules(rowPng));
   }
   return buffers;
 }
@@ -1114,7 +1115,17 @@ async function ocrSharedLabelGridColumns(
         const easyTexts = perJob[index] ?? [];
         if (easyTexts.length === 0) continue;
         const merged = bestStructuredColumnRead(job.current, easyTexts);
-        if (!merged.easyWon) continue;
+        if (!merged.easyWon) {
+          const target = job.sliceTarget;
+          const slices = target?.kind === 'value' ? rowBandSliceTexts?.valueSlices[target.index] : undefined;
+          if (target && slices && rowBandSliceTexts) {
+            rowBandSliceTexts.valueSlices[target.index] = fillUnreadSlicesFromAlternateRead(
+              slices,
+              easyTexts[0]!.split('\n'),
+            );
+          }
+          continue;
+        }
         easyWins += 1;
         job.assign(merged.text);
         if (job.sliceTarget && rowBandSliceTexts && job.sliceTarget.count > 0) {
@@ -1125,7 +1136,11 @@ async function ocrSharedLabelGridColumns(
           } else {
             const slices = rowBandSliceTexts.valueSlices[job.sliceTarget.index];
             if (slices) {
-              rowBandSliceTexts.valueSlices[job.sliceTarget.index] = lines.slice(0, job.sliceTarget.count);
+              // EasyOCR won the column overall; rows it left unread keep Tesseract's amount.
+              rowBandSliceTexts.valueSlices[job.sliceTarget.index] = fillUnreadSlicesFromAlternateRead(
+                lines.slice(0, job.sliceTarget.count),
+                slices,
+              );
             }
           }
         }

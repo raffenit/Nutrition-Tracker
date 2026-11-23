@@ -54,20 +54,16 @@ export type OcrVariantMode = 'full' | 'columnStrip';
  * Per-column strip OCR — no rotations or focus crops (those break on narrow crops).
  * Upscales the strip, then a small preprocess set tuned for one vertical panel.
  */
+/** Upscale uniformly until both minimums are met; never crops or changes the aspect ratio. */
 async function upscaleColumnStripSource(source: Sharp, minWidth: number, minHeight = 0): Promise<Sharp> {
   const meta = await source.metadata();
   const width = meta.width ?? minWidth;
   const height = meta.height ?? minHeight;
-  const targetW = Math.max(minWidth, width);
-  const targetH = minHeight > 0 ? Math.max(minHeight, height) : height;
-  let pipeline = source.clone();
-  if (width < targetW - 4) {
-    pipeline = pipeline.resize({ width: targetW, kernel: sharp.kernel.lanczos3 });
-  }
-  if (minHeight > 0 && height < targetH - 2) {
-    pipeline = pipeline.resize({ height: targetH, kernel: sharp.kernel.lanczos3 });
-  }
-  return pipeline;
+  const scale = Math.max(1, minWidth / Math.max(1, width), minHeight > 0 ? minHeight / Math.max(1, height) : 1);
+  const targetW = Math.round(width * scale);
+  const targetH = Math.round(height * scale);
+  if (targetW < width + 4 && targetH < height + 2) return source.clone();
+  return source.clone().resize({ width: targetW, height: targetH, fit: 'fill', kernel: sharp.kernel.lanczos3 });
 }
 
 export async function buildColumnStripOcrVariants(bytes: Buffer): Promise<Buffer[]> {
@@ -90,11 +86,9 @@ export async function buildColumnStripOcrVariants(bytes: Buffer): Promise<Buffer
 
 /** One horizontal nutrient row — upscale height, skip adaptive threshold on tiny crops. */
 export async function buildRowBandOcrVariants(bytes: Buffer): Promise<Buffer[]> {
-  const scaled = await upscaleColumnStripSource(
-    sharp(bytes).rotate(),
-    COLUMN_STRIP_OCR_TARGET_WIDTH,
-    ROW_BAND_OCR_MIN_HEIGHT,
-  );
+  // Height drives the scale: forcing a wide target width blows tall rows (Calories) up past
+  // the glyph sizes Tesseract reads well.
+  const scaled = await upscaleColumnStripSource(sharp(bytes).rotate(), 0, ROW_BAND_OCR_MIN_HEIGHT);
   const primary = await scaled.clone().greyscale().normalize().png().toBuffer();
   if (process.env.TESSERACT_ROW_BAND_DUAL_VARIANT === '1') {
     return uniqueBuffers([

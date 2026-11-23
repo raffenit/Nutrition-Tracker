@@ -198,7 +198,8 @@ export async function extractSharedLabelColumnPngsByRowBands(
     }
 
     const png = await base.clone().extract({ left, top, width, height }).png().toBuffer();
-    buffers.push(await deskewRowBandSlicePng(png, slice, column.width));
+    const deskewed = await deskewRowBandSlicePng(png, slice, column.width);
+    buffers.push(await stripRowBandSliceEdgeRules(deskewed));
   }
   return buffers;
 }
@@ -226,6 +227,89 @@ async function deskewRowBandSlicePng(
     .rotate(-angleDeg, { background: { r: 255, g: 255, b: 255 } })
     .png()
     .toBuffer();
+}
+
+/**
+ * Whiten thin full-height vertical rules caught at a slice's left/right edge.
+ * Column boundaries are shared between neighbors, so a printed separator can
+ * land just inside a crop; OCR then emits a leading/trailing "|" in every row.
+ * Only runs narrower than {@link SharedLabelGridParams.rowBandEdgeRuleMaxWidthFraction}
+ * with near-constant dark coverage qualify — text strokes never span a slice.
+ */
+export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
+  const params = DEFAULT_SHARED_LABEL_GRID_PARAMS;
+  const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const width = info.width ?? 0;
+  const height = info.height ?? 0;
+  if (width < 8 || height < 8) return png;
+  const scan = Math.max(1, Math.round(width * params.rowBandEdgeRuleScanEdgeFraction));
+  const maxRun = Math.max(1, Math.round(width * params.rowBandEdgeRuleMaxWidthFraction));
+  const minDarkFrac = params.rowBandEdgeRuleMinDarkRowFraction;
+  const darkLevel = params.rowBandEdgeRuleDarkLuminance;
+  const pixels = Buffer.from(data);
+  let changed = false;
+
+  // Horizontal row borders kept in the crop would otherwise count as the ends of a digit stroke.
+  const contentRows: number[] = [];
+  for (let y = 0; y < height; y += 1) {
+    let dark = 0;
+    for (let x = 0; x < width; x += 1) if (data[y * width + x]! < darkLevel) dark += 1;
+    if (dark < width * 0.5) contentRows.push(y);
+  }
+  if (contentRows.length === 0) return png;
+
+  const darkFracAt = (x: number): number => {
+    let dark = 0;
+    for (const y of contentRows) {
+      if (data[y * width + x]! < darkLevel) dark += 1;
+    }
+    return dark / contentRows.length;
+  };
+  // A printed separator reaches both ends of the content rows (glare may break it midway);
+  // a tall digit near the edge ("1g") leaves margin above and below.
+  const reachesEnds = (x: number): boolean => {
+    const edgeRows = Math.max(1, Math.round(contentRows.length * 0.1));
+    const darkInRows = (rows: number[]) => {
+      for (const y of rows) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const xx = x + dx;
+          if (xx >= 0 && xx < width && data[y * width + xx]! < darkLevel) return true;
+        }
+      }
+      return false;
+    };
+    return darkInRows(contentRows.slice(0, edgeRows)) && darkInRows(contentRows.slice(-edgeRows));
+  };
+
+  for (const [zoneStart, zoneEnd, step] of [
+    [0, Math.min(scan, width), 1],
+    [width - 1, Math.max(width - scan, -1), -1],
+  ] as const) {
+    let runStart = -1;
+    let runLength = 0;
+    const flush = () => {
+      if (runStart >= 0 && runLength <= maxRun) {
+        for (let i = 0; i < runLength; i += 1) {
+          const x = runStart + i * step;
+          for (let y = 0; y < height; y += 1) pixels[y * width + x] = 255;
+        }
+        changed = true;
+      }
+      runStart = -1;
+      runLength = 0;
+    };
+    for (let x = zoneStart; step === 1 ? x < zoneEnd : x > zoneEnd; x += step) {
+      if (darkFracAt(x) >= minDarkFrac && reachesEnds(x)) {
+        if (runStart < 0) runStart = x;
+        runLength += 1;
+      } else {
+        flush();
+      }
+    }
+    flush();
+  }
+  if (!changed) return png;
+  return sharp(pixels, { raw: { width, height, channels: 1 } }).png().toBuffer();
 }
 
 export function useRowBandSliceOcrForPlan(plan: SharedLabelValueGridPlan): boolean {

@@ -72,7 +72,7 @@ type BatchManifestEntry = { file: string; mode: EasyOcrLayout; i: number; bands?
 /** One JSONL record per manifest job on stdout. */
 type BatchResultLine = { i: number; text?: string; error?: string };
 
-function parseBatchStdout(stdout: string, jobCount: number): (string | null)[] {
+export function parseBatchStdout(stdout: string, jobCount: number): (string | null)[] {
   const results: (string | null)[] = Array.from({ length: jobCount }, () => null);
   for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
@@ -88,8 +88,9 @@ function parseBatchStdout(stdout: string, jobCount: number): (string | null)[] {
       appendImportJobDebug(`easyocr batch: job ${record.i} failed (${record.error})`);
       continue;
     }
-    const text = (record.text ?? '').trim();
-    if (text) results[record.i] = text;
+    // Row-band reads keep leading blank lines: line N must stay band N.
+    const text = (record.text ?? '').trimEnd();
+    if (text.trim()) results[record.i] = text;
   }
   return results;
 }

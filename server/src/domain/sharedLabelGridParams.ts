@@ -137,6 +137,14 @@ export type SharedLabelGridParams = {
   rowBandDeskewMinAngleDeg: number;
   /** Skip deskew beyond this angle — likely a detection artifact, not pack curvature (deg). */
   rowBandDeskewMaxAngleDeg: number;
+  /** Row-band slice edge cleanup: scan this fraction of slice width at each edge for vertical rules. */
+  rowBandEdgeRuleScanEdgeFraction: number;
+  /** A vertical rule spans at least this fraction of slice rows to count as chrome, not text. */
+  rowBandEdgeRuleMinDarkRowFraction: number;
+  /** Pixels darker than this luminance count toward a rule's vertical coverage. */
+  rowBandEdgeRuleDarkLuminance: number;
+  /** Rules wider than this fraction of slice width are not edge chrome (glare/text blocks). */
+  rowBandEdgeRuleMaxWidthFraction: number;
   /** Margin around detected label+value grid when cropping previews and OCR bands (fraction of image width). */
   gridEnvelopeMarginImageFraction: number;
   /** Sparse value grid: gutter level as fraction of value-region profile peak. */
@@ -214,6 +222,10 @@ export const DEFAULT_SHARED_LABEL_GRID_PARAMS: SharedLabelGridParams = {
   rowBandMinOcrExtractWidthPitchFraction: 0.65,
   rowBandDeskewMinAngleDeg: 0.35,
   rowBandDeskewMaxAngleDeg: 6,
+  rowBandEdgeRuleScanEdgeFraction: 0.15,
+  rowBandEdgeRuleMinDarkRowFraction: 0.7,
+  rowBandEdgeRuleDarkLuminance: 140,
+  rowBandEdgeRuleMaxWidthFraction: 0.04,
   gridEnvelopeMarginImageFraction: 20 / W,
   valueGutterThresholdRatio: 0.48,
   valueRawGutterSpacingFraction: 3 / W,

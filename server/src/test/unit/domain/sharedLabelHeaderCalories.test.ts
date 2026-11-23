@@ -25,3 +25,11 @@ test('buildCalorieRowCellsForStitch ignores % Daily Value body lines', () => {
   const row = buildCalorieRowCellsForStitch(values, headers);
   assert.deepEqual(row, ['140', '80']);
 });
+test('value-column preamble keeps the kcal count behind stray rule glyphs', () => {
+  assert.equal(pickPlausibleCalorieFromValueColumnPreamble('| Sl 80\n% Daily Value'), '80');
+  assert.equal(pickPlausibleCalorieFromValueColumnPreamble('% Daily Value\n| Sl 80'), '');
+  assert.equal(pickPlausibleCalorieFromValueColumnPreamble('Bar 17\n140\n% Daily Value'), '140');
+  assert.equal(pickPlausibleCalorieFromValueColumnPreamble('| Sl 80\n140\n% Daily Value'), '140');
+  assert.equal(pickPlausibleCalorieFromValueColumnPreamble('%Dally Valu\n120\n3g 4%'), '');
+  assert.equal(pickPlausibleCalorieFromValueColumnPreamble('3g 4%\n| s 25'), '');
+});

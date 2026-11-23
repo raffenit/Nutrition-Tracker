@@ -2,6 +2,7 @@ import {
   buildCalorieRowCellsForStitch,
   shouldInjectCalorieRowOverride,
 } from './sharedLabelHeaderCalories.js';
+import { NEXT_BAND_ROW, normalizeCellDigits } from './parseMultiProductLabelTable.js';
 import { SHARED_GRID_MIN_VALUE_LINES_PER_COLUMN } from './splitSingleLabelParams.js';
 
 export type SharedLabelStitchOptions = {
@@ -200,6 +201,7 @@ export function stitchSharedLabelGridFromRowBandSlices(
   stitchOptions?: SharedLabelStitchOptions,
 ): string | null {
   if (valueSliceTextsPerColumn.length < 2 || labelSliceTexts.length === 0) return null;
+  valueSliceTextsPerColumn = splitMergedDailyValueHeaderSlices(valueSliceTextsPerColumn);
 
   const columnCount = valueSliceTextsPerColumn.length;
   const names =
@@ -209,14 +211,21 @@ export function stitchSharedLabelGridFromRowBandSlices(
 
   const seenRows = new Set<string>();
   const rowBlocks: Array<{ label: string; values: string[] }> = [];
-  const labelNutrientSliceCount = countParsableLabelNutrientSlices(labelSliceTexts);
   let nutrientRowOrdinal = 0;
+  let proteinBand = -1;
   const bandCount = Math.max(
     labelSliceTexts.length,
     ...valueSliceTextsPerColumn.map((col) => col.length),
   );
+  const readBandLabels = Array.from({ length: bandCount }, (_, i) =>
+    rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i),
+  );
+  const bandLabels = fillRowLabelsByCanonicalOrder(readBandLabels);
+  const labelNutrientSliceCount =
+    countParsableLabelNutrientSlices(labelSliceTexts) +
+    bandLabels.filter((label, i) => label && !readBandLabels[i]).length;
   for (let i = 0; i < bandCount; i += 1) {
-    const rowLabel = rowLabelForBandIndex(labelSliceTexts, valueSliceTextsPerColumn, i);
+    const rowLabel = bandLabels[i];
     if (!rowLabel) continue;
     const key = rowLabel.toLowerCase();
     if (seenRows.has(key)) continue;
@@ -242,6 +251,14 @@ export function stitchSharedLabelGridFromRowBandSlices(
 
     seenRows.add(key);
     rowBlocks.push({ label: rowLabel, values });
+    proteinBand = key === 'protein' ? i : proteinBand;
+  }
+  const nextBand = proteinBand + 1;
+  if (proteinBand >= 0 && nextBand < bandCount && !bandLabels[nextBand]) {
+    const values = valueSliceTextsPerColumn.map((col) => cleanValue(col[nextBand] ?? ''));
+    if (values.some((v) => READABLE_AMOUNT.test(normalizeCellDigits(v)))) {
+      rowBlocks.push({ label: NEXT_BAND_ROW, values });
+    }
   }
 
   const valueTextsForCalories =
@@ -449,4 +466,136 @@ function looksLikeProductName(line: string): boolean {
   if (/\b(?:bar|cup|pack|candies|chocolate|wafer)\b/i.test(line)) return true;
   if (/®|™/.test(line)) return true;
   return line.split(/\s+/).length <= 4 && /^[A-Za-z]/.test(line);
+}
+
+/** Nutrition Facts rows always print in this order (FDA format). */
+const CANONICAL_ROW_ORDER = [
+  'Calories',
+  'Total Fat',
+  'Saturated Fat',
+  'Trans Fat',
+  'Cholesterol',
+  'Sodium',
+  'Total Carbohydrate',
+  'Dietary Fiber',
+  'Total Sugars',
+  'Includes Added Sugars',
+  'Protein',
+];
+
+function canonicalRowIndex(label: string | null): number {
+  if (!label) return -1;
+  const key = label.toLowerCase();
+  return CANONICAL_ROW_ORDER.findIndex((name) => key.startsWith(name.toLowerCase().split(' ').slice(0, 2).join(' ')));
+}
+
+/**
+ * Bands whose label OCR failed, sandwiched between two read labels, take the canonical rows in
+ * between when the band count matches exactly (e.g. Trans Fat · ? · ? · Total Carbohydrate);
+ * unread bands right after the last read row take the rows that follow it (… Added Sugars · ? → Protein).
+ */
+export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Array<string | null> {
+  const out = [...labels];
+  let prev = -1;
+  for (let i = 0; i < out.length; i += 1) {
+    if (canonicalRowIndex(out[i] ?? null) < 0) continue;
+    if (prev >= 0 && i - prev > 1) {
+      const from = canonicalRowIndex(out[prev] ?? null);
+      const to = canonicalRowIndex(out[i] ?? null);
+      const gapBands = out.slice(prev + 1, i);
+      if (to - from - 1 === gapBands.length && gapBands.every((label) => label === null)) {
+        for (let k = 1; k <= gapBands.length; k += 1) out[prev + k] = CANONICAL_ROW_ORDER[from + k]!;
+      }
+    }
+    prev = i;
+  }
+  if (prev >= 0) {
+    let next = canonicalRowIndex(out[prev] ?? null) + 1;
+    for (let i = prev + 1; i < out.length && out[i] === null && next < CANONICAL_ROW_ORDER.length; i += 1, next += 1) {
+      out[i] = CANONICAL_ROW_ORDER[next]!;
+    }
+  }
+  return out;
+}
+
+const READABLE_AMOUNT = /^<?\s*\d+(?:\.\d+)?(?!\d|\.|\s*%)/;
+/**
+ * A slice that is only the "Daily Value" header, even when OCR garbles it or reads the % as a
+ * digit ("1 Dally Walue", "% Daily Va1ue"); a slice with an amount before or after it
+ * ("140 % Daily Value", "% Daily Value 9g 12%") is not.
+ */
+const DAILY_VALUE_HEADER_ONLY = /^\W*[\d%]?\s*d[a-z]{2,4}\s*[vw]\S*\D*$/i;
+
+function leadingNumber(text: string): string | null {
+  return text.match(/\d+(?:\.\d+)?/)?.[0] ?? null;
+}
+
+/**
+ * A row-aligned second read (EasyOCR in row mode emits one line per band) fills only the
+ * slices the primary read left without digits, and only where a neighbouring slice agrees
+ * between the two reads, so a misaligned alternate can't move values between rows.
+ */
+export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: string[]): string[] {
+  const agrees = (i: number) =>
+    i >= 0 && i < primary.length && leadingNumber(primary[i]!) !== null &&
+    leadingNumber(primary[i]!) === leadingNumber(alternate[i] ?? '');
+  return primary.map((slice, i) => {
+    // "lOmg 52" has digits but no readable amount, so it counts as unread too.
+    if (READABLE_AMOUNT.test(normalizeCellDigits(slice)) || dailyValueTextInSlice(slice)) return slice;
+    // EasyOCR drops empty bands at the column ends, so a short alternate is padded, not refused.
+    const candidate = (alternate[i] ?? '').trim();
+    // Only an amount fills the cell; a lone "2%" is a daily value, not a mass, and a bare "5"
+    // (a "5%" that lost its sign) needs a unit or a printed %DV beside it to count.
+    const normalized = normalizeCellDigits(candidate);
+    if (!READABLE_AMOUNT.test(normalized) || dailyValueTextInSlice(candidate)) return slice;
+    // A calorie count (rounded to 10 from 50 up) is the one amount printed without a unit, and
+    // it is the topmost amount, so a unitless number below another amount (a "50%" that lost
+    // its sign in the Sodium row) is not one.
+    const calorieCount = /^(\d{2,4})\s*(?:k?cal)?$/i.exec(normalized);
+    const topmostAmount = primary
+      .slice(0, i)
+      .every((above) => DAILY_VALUE_HEADER_ONLY.test(above) || !/\d/.test(normalizeCellDigits(above)));
+    const caloriesRead =
+      topmostAmount && calorieCount && Number(calorieCount[1]) >= 50 && Number(calorieCount[1]) % 10 === 0;
+    if (!caloriesRead && !/^<?\s*[\d.]+\s*(?:m?c?g\b|\S*\s+\d{1,3}\s*%)/i.test(normalized)) return slice;
+    return agrees(i - 1) || agrees(i + 1) ? candidate : slice;
+  });
+}
+
+/** "% Daily Value" as OCR tends to garble it ("%Dally Valu", "% Daily Walue"). */
+const FUZZY_DAILY_VALUE = /%\s*d[a-z]{2,4}\s*[vw][a-z]{2,4}/i;
+const LEADING_AMOUNT = /^\s*(<?\s*\d+(?:\.\d+)?\s*m?g)\b/i;
+
+/**
+ * A curved column whose first row crop swallowed the "% Daily Value" header reads the Fat
+ * amount on the header band ("9g %Dally Value 12%") and every later row one band early.
+ * When most columns put the header on one band, split such a slice: the amount (and its
+ * trailing %DV) moves to the next band and the rest of that column shifts down one band.
+ */
+export function splitMergedDailyValueHeaderSlices(columns: string[][]): string[][] {
+  const bandCount = Math.max(0, ...columns.map((col) => col.length));
+  let headerBand = -1;
+  for (let i = 0; i < bandCount && headerBand < 0; i += 1) {
+    const hits = columns.filter((col) => FUZZY_DAILY_VALUE.test(col[i] ?? '')).length;
+    if (hits * 2 > columns.length) headerBand = i;
+  }
+  if (headerBand < 0) return columns;
+  return columns.map((col) => {
+    const slice = col[headerBand] ?? '';
+    const amount = slice.match(LEADING_AMOUNT)?.[1];
+    if (!amount || !FUZZY_DAILY_VALUE.test(slice)) return col;
+    const percent = slice.match(/(\d{1,3})\s*%\s*$/)?.[1];
+    const moved = percent ? `${amount} ${percent}%` : amount;
+    const header = slice.replace(LEADING_AMOUNT, '').trim();
+    // The Fat crop already read the same amount (and %DV): the column is aligned, only the
+    // header is noisy. "3g 4%" over "3g 15%" is Fat over Sat Fat, so that still shifts.
+    const next = col[headerBand + 1] ?? '';
+    const nextPercent = next.match(/(\d{1,3})\s*%\s*$/)?.[1];
+    const samePercent = !percent || !nextPercent || percent === nextPercent;
+    if (leadingNumber(next) === leadingNumber(amount) && samePercent) {
+      return [...col.slice(0, headerBand), header, ...col.slice(headerBand + 1)];
+    }
+    const shifted = [...col.slice(0, headerBand), header, moved, ...col.slice(headerBand + 1)];
+    return shifted.slice(0, col.length);
+  });
 }

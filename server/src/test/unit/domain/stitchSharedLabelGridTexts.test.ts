@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { parseMultiProductLabelTable } from '../../../domain/parseMultiProductLabelTable.js';
 import {
   diagnoseSharedLabelGridStitch,
+  fillUnreadSlicesFromAlternateRead,
+  splitMergedDailyValueHeaderSlices,
   stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
 } from '../../../domain/stitchSharedLabelGridTexts.js';
@@ -189,4 +191,150 @@ test('stitchSharedLabelGridFromRowBandSlices keeps column positions when a middl
   assert.equal(cols![1]!.nutrients.fat, 0);
   assert.equal(cols![2]!.nutrients.fat, 7);
   assert.equal(cols![2]!.nutrients.protein, 5);
+});
+
+test('alternate row read fills only digitless slices next to an agreeing neighbour', () => {
+  const primary = ['80', 'oz Daily Value', 'A', '29 10%', '0g', 'Omg 0%'];
+  const alternate = ['80', '% Dally Walue:', '39 4%', '29 10%', '9g', 'Omg 0%'];
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, alternate), [
+    '80', 'oz Daily Value', '39 4%', '29 10%', '0g', 'Omg 0%',
+  ]);
+});
+
+test('alternate row read keeps 1-glyph amounts and never fills a bare percent', () => {
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(['3g 4%', 'Ig', '0g'], ['3g 4%', '7g', '0g']), ['3g 4%', 'Ig', '0g']);
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(['3g 4%', 'A', '0g'], ['3g 4%', '2%', '0g']), ['3g 4%', 'A', '0g']);
+});
+
+test('alternate row read is ignored where neighbours disagree', () => {
+  const primary = ['A', '3g 15%', '0g'];
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%', '0g', '<5mg 0%']), primary);
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%']), primary);
+});
+
+test('alternate row read missing its empty end bands still fills interior slices', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['80', '3g 4%', 'A', '0g', ''], ['80', '3g 4%', '2g 10%', '0g']),
+    ['80', '3g 4%', '2g 10%', '0g', ''],
+  );
+});
+
+test('a Fat amount merged into the % Daily Value band moves down and shifts its column', () => {
+  const columns = [
+    ['80', '% Daily Value*', '3g 4%', '2g 10%', '0g'],
+    ['160', '9g %Dally Value _ 12%', '3g 15%', '0g', '<5mg 0%'],
+    ['130', '% Daily Valuer', '4g 5%', '2.5g 13%', '0g'],
+  ];
+  const out = splitMergedDailyValueHeaderSlices(columns);
+  assert.deepEqual(out[0], columns[0]);
+  assert.deepEqual(out[1], ['160', '%Dally Value _ 12%', '9g 12%', '3g 15%', '0g']);
+  assert.deepEqual(out[2], columns[2]);
+});
+
+test('header split needs most columns to agree on the header band', () => {
+  const columns = [
+    ['80', '3g 4%'],
+    ['160', '9g %Dally Value _ 12%'],
+    ['130', '4g 5%'],
+  ];
+  assert.deepEqual(splitMergedDailyValueHeaderSlices(columns), columns);
+});
+
+test('header split leaves a column alone when its Fat band already read the same amount', () => {
+  const columns = [
+    ['80', '% Daily Value*', '3g 4%', '2g 10%', '1g'],
+    ['160', '9g %Dally Value _ 12%', '9g 12%', '3g 15%', '2g'],
+    ['130', '% Daily Valuer', '4g 5%', '2.5g 13%', '1g'],
+  ];
+  const out = splitMergedDailyValueHeaderSlices(columns);
+  assert.deepEqual(out[1], ['160', '%Dally Value _ 12%', '9g 12%', '3g 15%', '2g']);
+});
+
+test('header split still shifts when Fat and Sat Fat share an amount but not a %DV', () => {
+  const columns = [
+    ['80', '% Daily Value*', '3g 4%', '2g 10%', '1g'],
+    ['90', '3g %Dally Value 4%', '3g 15%', '0g', '1g'],
+    ['130', '% Daily Valuer', '4g 5%', '2.5g 13%', '1g'],
+  ];
+  const out = splitMergedDailyValueHeaderSlices(columns);
+  assert.deepEqual(out[1], ['90', '%Dally Value 4%', '3g 4%', '3g 15%', '0g']);
+});
+
+test('a slice with digits but no readable amount takes the agreeing alternate amount', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Omg 0', 'lOmg 52', '25g 9%'], ['‘omg 0%', '110mg 5%', '259 9%']),
+    ['Omg 0', '110mg 5%', '25g 9%'],
+  );
+});
+
+test('a bare number with no unit or %DV does not fill an unread slice', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['0mg 0%', 'lOmg', '25g 9%'], ['0mg 0%', '5', '25g 9%']),
+    ['0mg 0%', 'lOmg', '25g 9%'],
+  );
+});
+
+test('the band below an inferred Protein row is kept for a column read one row low', () => {
+  const labelSlices = ['Calories', 'Total Fat', 'Sodium', 'Total Carbohydrate', 'Total Sugars', 'Includes Added Sugars', 'Prte1n', ''];
+  const valueSlices = [
+    ['90', '5g 6%', '120mg 5%', '20g 7%', '10g', '8g 16%', '2g', ''],
+    ['110', '6g 8%', '', '140mg 6%', '22g 8%', '12g', '10g 20%', '3g'],
+  ];
+  const stitched = stitchSharedLabelGridFromRowBandSlices(labelSlices, valueSlices, 'Snack A    Snack B');
+  assert.match(stitched!, /^Protein\b/im);
+  assert.match(stitched!, /^next band\n.*3g/im);
+});
+
+test('an alternate calorie count without a unit still fills an unread calorie slice', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '% Daily Value*', '9g 12%'], ['140', '% Daily Value*', '9g 12%']),
+    ['Sl', '% Daily Value*', '9g 12%'],
+  );
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '9g 12%', '3g 15%'], ['140', '9g 12%', '3g 15%']),
+    ['140', '9g 12%', '3g 15%'],
+  );
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '9g 12%', '3g 15%'], ['140 kcal', '9g 12%', '3g 15%']),
+    ['140 kcal', '9g 12%', '3g 15%'],
+  );
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Sl', '9g 12%', '3g 15%'], ['25', '9g 12%', '3g 15%']),
+    ['Sl', '9g 12%', '3g 15%'],
+  );
+});
+
+test('a unitless number below another amount is not taken as a calorie count', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['150', '9g 12%', 'lOmg', '20g 7%'], ['150', '9g 12%', '50', '20g 7%']),
+    ['150', '9g 12%', 'lOmg', '20g 7%'],
+  );
+});
+
+test('a garbled Daily Value header above the calorie band does not block a unitless calorie count', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['1 Dally Walue', 'Sl', '9g 12%'], ['1 Daily Value', '140', '9g 12%']),
+    ['1 Dally Walue', '140', '9g 12%'],
+  );
+});
+
+test('a calorie crop that also holds the Daily Value header still counts as the topmost amount', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['140 % Daily Value', 'A', '3g 15%'], ['140 % Daily Value', '50', '3g 15%']),
+    ['140 % Daily Value', 'A', '3g 15%'],
+  );
+});
+
+test('a Daily Value header with a digit misread inside it does not block a unitless calorie count', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['% Daily Va1ue', 'Sl', '9g 12%'], ['% Daily Value', '140', '9g 12%']),
+    ['% Daily Va1ue', '140', '9g 12%'],
+  );
+});
+
+test('a Daily Value header merged with an amount still counts as an amount above the band', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['% Daily Va1ue 39g 50%', 'A', '3g 15%'], ['% Daily Value 39g 50%', '50', '3g 15%']),
+    ['% Daily Va1ue 39g 50%', 'A', '3g 15%'],
+  );
 });
