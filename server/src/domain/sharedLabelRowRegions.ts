@@ -941,6 +941,11 @@ export function fitColumnSlicesToLocalRules(
   for (let j = 1; j < fitted.length; j += 1) {
     fitted[j] = Math.max(fitted[j]!, fitted[j - 1]! + minStep);
   }
+  const last = fitted.length - 1;
+  fitted[last] = bounds[last]!;
+  for (let j = last - 1; j > 0; j -= 1) {
+    fitted[j] = Math.min(fitted[j]!, fitted[j + 1]! - minStep);
+  }
   return slices.map((slice, rowIndex) => ({
     ...slice,
     rowIndex,
