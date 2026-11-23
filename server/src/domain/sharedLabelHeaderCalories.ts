@@ -35,10 +35,13 @@ export function shouldUseHeaderColumnCalories(headerColumnTexts: string[] | unde
 /** Display kcal above % Daily Value — not present in body value strips on many variety packs. */
 export function pickPlausibleCalorieFromValueColumnPreamble(text: string): string {
   let afterJunkFallback = '';
+  let inNutrientRows = false;
   for (const raw of text.replace(/\r/g, '\n').split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    if (/%\s*daily\s*value/i.test(line)) break;
+    // Garbled headings ("%Dally Valu", "% Daily Walue") still end the preamble.
+    if (/%\s*d[a-z]{2,4}\s*[vw][a-z]{2,4}/i.test(line)) break;
+    if (/\d\s*(?:m?g\b|%)/i.test(line)) inNutrientRows = true;
     if (/amount\s+per\s+serving/i.test(line)) continue;
     if (looksLikePlausibleCalorieCell(line)) {
       return line.match(/^(\d{2,4})\b/)?.[1] ?? line.trim();
@@ -48,7 +51,7 @@ export function pickPlausibleCalorieFromValueColumnPreamble(text: string): strin
     // Stray rule / glare glyphs ahead of the count ("| Sl 80"); words like "Bar 17" don't count,
     // and a clean count later in the preamble still wins.
     const afterJunk = line.match(/^(?:[^\d\s]{1,2}\s+){1,2}(\d{2,4})\s*$/);
-    if (afterJunk && !afterJunkFallback) afterJunkFallback = afterJunk[1]!;
+    if (afterJunk && !afterJunkFallback && !inNutrientRows) afterJunkFallback = afterJunk[1]!;
   }
   return afterJunkFallback;
 }
