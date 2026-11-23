@@ -1,9 +1,11 @@
-import { getFood } from '../db/foods.js';
+import { getFood, listFoodsWithIngredients } from '../db/foods.js';
 import { insertMeal } from '../db/logs.js';
 import { getMealPlanEntry, listMealPlanEntries, replaceMealPlanEntries } from '../db/mealPlan.js';
 import { drinkVolume } from '../domain/drinks.js';
 import { getKitMappingByKey } from '../db/mealKitEcosystems.js';
 import { aggregateGroceryLineItems, formatGroceryMarkdown, type PlannedMeal } from '../domain/groceryList.js';
+import { generateMealPlan, planCandidatesFromFoods } from '../domain/mealPlanGenerate.js';
+import { PROTEIN_TAGS, readProteinTags } from '../domain/proteinTags.js';
 import { kitLineKeyFromText } from '../domain/kitLineKey.js';
 import { isRecord, requiredNumber, requiredText } from '../domain/guards.js';
 import { roundNutrients, scaleNutrients } from '../domain/nutrients.js';
@@ -22,6 +24,8 @@ export function mealPlanRoutes(): Route[] {
     route('GET', '/api/meal-plan', readPlan),
     route('PUT', '/api/meal-plan', savePlan),
     route('GET', '/api/meal-plan/grocery', groceryList),
+    route('GET', '/api/meal-plan/generate/options', generateOptions),
+    route('POST', '/api/meal-plan/generate', generatePlan),
     route('POST', '/api/meal-plan/entries/:id/log', logFromEntry),
   ];
 }
@@ -119,6 +123,75 @@ async function logFromEntry(ctx: Ctx): Promise<void> {
     drinkMl: volume,
   });
   sendJson(ctx.res, 201, { ok: true, localDate: entry.localDate });
+}
+
+function generateOptions(ctx: Ctx): Promise<void> {
+  requireUser(ctx.auth);
+  const { mains, sides } = planCandidatesFromFoods(listFoodsWithIngredients(ctx.db, 'all'));
+  sendJson(ctx.res, 200, {
+    proteinTags: PROTEIN_TAGS,
+    candidates: { mains: mains.length, sides: sides.length },
+  });
+  return Promise.resolve();
+}
+
+async function generatePlan(ctx: Ctx): Promise<void> {
+  requireUser(ctx.auth);
+  const body = await readJson(ctx.req);
+  if (!isRecord(body)) throw new HttpError(400, 'Expected generation options');
+  const zone = householdZone(ctx);
+  const mealCount = typeof body.mealCount === 'number' ? Math.floor(body.mealCount) : 0;
+  if (mealCount <= 0 || mealCount > 31) throw new HttpError(400, 'Meal count must be between 1 and 31');
+
+  const proteins = readProteinTags(body.proteins);
+  const slotRaw = typeof body.slot === 'string' ? body.slot : 'meal';
+  if (!SLOTS.includes(slotRaw as MealSlot)) throw new HttpError(400, 'Invalid meal slot');
+
+  // Dates: explicit list wins; otherwise the Mon–Sun week containing `week`/today.
+  let dates: string[] = [];
+  if (Array.isArray(body.dates)) {
+    dates = body.dates.map((value) => {
+      if (typeof value !== 'string') throw new HttpError(400, 'Dates must be text');
+      return readLocalDate(value, zone);
+    });
+  } else {
+    const anchor = readLocalDate(typeof body.week === 'string' ? body.week : null, zone);
+    const weekStart = weekStartMonday(anchor);
+    const cursor = new Date(`${weekStart}T00:00:00Z`);
+    for (let i = 0; i < 7; i += 1) {
+      dates.push(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+  if (dates.length === 0) throw new HttpError(400, 'No dates to plan');
+
+  const seed = typeof body.seed === 'number' && Number.isFinite(body.seed) ? Math.floor(body.seed) : Math.floor(Math.random() * 0x7fffffff);
+  const avoidFoodIds = Array.isArray(body.avoidFoodIds)
+    ? body.avoidFoodIds.filter((value): value is string => typeof value === 'string')
+    : [];
+  const result = generateMealPlan(listFoodsWithIngredients(ctx.db, 'all'), {
+    mealCount,
+    proteins,
+    dates,
+    slot: slotRaw as MealSlot,
+    seed,
+    avoidFoodIds,
+  });
+  if (result.meals.length === 0) {
+    throw new HttpError(400, proteins.length > 0
+      ? 'No mains match the selected proteins — tag foods/recipes or loosen the filter'
+      : 'No plannable mains in the library');
+  }
+  sendJson(ctx.res, 200, {
+    seed,
+    proteinFilterApplied: result.proteinFilterApplied,
+    meals: result.meals.map((meal) => ({
+      localDate: meal.localDate,
+      slot: meal.slot,
+      main: meal.main,
+      side: meal.side,
+    })),
+  });
 }
 
 function readEntryInput(value: unknown): { localDate: string; slot: MealSlot; foodId: string; servings: number } {

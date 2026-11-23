@@ -88,6 +88,8 @@ export type Food = {
   instructions: string | null;
   /** Meal-kit brand ecosystem (Green Chef, etc.) for shared kit → store mappings. */
   mealKitEcosystemId: string | null;
+  /** Canonical protein tags (chicken, fish, …) used by meal-plan shuffling. */
+  proteinTags: string[];
   ingredients: IngredientLine[];
 };
 
@@ -96,6 +98,8 @@ export type IngredientLine = {
   servings: number;
   sourceRef: string | null;
   childFoodId: string | null;
+  /** Recipe-part role for mix-and-match planning ('main' centerpiece vs 'side'). */
+  componentRole: 'main' | 'side' | null;
   /** Library food to buy when the recipe line is kit-specific (e.g. meal-kit sauce pouch). */
   shopEquivalentFoodId: string | null;
   /** Free-text shopping name when there is no library equivalent. */

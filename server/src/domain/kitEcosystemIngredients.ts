@@ -11,6 +11,7 @@ export function effectiveIngredientLine(line: IngredientLine, mapping: KitIngred
     servings: line.servings,
     sourceRef: line.sourceRef,
     childFoodId: line.childFoodId ?? mapping.nutritionFoodId,
+    componentRole: line.componentRole,
     shopEquivalentFoodId: line.shopEquivalentFoodId ?? mapping.shopEquivalentFoodId,
     shopEquivalentLabel: line.shopEquivalentLabel ?? mapping.shopEquivalentLabel,
   };

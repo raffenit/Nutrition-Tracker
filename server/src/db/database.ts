@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS foods (
   makes_servings REAL NOT NULL DEFAULT 1,
   servings_per_container REAL,
   nutrient_units_json TEXT NOT NULL DEFAULT '{}',
+  protein_tags_json TEXT NOT NULL DEFAULT '[]',
   source TEXT NOT NULL,
   source_ref TEXT,
   created_at TEXT NOT NULL
@@ -69,7 +70,8 @@ CREATE TABLE IF NOT EXISTS food_ingredients (
   name TEXT NOT NULL,
   servings REAL NOT NULL,
   source_ref TEXT,
-  child_food_id TEXT REFERENCES foods(id) ON DELETE SET NULL
+  child_food_id TEXT REFERENCES foods(id) ON DELETE SET NULL,
+  component_role TEXT
 );
 
 CREATE TABLE IF NOT EXISTS uploads (
@@ -244,6 +246,13 @@ function migrate(db: AppDatabase): void {
   }
   if (!ingredientColumns.some((column) => column.name === 'shop_equivalent_label')) {
     db.exec(`ALTER TABLE food_ingredients ADD COLUMN shop_equivalent_label TEXT`);
+  }
+  if (!ingredientColumns.some((column) => column.name === 'component_role')) {
+    db.exec(`ALTER TABLE food_ingredients ADD COLUMN component_role TEXT`);
+  }
+  foodColumns = db.prepare('PRAGMA table_info(foods)').all() as Array<{ name: string }>;
+  if (!foodColumns.some((column) => column.name === 'protein_tags_json')) {
+    db.exec(`ALTER TABLE foods ADD COLUMN protein_tags_json TEXT NOT NULL DEFAULT '[]'`);
   }
   db.exec(`
     CREATE TABLE IF NOT EXISTS meal_kit_ecosystems (
