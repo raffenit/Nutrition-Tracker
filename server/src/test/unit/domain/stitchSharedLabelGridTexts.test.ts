@@ -249,3 +249,13 @@ test('header split leaves a column alone when its Fat band already read the same
   const out = splitMergedDailyValueHeaderSlices(columns);
   assert.deepEqual(out[1], ['160', '%Dally Value _ 12%', '9g 12%', '3g 15%', '2g']);
 });
+
+test('header split still shifts when Fat and Sat Fat share an amount but not a %DV', () => {
+  const columns = [
+    ['80', '% Daily Value*', '3g 4%', '2g 10%', '1g'],
+    ['90', '3g %Dally Value 4%', '3g 15%', '0g', '1g'],
+    ['130', '% Daily Valuer', '4g 5%', '2.5g 13%', '1g'],
+  ];
+  const out = splitMergedDailyValueHeaderSlices(columns);
+  assert.deepEqual(out[1], ['90', '%Dally Value 4%', '3g 4%', '3g 15%', '0g']);
+});

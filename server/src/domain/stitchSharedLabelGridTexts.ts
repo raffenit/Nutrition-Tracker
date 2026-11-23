@@ -559,8 +559,12 @@ export function splitMergedDailyValueHeaderSlices(columns: string[][]): string[]
     const percent = slice.match(/(\d{1,3})\s*%\s*$/)?.[1];
     const moved = percent ? `${amount} ${percent}%` : amount;
     const header = slice.replace(LEADING_AMOUNT, '').trim();
-    // The Fat crop already read the same amount: the column is aligned, only the header is noisy.
-    if (leadingNumber(col[headerBand + 1] ?? '') === leadingNumber(amount)) {
+    // The Fat crop already read the same amount (and %DV): the column is aligned, only the
+    // header is noisy. "3g 4%" over "3g 15%" is Fat over Sat Fat, so that still shifts.
+    const next = col[headerBand + 1] ?? '';
+    const nextPercent = next.match(/(\d{1,3})\s*%\s*$/)?.[1];
+    const samePercent = !percent || !nextPercent || percent === nextPercent;
+    if (leadingNumber(next) === leadingNumber(amount) && samePercent) {
       return [...col.slice(0, headerBand), header, ...col.slice(headerBand + 1)];
     }
     const shifted = [...col.slice(0, headerBand), header, moved, ...col.slice(headerBand + 1)];
