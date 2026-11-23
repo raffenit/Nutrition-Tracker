@@ -3,7 +3,8 @@ import { api } from '../api/client';
 import { RemoveButton } from '../components/RemoveButton';
 import { formatDisplayDate } from '../dateFormat';
 import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
-import type { Food } from '../types';
+import type { Food, ProteinTag } from '../types';
+import { PROTEIN_TAGS } from '../types';
 import { weekDays, weekEndSunday, weekStartMonday } from '../weekPlan';
 
 type PlanEntry = {
@@ -26,6 +27,23 @@ type GroceryLineItem = {
 
 type PlanView = 'week' | 'shop';
 
+type GeneratedCandidate = {
+  foodId: string;
+  name: string;
+  role: 'main' | 'side';
+  proteinTags: string[];
+  sourceRecipeId: string | null;
+  servings: number;
+};
+
+type DraftMeal = {
+  localDate: string;
+  slot: PlanEntry['slot'];
+  main: GeneratedCandidate;
+  side: GeneratedCandidate | null;
+  include: boolean;
+};
+
 export function PlanPage() {
   const href = usePath();
   const weekParam = new URLSearchParams(href.includes('?') ? href.split('?')[1] : '').get('week');
@@ -40,6 +58,7 @@ export function PlanPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addDay, setAddDay] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -115,6 +134,11 @@ export function PlanPage() {
           <button type="button" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>Week</button>
           <button type="button" role="tab" aria-selected={view === 'shop'} className={view === 'shop' ? 'active' : ''} onClick={() => setView('shop')}>Shopping list</button>
         </div>
+        {view === 'week' && (
+          <button type="button" className="settings-secondary-btn plan-generate-btn" onClick={() => setGenerateOpen(true)}>
+            Generate meals…
+          </button>
+        )}
       </header>
 
       {error && <p className="notice">{error}</p>}
@@ -218,6 +242,32 @@ export function PlanPage() {
         </div>
       )}
 
+      {generateOpen && (
+        <GeneratePlanDialog
+          weekStart={weekStart}
+          saving={busy}
+          onClose={() => setGenerateOpen(false)}
+          onAdd={(drafts) => {
+            setGenerateOpen(false);
+            const additions: PlanEntry[] = [];
+            for (const draft of drafts) {
+              for (const part of [draft.main, draft.side]) {
+                if (!part) continue;
+                additions.push({
+                  id: `tmp-${Date.now()}-${part.foodId}`,
+                  localDate: draft.localDate,
+                  slot: draft.slot,
+                  foodId: part.foodId,
+                  foodName: part.name,
+                  servings: part.servings,
+                });
+              }
+            }
+            void saveEntries([...entries, ...additions]);
+          }}
+        />
+      )}
+
       {addDay && (
         <AddPlanMealDialog
           day={addDay}
@@ -307,6 +357,181 @@ function AddPlanMealDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function GeneratePlanDialog({
+  weekStart,
+  saving,
+  onClose,
+  onAdd,
+}: {
+  weekStart: string;
+  saving: boolean;
+  onClose: () => void;
+  onAdd: (drafts: DraftMeal[]) => void;
+}) {
+  const [mealCount, setMealCount] = useState('4');
+  const [slot, setSlot] = useState<PlanEntry['slot']>('meal');
+  const [proteins, setProteins] = useState<Set<ProteinTag>>(new Set());
+  const [options, setOptions] = useState<{ proteinTags: ProteinTag[]; candidates: { mains: number; sides: number } } | null>(null);
+  const [drafts, setDrafts] = useState<DraftMeal[] | null>(null);
+  const [seed, setSeed] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api<{ proteinTags: ProteinTag[]; candidates: { mains: number; sides: number } }>('/api/meal-plan/generate/options')
+      .then(setOptions)
+      .catch(() => setError('Could not load generator options'));
+  }, []);
+
+  async function generate(count: number, nextSeed: number, dates?: string[], avoid?: string[]): Promise<DraftMeal[]> {
+    const result = await api<{ seed: number; meals: Array<{ localDate: string; slot: PlanEntry['slot']; main: GeneratedCandidate; side: GeneratedCandidate | null }> }>(
+      '/api/meal-plan/generate',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          mealCount: count,
+          proteins: [...proteins],
+          slot,
+          week: weekStart,
+          dates,
+          seed: nextSeed,
+          avoidFoodIds: avoid ?? [],
+        }),
+      },
+    );
+    setSeed(result.seed + 1);
+    return result.meals.map((meal) => ({ ...meal, include: true }));
+  }
+
+  async function runGenerate(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const count = Math.max(1, Math.min(31, Number(mealCount) || 1));
+      setDrafts(await generate(count, seed));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Generation failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rerollMeal(index: number): Promise<void> {
+    if (!drafts) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const others = drafts.flatMap((meal, i) => i === index ? [] : [meal.main.foodId, meal.side?.foodId].filter((id): id is string => Boolean(id)));
+      const replacement = await generate(1, seed, [drafts[index]!.localDate], [...others, drafts[index]!.main.foodId, drafts[index]!.side?.foodId ?? ''].filter(Boolean));
+      const next = [...drafts];
+      next[index] = { ...replacement[0]!, include: drafts[index]!.include };
+      setDrafts(next);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Re-roll failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const included = drafts?.filter((meal) => meal.include) ?? [];
+
+  return (
+    <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
+      <div className="card plan-dialog generate-dialog" onClick={(event) => event.stopPropagation()}>
+        <h2>Generate meals</h2>
+        <div className="form-row-2">
+          <label>
+            Meals
+            <input type="number" min={1} max={31} value={mealCount} onChange={(event) => setMealCount(event.target.value)} />
+          </label>
+          <label>
+            Slot
+            <select value={slot} onChange={(event) => setSlot(event.target.value as PlanEntry['slot'])}>
+              <option value="meal">Meal</option>
+              <option value="snack">Snack</option>
+              <option value="dessert">Dessert</option>
+              <option value="drink">Drink</option>
+            </select>
+          </label>
+        </div>
+        <fieldset className="protein-tags-field">
+          <legend className="muted">Proteins (any of — none selected = all)</legend>
+          <div className="protein-tags-row">
+            {PROTEIN_TAGS.map((tag) => (
+              <label key={tag} className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={proteins.has(tag)}
+                  onChange={(event) => {
+                    const next = new Set(proteins);
+                    if (event.target.checked) next.add(tag); else next.delete(tag);
+                    setProteins(next);
+                  }}
+                />
+                <span>{tag}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {options && (
+          <p className="muted">
+            {options.candidates.mains} mains · {options.candidates.sides} sides in the library
+          </p>
+        )}
+        {error && <p className="notice">{error}</p>}
+        {drafts && (
+          <ul className="generate-drafts">
+            {drafts.map((meal, index) => (
+              <li key={`${meal.localDate}-${index}`} className="generate-draft">
+                <label className="checkbox-inline">
+                  <input
+                    type="checkbox"
+                    checked={meal.include}
+                    onChange={(event) => {
+                      const next = [...drafts];
+                      next[index] = { ...meal, include: event.target.checked };
+                      setDrafts(next);
+                    }}
+                  />
+                </label>
+                <div className="generate-draft-body">
+                  <strong>{formatDisplayDate(meal.localDate, 'mdy')}</strong>
+                  <span className="muted">{meal.main.name}{meal.side ? ` + ${meal.side.name}` : ''}</span>
+                  {meal.main.proteinTags.length > 0 && <span className="muted"> · {meal.main.proteinTags.join(', ')}</span>}
+                </div>
+                <button type="button" className="linkish" disabled={busy} onClick={() => void rerollMeal(index)}>
+                  Re-roll
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="row">
+          <button type="button" onClick={onClose}>Cancel</button>
+          {!drafts ? (
+            <button type="button" className="primary" disabled={busy || !options} aria-busy={busy} onClick={() => void runGenerate()}>
+              {busy ? 'Generating…' : 'Generate'}
+            </button>
+          ) : (
+            <>
+              <button type="button" disabled={busy} onClick={() => void runGenerate()}>Re-generate</button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || saving || included.length === 0}
+                aria-busy={saving}
+                onClick={() => onAdd(included)}
+              >
+                {saving ? 'Saving…' : `Add ${included.length} meal${included.length === 1 ? '' : 's'} to plan`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
