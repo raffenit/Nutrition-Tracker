@@ -231,6 +231,8 @@ export function reconcileAmountWithDailyValue(cell: string, dailyValue: number):
   }
   const fits = (amount: number) => Math.abs((amount / dailyValue) * 100 - percent) <= Math.max(1.5, percent * 0.1);
   if (fits(Number(literal))) return Number(literal);
+  // A thin leading "1" is easy to lose ("lg 4%" for "11g 4%", "10mg 5%" for "110mg 5%").
+  if (!literal.includes('.')) options.add(Number(`1${literal}`));
   const matches = [...options].filter((amount) => amount > 0 && fits(amount));
   return matches.length === 1 ? matches[0]! : null;
 }

@@ -114,3 +114,10 @@ test('T beside a 1-glyph before a unit reads as 11', () => {
   assert.equal(normalizeCellDigits('Tig 4%'), '11g 4%');
   assert.equal(normalizeCellDigits('Tlg'), '11g');
 });
+
+test('%DV restores a lost leading 1 only when the read amount does not fit', () => {
+  assert.equal(reconcileAmountWithDailyValue('lg 4%', 275), 11);
+  assert.equal(reconcileAmountWithDailyValue('10mg 5%', 2300), 110);
+  assert.equal(reconcileAmountWithDailyValue('10mg 0%', 2300), 10);
+  assert.equal(reconcileAmountWithDailyValue('1g 4%', 28), 1);
+});
