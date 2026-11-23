@@ -256,6 +256,21 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
     }
     return dark / height;
   };
+  // A printed separator runs the full slice height; a tall digit near the edge ("1g") does not.
+  const spansHeight = (x: number): boolean => {
+    let longest = 0;
+    let run = 0;
+    for (let y = 0; y < height; y += 1) {
+      let dark = false;
+      for (let dx = -1; dx <= 1 && !dark; dx += 1) {
+        const xx = x + dx;
+        if (xx >= 0 && xx < width && data[y * width + xx]! < darkLevel) dark = true;
+      }
+      run = dark ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    return longest >= height * 0.9;
+  };
 
   for (const [zoneStart, zoneEnd, step] of [
     [0, Math.min(scan, width), 1],
@@ -275,7 +290,7 @@ export async function stripRowBandSliceEdgeRules(png: Buffer): Promise<Buffer> {
       runLength = 0;
     };
     for (let x = zoneStart; step === 1 ? x < zoneEnd : x > zoneEnd; x += step) {
-      if (darkFracAt(x) >= minDarkFrac) {
+      if (darkFracAt(x) >= minDarkFrac && spansHeight(x)) {
         if (runStart < 0) runStart = x;
         runLength += 1;
       } else {
