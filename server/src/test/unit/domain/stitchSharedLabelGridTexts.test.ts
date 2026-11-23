@@ -331,3 +331,10 @@ test('a Daily Value header with a digit misread inside it does not block a unitl
     ['% Daily Va1ue', '140', '9g 12%'],
   );
 });
+
+test('a Daily Value header merged with an amount still counts as an amount above the band', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['% Daily Va1ue 39g 50%', 'A', '3g 15%'], ['% Daily Value 39g 50%', '50', '3g 15%']),
+    ['% Daily Va1ue 39g 50%', 'A', '3g 15%'],
+  );
+});
