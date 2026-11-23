@@ -95,8 +95,16 @@ export function createImportProgressRunner(
 
   function startServerPoll(jobId: string): void {
     stopPoll?.();
+    // Dedupe snapshots: the poll fires ~2x/sec but job state only changes on
+    // real step/message/activity updates (elapsed seconds excluded from the
+    // key so the timer still ticks once per second).
+    let lastKey = '';
     stopPoll = pollImportJob(jobId, (snapshot) => {
       serverDriven = true;
+      const { elapsedMs: _elapsedMs, updatedAt: _updatedAt, ...stable } = snapshot as Record<string, unknown>;
+      const key = `${JSON.stringify(stable)}|${Math.floor((snapshot.elapsedMs ?? 0) / 1000)}`;
+      if (key === lastKey) return;
+      lastKey = key;
       setImportProgress(snapshotToProgress(snapshot));
     });
   }
@@ -122,9 +130,15 @@ export function createImportProgressRunner(
     try {
       const body = new FormData();
       body.set('file', file);
+      // XHR progress fires per network chunk (hundreds of events on big
+      // uploads); throttle UI updates so the progress card doesn't flicker.
+      let lastUploadPublish = 0;
       const result = await apiFormUpload<T>('/api/uploads', body, (loaded, total) => {
         if (total <= 0) return;
         const pct = Math.min(100, Math.round((loaded / total) * 100));
+        const now = Date.now();
+        if (loaded < total && now - lastUploadPublish < 150) return;
+        lastUploadPublish = now;
         if (loaded >= total) {
           if (!processingStarted) {
             processingStarted = true;
