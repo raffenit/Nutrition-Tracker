@@ -24,6 +24,7 @@ import { scoreLabelExtraction } from '../domain/labelSlots.js';
 import { stitchColumnStripOcrTexts } from '../domain/stitchColumnStripTexts.js';
 import {
   diagnoseSharedLabelGridStitch,
+  fillUnreadSlicesFromAlternateRead,
   formatSharedLabelStitchFailure,
   stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
@@ -1114,7 +1115,17 @@ async function ocrSharedLabelGridColumns(
         const easyTexts = perJob[index] ?? [];
         if (easyTexts.length === 0) continue;
         const merged = bestStructuredColumnRead(job.current, easyTexts);
-        if (!merged.easyWon) continue;
+        if (!merged.easyWon) {
+          const target = job.sliceTarget;
+          const slices = target?.kind === 'value' ? rowBandSliceTexts?.valueSlices[target.index] : undefined;
+          if (target && slices && rowBandSliceTexts) {
+            rowBandSliceTexts.valueSlices[target.index] = fillUnreadSlicesFromAlternateRead(
+              slices,
+              easyTexts[0]!.split('\n'),
+            );
+          }
+          continue;
+        }
         easyWins += 1;
         job.assign(merged.text);
         if (job.sliceTarget && rowBandSliceTexts && job.sliceTarget.count > 0) {

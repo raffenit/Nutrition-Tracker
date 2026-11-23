@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { parseMultiProductLabelTable } from '../../../domain/parseMultiProductLabelTable.js';
 import {
   diagnoseSharedLabelGridStitch,
+  fillUnreadSlicesFromAlternateRead,
   stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
 } from '../../../domain/stitchSharedLabelGridTexts.js';
@@ -189,4 +190,18 @@ test('stitchSharedLabelGridFromRowBandSlices keeps column positions when a middl
   assert.equal(cols![1]!.nutrients.fat, 0);
   assert.equal(cols![2]!.nutrients.fat, 7);
   assert.equal(cols![2]!.nutrients.protein, 5);
+});
+
+test('alternate row read fills only digitless slices next to an agreeing neighbour', () => {
+  const primary = ['80', 'oz Daily Value', 'A', '29 10%', '0g', 'Omg 0%'];
+  const alternate = ['80', '% Dally Walue:', '39 4%', '29 10%', '9g', 'Omg 0%'];
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, alternate), [
+    '80', 'oz Daily Value', '39 4%', '29 10%', '0g', 'Omg 0%',
+  ]);
+});
+
+test('alternate row read is ignored where neighbours disagree or it is shorter', () => {
+  const primary = ['A', '3g 15%', '0g'];
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%', '0g', '<5mg 0%']), primary);
+  assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%']), primary);
 });

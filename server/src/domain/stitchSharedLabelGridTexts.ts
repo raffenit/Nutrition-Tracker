@@ -506,3 +506,25 @@ export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Arr
   }
   return out;
 }
+
+function leadingNumber(text: string): string | null {
+  return text.match(/\d+(?:\.\d+)?/)?.[0] ?? null;
+}
+
+/**
+ * A row-aligned second read (EasyOCR in row mode emits one line per band) fills only the
+ * slices the primary read left without digits, and only where a neighbouring slice agrees
+ * between the two reads, so a misaligned alternate can't move values between rows.
+ */
+export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: string[]): string[] {
+  if (alternate.length < primary.length) return primary;
+  const agrees = (i: number) =>
+    i >= 0 && i < primary.length && leadingNumber(primary[i]!) !== null &&
+    leadingNumber(primary[i]!) === leadingNumber(alternate[i]!);
+  return primary.map((slice, i) => {
+    if (/\d/.test(slice) || dailyValueTextInSlice(slice)) return slice;
+    const candidate = alternate[i]!.trim();
+    if (!/\d/.test(candidate) || dailyValueTextInSlice(candidate)) return slice;
+    return agrees(i - 1) || agrees(i + 1) ? candidate : slice;
+  });
+}
