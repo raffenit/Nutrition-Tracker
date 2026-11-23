@@ -73,6 +73,7 @@ type ImportResult = {
   warning: string | null;
   fieldReview?: ImportFieldReviewMap;
   recipeCard?: RecipeCardImport | null;
+  recipeCards?: RecipeCardImport[];
   labelPanels?: LabelPanelImport[];
 };
 
@@ -637,6 +638,9 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [instructions, setInstructions] = useState('');
   const [labelNutrients, setLabelNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [bookletCards, setBookletCards] = useState<RecipeCardImport[]>([]);
+  const [bookletIndex, setBookletIndex] = useState(0);
+  const [bookletSaved, setBookletSaved] = useState<number[]>([]);
   const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
   const recipeImportRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
   const { busy: recipeSaveBusy, run: runRecipeSave } = useAsyncAction();
@@ -743,43 +747,61 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     });
   }
 
+  function loadRecipeCard(card: RecipeCardImport, status: string | null): void {
+    setName(card.name);
+    const importedBrand = card.brand ?? '';
+    setBrand(importedBrand);
+    setMakesServings(String(card.makesServings));
+    setInstructions(card.instructions);
+    setLabelNutrients(card.nutrients);
+    setProteinTags([]);
+    const importedLines: RecipeEditorLine[] = card.ingredients.map((line) => ({
+      foodId: null,
+      name: line.name,
+      servings: line.servings,
+      servingLabel: '1 item',
+      componentRole: null,
+      shopEquivalentFoodId: null,
+      shopEquivalentLabel: '',
+    }));
+    setLines(importedLines);
+    void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then(({ ecosystems: ecos }) => {
+      setEcosystems(ecos);
+      const brandMatch = importedBrand
+        ? ecos.find((eco) => eco.name.localeCompare(importedBrand, undefined, { sensitivity: 'accent' }) === 0)
+        : undefined;
+      if (brandMatch) {
+        setMealKitEcosystemId(brandMatch.id);
+        void applyEcosystemMappings(brandMatch.id, importedLines).then((mapped) => {
+          setLines(mapped);
+          setImportStatus(status ?? 'Recipe card imported — kit sheet applied.');
+        });
+      } else {
+        setMealKitEcosystemId(null);
+        setImportStatus(status ?? 'Recipe card imported — pick a meal-kit ecosystem to apply your reference sheet.');
+      }
+    });
+  }
+
   function applyRecipeImport(result: ImportResult): void {
-    if (result.recipeCard) {
-      const card = result.recipeCard;
-      setName(card.name);
-      const importedBrand = card.brand ?? '';
-      setBrand(importedBrand);
-      setMakesServings(String(card.makesServings));
-      setInstructions(card.instructions);
-      setLabelNutrients(card.nutrients);
-      const importedLines: RecipeEditorLine[] = card.ingredients.map((line) => ({
-        foodId: null,
-        name: line.name,
-        servings: line.servings,
-        servingLabel: '1 item',
-        componentRole: null,
-        shopEquivalentFoodId: null,
-        shopEquivalentLabel: '',
-      }));
-      void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then(({ ecosystems: ecos }) => {
-        setEcosystems(ecos);
-        const brandMatch = importedBrand
-          ? ecos.find((eco) => eco.name.localeCompare(importedBrand, undefined, { sensitivity: 'accent' }) === 0)
-          : undefined;
-        if (brandMatch) {
-          setMealKitEcosystemId(brandMatch.id);
-          void applyEcosystemMappings(brandMatch.id, importedLines).then((mapped) => {
-            setLines(mapped);
-            setImportStatus(result.warning ?? 'Recipe card imported — kit sheet applied.');
-          });
-        } else {
-          setLines(importedLines);
-          setImportStatus(result.warning ?? 'Recipe card imported — pick a meal-kit ecosystem to apply your reference sheet.');
-        }
-      });
+    const cards = result.recipeCards && result.recipeCards.length > 0
+      ? result.recipeCards
+      : result.recipeCard ? [result.recipeCard] : [];
+    setBookletCards(cards.length > 1 ? cards : []);
+    setBookletIndex(0);
+    setBookletSaved([]);
+    if (cards.length > 0) {
+      loadRecipeCard(cards[0]!, result.warning);
       return;
     }
     setImportStatus(result.warning ?? 'No recipe sections found in that file.');
+  }
+
+  function selectBookletCard(index: number): void {
+    const card = bookletCards[index];
+    if (!card) return;
+    setBookletIndex(index);
+    loadRecipeCard(card, `Recipe ${index + 1} of ${bookletCards.length} loaded.`);
   }
 
   function linkLineNutrition(index: number, food: Food): void {
@@ -846,6 +868,20 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       } else {
         await api('/api/foods/compose', { method: 'POST', body: JSON.stringify(payload) });
       }
+      if (!editId && bookletCards.length > 1) {
+        const saved = [...new Set([...bookletSaved, bookletIndex])];
+        setBookletSaved(saved);
+        const nextIndex = bookletCards.findIndex((_card, index) => !saved.includes(index));
+        if (nextIndex >= 0) {
+          setBookletIndex(nextIndex);
+          loadRecipeCard(
+            bookletCards[nextIndex]!,
+            `Saved “${name}”. Loaded recipe ${nextIndex + 1} of ${bookletCards.length} — ${bookletCards.length - saved.length} left.`,
+          );
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+      }
       navigate('/library?shelf=recipes');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save');
@@ -886,6 +922,18 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         </button>
         {importProgress && <ImportProgress progress={importProgress} />}
         {importStatus && !importProgress && <p className="muted">{importStatus}</p>}
+        {bookletCards.length > 1 && !importProgress && (
+          <label className="recipe-booklet-picker">
+            Recipe from this booklet ({bookletSaved.length} of {bookletCards.length} saved)
+            <select value={bookletIndex} onChange={(event) => selectBookletCard(Number(event.target.value))}>
+              {bookletCards.map((card, index) => (
+                <option key={`${index}-${card.name}`} value={index}>
+                  {index + 1}. {card.name}{bookletSaved.includes(index) ? ' ✓ saved' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </section>
 
       <section className="card form-section">
