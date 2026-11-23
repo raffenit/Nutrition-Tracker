@@ -273,3 +273,14 @@ test('a bare number with no unit or %DV does not fill an unread slice', () => {
     ['0mg 0%', 'lOmg', '25g 9%'],
   );
 });
+
+test('the band below an inferred Protein row is kept for a column read one row low', () => {
+  const labelSlices = ['Calories', 'Total Fat', 'Sodium', 'Total Carbohydrate', 'Total Sugars', 'Includes Added Sugars', 'Prte1n', ''];
+  const valueSlices = [
+    ['90', '5g 6%', '120mg 5%', '20g 7%', '10g', '8g 16%', '2g', ''],
+    ['110', '6g 8%', '', '140mg 6%', '22g 8%', '12g', '10g 20%', '3g'],
+  ];
+  const stitched = stitchSharedLabelGridFromRowBandSlices(labelSlices, valueSlices, 'Snack A    Snack B');
+  assert.match(stitched!, /^Protein\b/im);
+  assert.match(stitched!, /^next band\n.*3g/im);
+});

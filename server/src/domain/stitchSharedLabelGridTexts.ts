@@ -251,7 +251,7 @@ export function stitchSharedLabelGridFromRowBandSlices(
 
     seenRows.add(key);
     rowBlocks.push({ label: rowLabel, values });
-    proteinBand = rowLabel === 'protein' ? i : proteinBand;
+    proteinBand = key === 'protein' ? i : proteinBand;
   }
   const nextBand = proteinBand + 1;
   if (proteinBand >= 0 && nextBand < bandCount && !bandLabels[nextBand]) {
