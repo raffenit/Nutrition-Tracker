@@ -28,7 +28,7 @@ async function fullWidth(bytes: Buffer): Promise<number> {
 
 test(
   'local focus fixture matrix: incidental blur crops, variety pack does not',
-  { skip: !existsSync(path.join(localImagesDir, FIXTURES.incidentalBlur)) },
+  { skip: !existsSync(path.join(localImagesDir, FIXTURES.incidentalBlur)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     for (const [label, file] of Object.entries(FIXTURES)) {
       const filePath = path.join(localImagesDir, file);

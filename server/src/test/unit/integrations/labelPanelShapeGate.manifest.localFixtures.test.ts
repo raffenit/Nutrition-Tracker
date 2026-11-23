@@ -19,7 +19,7 @@ const tessCache = path.join(repoRoot, 'data', 'tesseract-cache');
 
 test(
   'manifest panelShapeGate expectations match local test images',
-  { skip: !existsSync(manifestPath) },
+  { skip: !existsSync(manifestPath) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as TestImageManifest;
     const failures: string[] = [];

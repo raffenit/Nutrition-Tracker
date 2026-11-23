@@ -91,7 +91,7 @@ test('loadGlareGroundTruthForImage matches basename', async () => {
 
 test(
   'Costco glare ground truth resolves row targets for columns 4 and 8',
-  { skip: !existsSync(path.join(repoRoot, 'local/test-images/costco-candy.jpg')) },
+  { skip: !existsSync(path.join(repoRoot, 'local/test-images/costco-candy.jpg')) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const { prepareVarietyPackBandContext, runVarietyPackGridPipeline } = await import(
       '../../../integrations/varietyPackGridPipeline.js'

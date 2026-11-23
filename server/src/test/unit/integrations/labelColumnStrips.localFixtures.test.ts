@@ -28,7 +28,7 @@ const FIXTURES = {
 
 test(
   'local shared-label multi-value photo separates into multiple column strips',
-  { skip: !existsSync(path.join(localImagesDir, FIXTURES.sharedLabelMultiValue)) },
+  { skip: !existsSync(path.join(localImagesDir, FIXTURES.sharedLabelMultiValue)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(path.join(localImagesDir, FIXTURES.sharedLabelMultiValue));
     const hint = await inferLabelLayoutHint(bytes);
@@ -43,7 +43,7 @@ test(
 
 test(
   'local portrait label does not run wide column-strip detection',
-  { skip: !existsSync(path.join(localImagesDir, FIXTURES.singlePortrait)) },
+  { skip: !existsSync(path.join(localImagesDir, FIXTURES.singlePortrait)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(path.join(localImagesDir, FIXTURES.singlePortrait));
     const hint = await inferLabelLayoutHint(bytes);
@@ -54,7 +54,7 @@ test(
 
 test(
   'local two-product wide photo does not yield a parseable multi-column import',
-  { skip: !existsSync(path.join(localImagesDir, FIXTURES.splitSingle)) },
+  { skip: !existsSync(path.join(localImagesDir, FIXTURES.splitSingle)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(path.join(localImagesDir, FIXTURES.splitSingle));
     const tess = await import('node:os').then((os) => os.tmpdir());

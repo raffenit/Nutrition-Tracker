@@ -246,7 +246,7 @@ test('separateSharedLabelValueTexts drops label-rail OCR bleed', () => {
 
 test(
   'Costco snapshot first value strip is product column (not label bleed)',
-  { skip: !existsSync(costcoSnapshotPath) },
+  { skip: !existsSync(costcoSnapshotPath) && 'missing server/src/test/fixtures/costcoCandySharedLabelOcr.snapshot.json (generated OCR snapshot)' },
   async () => {
     const snap = JSON.parse(await readFile(costcoSnapshotPath, 'utf8')) as {
       labelColumnText: string;

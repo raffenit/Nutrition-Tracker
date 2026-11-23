@@ -25,7 +25,7 @@ const hasManifest = existsSync(manifestPath);
 
 test(
   'local test-images manifest matches variety pack pipeline ground truth',
-  { skip: !hasManifest },
+  { skip: !hasManifest && 'missing local/test-images/manifest.json (host-specific, gitignored)' },
   async () => {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as TestImageManifest;
     const failures: string[] = [];

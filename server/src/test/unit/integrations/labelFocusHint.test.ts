@@ -16,7 +16,7 @@ const localImagesDir = path.join(repoRoot, 'local', 'test-images');
 
 test(
   'ice cream photo reads as single subject in focus',
-  { skip: !existsSync(path.join(localImagesDir, LOCAL_SPLIT_SINGLE_JPG)) },
+  { skip: !existsSync(path.join(localImagesDir, LOCAL_SPLIT_SINGLE_JPG)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(path.join(localImagesDir, LOCAL_SPLIT_SINGLE_JPG));
     const focus = await inferDepthOfFieldHint(bytes);
@@ -31,7 +31,7 @@ test(
 
 test(
   'variety pack (shared rail) reads as wide in-focus table',
-  { skip: !existsSync(path.join(localImagesDir, LOCAL_SHARED_LABEL_MULTI_VALUE_JPG)) },
+  { skip: !existsSync(path.join(localImagesDir, LOCAL_SHARED_LABEL_MULTI_VALUE_JPG)) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(path.join(localImagesDir, LOCAL_SHARED_LABEL_MULTI_VALUE_JPG));
     const focus = await inferDepthOfFieldHint(bytes);

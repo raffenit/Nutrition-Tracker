@@ -100,7 +100,7 @@ test('stage report: mis-indexed values block at parse_macros (stitch can still s
 
 test(
   'Costco candy OCR snapshot: row-band geometry yields numeric calories per column',
-  { skip: !existsSync(costcoSnapshotPath) },
+  { skip: !existsSync(costcoSnapshotPath) && 'missing server/src/test/fixtures/costcoCandySharedLabelOcr.snapshot.json (generated OCR snapshot)' },
   async () => {
     const snap = JSON.parse(await readFile(costcoSnapshotPath, 'utf8')) as {
       labelColumnText: string;

@@ -17,7 +17,7 @@ const imagePath = path.join(repoRoot, 'local', 'test-images', LOCAL_SINGLE_PANEL
 
 test(
   'gated portrait crop keeps full Nutrition Facts on protein-shake',
-  { skip: !existsSync(imagePath) },
+  { skip: !existsSync(imagePath) && 'missing local/test-images photo fixture (host-specific, gitignored)' },
   async () => {
     const bytes = await readFile(imagePath);
     const hint = await inferLabelLayoutHint(bytes);
