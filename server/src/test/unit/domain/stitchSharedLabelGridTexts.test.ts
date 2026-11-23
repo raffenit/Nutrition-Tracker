@@ -4,6 +4,7 @@ import { parseMultiProductLabelTable } from '../../../domain/parseMultiProductLa
 import {
   diagnoseSharedLabelGridStitch,
   fillUnreadSlicesFromAlternateRead,
+  splitMergedDailyValueHeaderSlices,
   stitchSharedLabelGridFromRowBandSlices,
   stitchSharedLabelGridTexts,
 } from '../../../domain/stitchSharedLabelGridTexts.js';
@@ -204,4 +205,25 @@ test('alternate row read is ignored where neighbours disagree or it is shorter',
   const primary = ['A', '3g 15%', '0g'];
   assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%', '0g', '<5mg 0%']), primary);
   assert.deepEqual(fillUnreadSlicesFromAlternateRead(primary, ['9g 12%']), primary);
+});
+
+test('a Fat amount merged into the % Daily Value band moves down and shifts its column', () => {
+  const columns = [
+    ['80', '% Daily Value*', '3g 4%', '2g 10%', '0g'],
+    ['160', '9g %Dally Value _ 12%', '3g 15%', '0g', '<5mg 0%'],
+    ['130', '% Daily Valuer', '4g 5%', '2.5g 13%', '0g'],
+  ];
+  const out = splitMergedDailyValueHeaderSlices(columns);
+  assert.deepEqual(out[0], columns[0]);
+  assert.deepEqual(out[1], ['160', '%Dally Value _ 12%', '9g 12%', '3g 15%', '0g']);
+  assert.deepEqual(out[2], columns[2]);
+});
+
+test('header split needs most columns to agree on the header band', () => {
+  const columns = [
+    ['80', '3g 4%'],
+    ['160', '9g %Dally Value _ 12%'],
+    ['130', '4g 5%'],
+  ];
+  assert.deepEqual(splitMergedDailyValueHeaderSlices(columns), columns);
 });

@@ -200,6 +200,7 @@ export function stitchSharedLabelGridFromRowBandSlices(
   stitchOptions?: SharedLabelStitchOptions,
 ): string | null {
   if (valueSliceTextsPerColumn.length < 2 || labelSliceTexts.length === 0) return null;
+  valueSliceTextsPerColumn = splitMergedDailyValueHeaderSlices(valueSliceTextsPerColumn);
 
   const columnCount = valueSliceTextsPerColumn.length;
   const names =
@@ -526,5 +527,35 @@ export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: 
     const candidate = alternate[i]!.trim();
     if (!/\d/.test(candidate) || dailyValueTextInSlice(candidate)) return slice;
     return agrees(i - 1) || agrees(i + 1) ? candidate : slice;
+  });
+}
+
+/** "% Daily Value" as OCR tends to garble it ("%Dally Valu", "% Daily Walue"). */
+const FUZZY_DAILY_VALUE = /%\s*d[a-z]{2,4}\s*[vw][a-z]{2,4}/i;
+const LEADING_AMOUNT = /^\s*(<?\s*\d+(?:\.\d+)?\s*m?g)\b/i;
+
+/**
+ * A curved column whose first row crop swallowed the "% Daily Value" header reads the Fat
+ * amount on the header band ("9g %Dally Value 12%") and every later row one band early.
+ * When most columns put the header on one band, split such a slice: the amount (and its
+ * trailing %DV) moves to the next band and the rest of that column shifts down one band.
+ */
+export function splitMergedDailyValueHeaderSlices(columns: string[][]): string[][] {
+  const bandCount = Math.max(0, ...columns.map((col) => col.length));
+  let headerBand = -1;
+  for (let i = 0; i < bandCount && headerBand < 0; i += 1) {
+    const hits = columns.filter((col) => FUZZY_DAILY_VALUE.test(col[i] ?? '')).length;
+    if (hits * 2 > columns.length) headerBand = i;
+  }
+  if (headerBand < 0) return columns;
+  return columns.map((col) => {
+    const slice = col[headerBand] ?? '';
+    const amount = slice.match(LEADING_AMOUNT)?.[1];
+    if (!amount || !FUZZY_DAILY_VALUE.test(slice)) return col;
+    const percent = slice.match(/(\d{1,3})\s*%\s*$/)?.[1];
+    const moved = percent ? `${amount} ${percent}%` : amount;
+    const header = slice.replace(LEADING_AMOUNT, '').trim();
+    const shifted = [...col.slice(0, headerBand), header, moved, ...col.slice(headerBand + 1)];
+    return shifted.slice(0, col.length);
   });
 }
