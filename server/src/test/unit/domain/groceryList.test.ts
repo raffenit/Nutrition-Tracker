@@ -21,6 +21,7 @@ const yogurt: Food = {
   sourceRef: null,
   instructions: null,
   mealKitEcosystemId: null,
+  proteinTags: [],
   ingredients: [],
 };
 
@@ -41,11 +42,13 @@ const chili: Food = {
   sourceRef: null,
   instructions: null,
   mealKitEcosystemId: null,
+  proteinTags: [],
   ingredients: [{
     name: 'Greek yogurt',
     servings: 2,
     sourceRef: null,
     childFoodId: 'y1',
+    componentRole: null,
     shopEquivalentFoodId: null,
     shopEquivalentLabel: null,
   }],
@@ -56,6 +59,7 @@ const kitSauceLine = {
   servings: 1,
   sourceRef: null,
   childFoodId: null as string | null,
+  componentRole: null as 'main' | 'side' | null,
   shopEquivalentFoodId: 'y1',
   shopEquivalentLabel: null as string | null,
 };
@@ -90,6 +94,7 @@ test('aggregateGroceryLineItems parses oz quantities from ingredient text', () =
       servings: 1,
       sourceRef: null,
       childFoodId: null,
+      componentRole: null,
       shopEquivalentFoodId: null,
       shopEquivalentLabel: null,
     }],
@@ -112,6 +117,7 @@ test('aggregateGroceryLineItems resolves ecosystem sheet without per-recipe equi
       servings: 1,
       sourceRef: null,
       childFoodId: null,
+      componentRole: null,
       shopEquivalentFoodId: null,
       shopEquivalentLabel: null,
     }],

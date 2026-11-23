@@ -58,11 +58,27 @@ export type HydrationEntry = {
   label: string;
 };
 
+export const PROTEIN_TAGS = [
+  'chicken',
+  'turkey',
+  'beef',
+  'pork',
+  'fish',
+  'shellfish',
+  'tofu',
+  'eggs',
+  'dairy',
+  'legumes',
+] as const;
+
+export type ProteinTag = (typeof PROTEIN_TAGS)[number];
+
 export type IngredientLine = {
   name: string;
   servings: number;
   sourceRef: string | null;
   childFoodId: string | null;
+  componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string | null;
 };
@@ -93,6 +109,7 @@ export type Food = {
   sourceRef: string | null;
   instructions: string | null;
   mealKitEcosystemId: string | null;
+  proteinTags: string[];
   ingredients: IngredientLine[];
 };
 

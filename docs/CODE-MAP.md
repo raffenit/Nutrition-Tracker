@@ -141,6 +141,7 @@ Shell / nav: `web/src/components/AppShell.tsx`.
 | Weight reminders | `server/src/domain/weight.ts` |
 | Diet templates | `server/src/domain/dietPresets.ts` |
 | Grocery from meal plan | `server/src/domain/groceryList.ts` |
+| Meal-plan shuffle (protein tags, main/side parts) | `server/src/domain/mealPlanGenerate.ts`, `server/src/domain/proteinTags.ts` |
 | Goal alerts | `server/src/domain/alerts.ts`, `server/src/db/alerts.ts`, `web/src/components/GoalAlertBanners.tsx` |
 | Timezone / local dates | `server/src/domain/time.ts` |
 

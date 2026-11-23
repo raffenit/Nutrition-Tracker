@@ -36,7 +36,7 @@ import {
 } from '../nutrientUnits';
 import { supportsNativeLabelCamera } from '../lib/cameraCapture';
 import { DecimalInput } from '../components/DecimalInput';
-import { EMPTY_NUTRIENTS, type Food, type MultiLabelImportDefault, type Nutrients, type Session } from '../types';
+import { EMPTY_NUTRIENTS, PROTEIN_TAGS, type Food, type MultiLabelImportDefault, type Nutrients, type ProteinTag, type Session } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
 
@@ -91,6 +91,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const [serving, setServing] = useState('1 serving');
   const [isDrink, setIsDrink] = useState(false);
   const [drinkMl, setDrinkMl] = useState('355');
+  const [proteinTags, setProteinTags] = useState<ProteinTag[]>([]);
   const [candidates, setCandidates] = useState<string[]>([]);
   const [menuItems, setMenuItems] = useState<Array<{ name: string; servingLabel: string; nutrients: Nutrients }>>([]);
   const [menuFilter, setMenuFilter] = useState('');
@@ -144,6 +145,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       });
       setIsDrink(food.isDrink);
       setDrinkMl(food.drinkMl ? String(food.drinkMl) : '355');
+      setProteinTags((food.proteinTags ?? []).filter((tag): tag is ProteinTag => (PROTEIN_TAGS as readonly string[]).includes(tag)));
       setLoading(false);
     }).catch(() => setSaveError('Could not load this food'));
   }, [editId]);
@@ -372,6 +374,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       isDrink,
       drinkMl: isDrink ? Number(drinkMl) : null,
       isFavorite: false,
+      proteinTags,
       source,
       uploadId: uploadId ?? undefined,
     };
@@ -558,6 +561,21 @@ function FoodEditor({ editId }: { editId: string | null }) {
               <span>Counts as a drink (hydration)</span>
             </label>
             {isDrink && <label>Volume (ml)<input value={drinkMl} onChange={(event) => setDrinkMl(event.target.value)} /></label>}
+            <fieldset className="protein-tags-field">
+              <legend className="muted">Protein tags (for meal-plan shuffling)</legend>
+              <div className="protein-tags-row">
+                {PROTEIN_TAGS.map((tag) => (
+                  <label key={tag} className="checkbox-inline">
+                    <input
+                      type="checkbox"
+                      checked={proteinTags.includes(tag)}
+                      onChange={(event) => setProteinTags((prev) => event.target.checked ? [...prev, tag] : prev.filter((item) => item !== tag))}
+                    />
+                    <span>{tag}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </section>
 
           {missingExtraImportNotes(importFieldReview).length > 0 && (
@@ -604,6 +622,7 @@ type RecipeEditorLine = {
   name: string;
   servings: number;
   servingLabel: string;
+  componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string;
 };
@@ -612,6 +631,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [mealKitEcosystemId, setMealKitEcosystemId] = useState<string | null>(null);
+  const [proteinTags, setProteinTags] = useState<ProteinTag[]>([]);
   const [ecosystems, setEcosystems] = useState<MealKitEcosystem[]>([]);
   const [makesServings, setMakesServings] = useState('1');
   const [instructions, setInstructions] = useState('');
@@ -674,6 +694,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       setName(food.name);
       setBrand(food.brand ?? '');
       setMealKitEcosystemId(food.mealKitEcosystemId);
+      setProteinTags((food.proteinTags ?? []).filter((tag): tag is ProteinTag => (PROTEIN_TAGS as readonly string[]).includes(tag)));
       setMakesServings(String(food.makesServings));
       setInstructions(food.instructions ?? '');
       setLabelNutrients(food.nutrients);
@@ -685,6 +706,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         }
         const base = {
           servings: line.servings,
+          componentRole: line.componentRole ?? null,
           shopEquivalentFoodId: line.shopEquivalentFoodId,
           shopEquivalentLabel: shopLabel,
         };
@@ -714,6 +736,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         name: food.name,
         servings: 1,
         servingLabel: food.servingLabel,
+        componentRole: null,
         shopEquivalentFoodId: null,
         shopEquivalentLabel: '',
       }];
@@ -734,6 +757,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         name: line.name,
         servings: line.servings,
         servingLabel: '1 item',
+        componentRole: null,
         shopEquivalentFoodId: null,
         shopEquivalentLabel: '',
       }));
@@ -797,6 +821,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       name,
       brand: brand.trim() || null,
       mealKitEcosystemId,
+      proteinTags,
       kind: 'custom' as const,
       makesServings: Number(makesServings),
       servingLabel: '1 serving',
@@ -810,6 +835,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         name: line.name,
         servings: line.servings,
         foodId: line.foodId,
+        componentRole: line.componentRole,
         shopEquivalentFoodId: line.shopEquivalentFoodId,
         shopEquivalentLabel: line.shopEquivalentLabel.trim() || null,
       })),
@@ -892,6 +918,21 @@ function RecipeEditor({ editId }: { editId: string | null }) {
             Edit sheet
           </button>
         </p>
+        <fieldset className="protein-tags-field">
+          <legend className="muted">Protein tags (for meal-plan shuffling)</legend>
+          <div className="protein-tags-row">
+            {PROTEIN_TAGS.map((tag) => (
+              <label key={tag} className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={proteinTags.includes(tag)}
+                  onChange={(event) => setProteinTags((prev) => event.target.checked ? [...prev, tag] : prev.filter((item) => item !== tag))}
+                />
+                <span>{tag}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </section>
 
       <section className="card form-section">
@@ -938,6 +979,22 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                     }}
                   />
                   <span className="muted">× {line.servingLabel}</span>
+                </label>
+                <label className="recipe-ingredient-role">
+                  <span className="sr-only">Component role for {line.name}</span>
+                  <select
+                    value={line.componentRole ?? ''}
+                    aria-label={`Component role for ${line.name}`}
+                    onChange={(event) => {
+                      const next = [...lines];
+                      next[index] = { ...line, componentRole: (event.target.value || null) as 'main' | 'side' | null };
+                      setLines(next);
+                    }}
+                  >
+                    <option value="">Part</option>
+                    <option value="main">Main</option>
+                    <option value="side">Side</option>
+                  </select>
                 </label>
                 <RemoveButton label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))} />
               </div>

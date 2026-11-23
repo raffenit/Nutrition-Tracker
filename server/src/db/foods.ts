@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CoreNutrientUnits, Food, FoodKind, FoodSource, IngredientLine, Nutrients } from '../types.js';
+import { parseStoredComponentRole, parseStoredProteinTags, type ProteinTag } from '../domain/proteinTags.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS, readCoreNutrientUnits } from '../domain/nutrientUnits.js';
 import { parseStoredExtras } from '../domain/nutrients.js';
 import type { AppDatabase } from './database.js';
@@ -21,6 +22,7 @@ export type NewFood = {
   sourceRef: string | null;
   instructions: string | null;
   mealKitEcosystemId: string | null;
+  proteinTags: ProteinTag[];
   ingredients: IngredientLine[];
 };
 
@@ -43,6 +45,7 @@ type FoodSql = {
   makes_servings: number;
   servings_per_container: number | null;
   nutrient_units_json: string;
+  protein_tags_json: string;
   source: FoodSource;
   source_ref: string | null;
   instructions: string | null;
@@ -56,11 +59,11 @@ export function insertFood(db: AppDatabase, food: NewFood): Food {
       `INSERT INTO foods (
         id, created_by, name, brand, kind, serving_label, calories, protein, fiber, fat, carbs, sodium,
         extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json,
-        source, source_ref, instructions, meal_kit_ecosystem_id, created_at
+        protein_tags_json, source, source_ref, instructions, meal_kit_ecosystem_id, created_at
       ) VALUES (
         @id, @createdBy, @name, @brand, @kind, @servingLabel, @calories, @protein, @fiber, @fat, @carbs, @sodium,
         @extras, @isFavorite, @isDrink, @drinkMl, @makesServings, @servingsPerContainer, @nutrientUnitsJson,
-        @source, @sourceRef, @instructions, @mealKitEcosystemId, @createdAt
+        @proteinTagsJson, @source, @sourceRef, @instructions, @mealKitEcosystemId, @createdAt
       )`,
     ).run({ id, ...foodParams(food), createdAt: new Date().toISOString() });
     replaceIngredients(db, id, food.ingredients);
@@ -78,7 +81,8 @@ export function updateFood(db: AppDatabase, id: string, food: NewFood): Food | n
         calories = @calories, protein = @protein, fiber = @fiber, fat = @fat, carbs = @carbs, sodium = @sodium,
         extras_json = @extras, is_favorite = @isFavorite, is_drink = @isDrink, drink_ml = @drinkMl,
         makes_servings = @makesServings, servings_per_container = @servingsPerContainer,
-        nutrient_units_json = @nutrientUnitsJson, source = @source, source_ref = @sourceRef,
+        nutrient_units_json = @nutrientUnitsJson, protein_tags_json = @proteinTagsJson,
+        source = @source, source_ref = @sourceRef,
         instructions = @instructions, meal_kit_ecosystem_id = @mealKitEcosystemId
        WHERE id = @id`,
     ).run({ id, ...foodParams(food) });
@@ -121,6 +125,20 @@ export function listFoods(db: AppDatabase, query: string, shelf: FoodShelf = 'al
   return rows.map((row) => toFood(row, []));
 }
 
+/** Full foods including ingredient lines — for plan generation and rollups. */
+export function listFoodsWithIngredients(db: AppDatabase, shelf: FoodShelf = 'all'): Food[] {
+  return listFoodRows(db, shelf).map((row) => toFood(row, ingredientsFor(db, row.id)));
+}
+
+function listFoodRows(db: AppDatabase, shelf: FoodShelf): FoodSql[] {
+  const shelfSql = shelf === 'foods'
+    ? " AND kind != 'custom'"
+    : shelf === 'recipes'
+      ? " AND kind = 'custom'"
+      : '';
+  return db.prepare(`${FOOD_COLUMNS} FROM foods WHERE 1=1${shelfSql} ORDER BY is_favorite DESC, name COLLATE NOCASE LIMIT 500`).all() as FoodSql[];
+}
+
 function mustFood(db: AppDatabase, id: string): Food {
   const food = getFood(db, id);
   if (!food) throw new Error('Saved food could not be read back');
@@ -130,8 +148,8 @@ function mustFood(db: AppDatabase, id: string): Food {
 function replaceIngredients(db: AppDatabase, parentId: string, lines: IngredientLine[]): void {
   db.prepare('DELETE FROM food_ingredients WHERE parent_id = ?').run(parentId);
   const insert = db.prepare(
-    `INSERT INTO food_ingredients (id, parent_id, name, servings, source_ref, child_food_id, shop_equivalent_food_id, shop_equivalent_label)
-     VALUES (@id, @parentId, @name, @servings, @sourceRef, @childFoodId, @shopEquivalentFoodId, @shopEquivalentLabel)`,
+    `INSERT INTO food_ingredients (id, parent_id, name, servings, source_ref, child_food_id, component_role, shop_equivalent_food_id, shop_equivalent_label)
+     VALUES (@id, @parentId, @name, @servings, @sourceRef, @childFoodId, @componentRole, @shopEquivalentFoodId, @shopEquivalentLabel)`,
   );
   for (const line of lines) {
     insert.run({
@@ -141,6 +159,7 @@ function replaceIngredients(db: AppDatabase, parentId: string, lines: Ingredient
       servings: line.servings,
       sourceRef: line.sourceRef,
       childFoodId: line.childFoodId,
+      componentRole: line.componentRole,
       shopEquivalentFoodId: line.shopEquivalentFoodId,
       shopEquivalentLabel: line.shopEquivalentLabel,
     });
@@ -149,13 +168,14 @@ function replaceIngredients(db: AppDatabase, parentId: string, lines: Ingredient
 
 function ingredientsFor(db: AppDatabase, parentId: string): IngredientLine[] {
   const rows = db.prepare(
-    `SELECT name, servings, source_ref, child_food_id, shop_equivalent_food_id, shop_equivalent_label
+    `SELECT name, servings, source_ref, child_food_id, component_role, shop_equivalent_food_id, shop_equivalent_label
      FROM food_ingredients WHERE parent_id = ?`,
   ).all(parentId) as Array<{
     name: string;
     servings: number;
     source_ref: string | null;
     child_food_id: string | null;
+    component_role: string | null;
     shop_equivalent_food_id: string | null;
     shop_equivalent_label: string | null;
   }>;
@@ -164,6 +184,7 @@ function ingredientsFor(db: AppDatabase, parentId: string): IngredientLine[] {
     servings: row.servings,
     sourceRef: row.source_ref,
     childFoodId: row.child_food_id,
+    componentRole: parseStoredComponentRole(row.component_role),
     shopEquivalentFoodId: row.shop_equivalent_food_id,
     shopEquivalentLabel: row.shop_equivalent_label,
   }));
@@ -195,6 +216,7 @@ function toFood(row: FoodSql, ingredients: IngredientLine[]): Food {
     sourceRef: row.source_ref,
     instructions: row.instructions,
     mealKitEcosystemId: row.meal_kit_ecosystem_id,
+    proteinTags: parseStoredProteinTags(row.protein_tags_json),
     ingredients,
   };
 }
@@ -219,6 +241,7 @@ function foodParams(food: NewFood): Record<string, string | number | null> {
     makesServings: food.makesServings,
     servingsPerContainer: food.servingsPerContainer,
     nutrientUnitsJson: JSON.stringify(food.nutrientUnits),
+    proteinTagsJson: JSON.stringify(food.proteinTags),
     source: food.source,
     sourceRef: food.sourceRef,
     instructions: food.instructions,
@@ -245,4 +268,5 @@ function likeTerm(query: string): string {
 }
 
 const FOOD_COLUMNS = `SELECT id, name, brand, kind, serving_label, calories, protein, fiber, fat, carbs, sodium,
-  extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json, source, source_ref, instructions, meal_kit_ecosystem_id`;
+  extras_json, is_favorite, is_drink, drink_ml, makes_servings, servings_per_container, nutrient_units_json, protein_tags_json,
+  source, source_ref, instructions, meal_kit_ecosystem_id`;

@@ -8,6 +8,7 @@ import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
+import { readComponentRole, readProteinTags } from '../domain/proteinTags.js';
 import { applySlotMergedNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
@@ -108,6 +109,7 @@ async function createStubFoods(ctx: Ctx): Promise<void> {
       sourceRef: null,
       instructions: null,
       mealKitEcosystemId: null,
+      proteinTags: [],
       ingredients: [],
     });
     foods.push(food);
@@ -175,6 +177,7 @@ async function composeFood(ctx: Ctx): Promise<void> {
     sourceRef: null,
     instructions,
     mealKitEcosystemId: ecosystemId,
+    proteinTags: readProteinTags(body.proteinTags),
     ingredients: ingredientRows,
   });
   sendJson(ctx.res, 201, { food });
@@ -361,6 +364,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   nutrients: ReturnType<typeof readNutrients>;
   sourceRef: string | null;
   childFoodId: string | null;
+  componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string | null;
 } {
@@ -370,6 +374,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   const shopEquivalentFoodId = optionalText(value.shopEquivalentFoodId);
   const shopEquivalentLabel = optionalText(value.shopEquivalentLabel);
   const childFoodId = typeof value.foodId === 'string' ? value.foodId : null;
+  const componentRole = readComponentRole(value.componentRole);
   if (childFoodId) {
     const food = getFood(ctx.db, childFoodId);
     if (!food) throw new HttpError(400, 'Unknown ingredient');
@@ -379,6 +384,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
       nutrients: food.nutrients,
       sourceRef: food.sourceRef,
       childFoodId,
+      componentRole,
       shopEquivalentFoodId,
       shopEquivalentLabel,
     };
@@ -389,6 +395,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
     nutrients: readNutrients(value.nutrients),
     sourceRef: typeof value.sourceRef === 'string' ? value.sourceRef : null,
     childFoodId: null,
+    componentRole,
     shopEquivalentFoodId,
     shopEquivalentLabel,
   };
@@ -410,11 +417,12 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
   }
   const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
   const nutrients = roundNutrients(perServing(sumIngredientNutrients(lines), input.makesServings));
-  const baseIngredients = lines.map(({ name, servings, sourceRef, childFoodId, shopEquivalentFoodId, shopEquivalentLabel }) => ({
+  const baseIngredients = lines.map(({ name, servings, sourceRef, childFoodId, componentRole, shopEquivalentFoodId, shopEquivalentLabel }) => ({
     name,
     servings,
     sourceRef,
     childFoodId,
+    componentRole,
     shopEquivalentFoodId,
     shopEquivalentLabel,
   }));

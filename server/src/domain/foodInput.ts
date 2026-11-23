@@ -1,5 +1,6 @@
 import type { NewFood } from '../db/foods.js';
 import { HttpError } from '../http/errors.js';
+import { readComponentRole, readProteinTags } from './proteinTags.js';
 import type { FoodKind, FoodSource, IngredientLine } from '../types.js';
 import { isRecord, nonNegative, optionalText, requiredNumber, requiredText } from './guards.js';
 import { readNutrients } from './nutrients.js';
@@ -40,6 +41,7 @@ export function readFoodInput(body: unknown, createdBy: string): NewFood {
     sourceRef: optionalText(body.sourceRef),
     instructions: readInstructions(body.instructions),
     mealKitEcosystemId: optionalText(body.mealKitEcosystemId),
+    proteinTags: readProteinTags(body.proteinTags),
     ingredients: readIngredients(body.ingredients),
   };
 }
@@ -74,6 +76,7 @@ function readIngredient(value: unknown): IngredientLine {
     servings,
     sourceRef: optionalText(value.sourceRef),
     childFoodId,
+    componentRole: readComponentRole(value.componentRole),
     shopEquivalentFoodId: optionalText(value.shopEquivalentFoodId),
     shopEquivalentLabel: optionalText(value.shopEquivalentLabel),
   };
