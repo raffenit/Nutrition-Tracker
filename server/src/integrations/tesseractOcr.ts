@@ -6,16 +6,22 @@ export type TesseractLineBox = {
   bbox: { x0: number; y0: number; x1: number; y1: number };
 };
 
+export type TesseractWordBox = TesseractLineBox & { confidence: number };
+
 export type TesseractBatchResult = {
   texts: string[];
   logLines: string[];
   /** Per run (image × PSM, same order as `texts`) when `withLines` is requested. */
   lines?: TesseractLineBox[][];
+  /** Per run when `withWords` is requested (word text + bbox, for layout reconstruction). */
+  words?: TesseractWordBox[][];
 };
 
 export type TesseractRecognizeOptions = {
   /** Also return line text + bbox (for contested-row re-read). */
   withLines?: boolean;
+  /** Also return word text + bbox (for table/column reconstruction). */
+  withWords?: boolean;
 };
 
 const STDERR_PATTERNS =
@@ -69,7 +75,10 @@ export async function recognizeImagesOnWorker(
   const logLines: string[] = [];
   const texts: string[] = [];
   const lines: TesseractLineBox[][] = [];
+  const words: TesseractWordBox[][] = [];
   const withLines = options?.withLines === true;
+  const withWords = options?.withWords === true;
+  const withBlocks = withLines || withWords;
   const totalRuns = images.length * psmModes.length;
   let runInBatch = 0;
 
@@ -83,17 +92,21 @@ export async function recognizeImagesOnWorker(
 
       await worker.setParameters({ tessedit_pageseg_mode: psm });
       const { result, stderr } = await withStderrCapture(async () => {
-        const recognition = withLines
+        const recognition = withBlocks
           ? await worker.recognize(images[imageIndex]!, {}, { text: true, blocks: true })
           : await worker.recognize(images[imageIndex]!);
-        if (withLines) {
-          lines.push(
-            (recognition.data.blocks ?? []).flatMap((block) =>
-              block.paragraphs.flatMap((paragraph) =>
-                paragraph.lines.map((line) => ({ text: line.text, bbox: { ...line.bbox } })),
-              ),
+        const blockLines = (recognition.data.blocks ?? []).flatMap((block) =>
+          block.paragraphs.flatMap((paragraph) => paragraph.lines),
+        );
+        if (withWords) {
+          words.push(
+            blockLines.flatMap((line) =>
+              line.words.map((word) => ({ text: word.text, bbox: { ...word.bbox }, confidence: word.confidence })),
             ),
           );
+        }
+        if (withLines) {
+          lines.push(blockLines.map((line) => ({ text: line.text, bbox: { ...line.bbox } })));
         }
         return recognition.data.text ?? '';
       });
@@ -114,7 +127,12 @@ export async function recognizeImagesOnWorker(
   }
 
   pushDebug(logLines);
-  return withLines ? { texts, logLines, lines } : { texts, logLines };
+  return {
+    texts,
+    logLines,
+    ...(withLines ? { lines } : {}),
+    ...(withWords ? { words } : {}),
+  };
 }
 
 /** Run Tesseract on one or more PNG buffers; capture logger, errorHandler, and process stderr. */
