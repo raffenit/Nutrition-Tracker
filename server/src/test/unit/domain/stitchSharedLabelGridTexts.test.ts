@@ -317,3 +317,10 @@ test('a garbled Daily Value header above the calorie band does not block a unitl
     ['1 Dally Walue', '140', '9g 12%'],
   );
 });
+
+test('a calorie crop that also holds the Daily Value header still counts as the topmost amount', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['140 % Daily Value', 'A', '3g 15%'], ['140 % Daily Value', '50', '3g 15%']),
+    ['140 % Daily Value', 'A', '3g 15%'],
+  );
+});
