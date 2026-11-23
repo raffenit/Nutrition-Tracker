@@ -214,7 +214,7 @@ const ROW_DAILY_VALUES: Array<[string, number]> = [
  * "459 23%" is "4.5g 23%" with the "g" read as a trailing 9 and the decimal lost: keep the
  * reading (raw, without a trailing 9, with a decimal restored) whose %DV matches the printed one.
  */
-export function reconcileAmountWithDailyValue(cell: string, dailyValue: number): number | null {
+export function reconcileAmountWithDailyValue(cell: string, dailyValue: number, restoreLostOne = true): number | null {
   const match = normalizeCellDigits(cell).match(/^(\d+(?:\.\d+)?)\D{0,3}?\s+(\d{1,3})\s*%/);
   if (!match) return null;
   const literal = match[1]!;
@@ -232,7 +232,7 @@ export function reconcileAmountWithDailyValue(cell: string, dailyValue: number):
   const fits = (amount: number) => Math.abs((amount / dailyValue) * 100 - percent) <= Math.max(1.5, percent * 0.1);
   if (fits(Number(literal))) return Number(literal);
   // A thin leading "1" is easy to lose ("lg 4%" for "11g 4%", "10mg 5%" for "110mg 5%").
-  if (!literal.includes('.')) options.add(Number(`1${literal}`));
+  if (restoreLostOne && !literal.includes('.')) options.add(Number(`1${literal}`));
   const matches = [...options].filter((amount) => amount > 0 && fits(amount));
   return matches.length === 1 ? matches[0]! : null;
 }
@@ -248,7 +248,8 @@ function cellRowFit(row: string, cell: string): number {
   if (/\d\s*mg\b/i.test(normalized)) score += mgRow ? 2 : -3;
   else if (/\d\s*g\b/i.test(normalized)) score += mgRow ? -3 : 1;
   const dailyValue = ROW_DAILY_VALUES.find(([prefix]) => row.startsWith(prefix))?.[1];
-  if (dailyValue && reconcileAmountWithDailyValue(normalized, dailyValue) !== null) score += 2;
+  // A guessed lost "1" is a repair, not evidence: "1g 4%" (fiber) must not look like 11g carbs.
+  if (dailyValue && reconcileAmountWithDailyValue(normalized, dailyValue, false) !== null) score += 2;
   return score;
 }
 

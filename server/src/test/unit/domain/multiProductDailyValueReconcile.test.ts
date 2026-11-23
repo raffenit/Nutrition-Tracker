@@ -121,3 +121,14 @@ test('%DV restores a lost leading 1 only when the read amount does not fit', () 
   assert.equal(reconcileAmountWithDailyValue('10mg 0%', 2300), 10);
   assert.equal(reconcileAmountWithDailyValue('1g 4%', 28), 1);
 });
+
+test('row realignment does not take a guessed lost 1 as evidence for a row', () => {
+  assert.equal(reconcileAmountWithDailyValue('1g 4%', 275, false), null);
+  const labels = ['total fat', 'saturated fat', 'cholesterol', 'sodium', 'total carbohydrate', 'dietary fiber', 'total sugars', 'includes added sugars'];
+  const slidUp = ['9g 12%', '3g 15%', '100mg 4%', '1g 4%', '16g', '15g 30%', '3g', '-'];
+  const rows = labels.map((row, i) => ({ row, values: [slidUp[i]!] }));
+  realignShiftedColumns(rows, 1);
+  const column = Object.fromEntries(rows.map((row) => [row.row, row.values[0]]));
+  assert.equal(column['dietary fiber'], '1g 4%');
+  assert.equal(column.sodium, '100mg 4%');
+});
