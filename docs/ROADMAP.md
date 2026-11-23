@@ -435,6 +435,37 @@ Deliverable: short `docs/WALK-REMINDER.md` with HA example automation (time + no
 
 ---
 
+## Phase 14 — Free-text meal descriptions ("1x salmon nigiri, 4x maki")
+
+**Status:** Not started.
+
+**Problem:** Logging a plate of food means finding each item in the library one at a time. Users naturally describe meals as text ("1x salmon nigiri and 4x salmon tuna avocado maki") and expect macros to follow.
+
+**Goal:** Paste/type a free-text meal description → parsed into component items with quantities → each resolved to a library food, USDA (incl. FNDDS prepared foods), or OpenFoodFacts match → user reviews/edits → logged as entries in one slot.
+
+**Design**
+
+- **Segment:** split description into `{ qty, item }` pairs. Start with a deterministic parser for the common `Nx item` / comma / "and" patterns; escalate to an LLM only for unparseable input.
+- **Resolve per item:** library search → USDA FDC (widen `dataType` to include `Survey (FNDDS)` for restaurant/prepared foods like sushi) → OpenFoodFacts → optional LLM decomposition fallback for composed dishes ("salmon tuna avocado maki" → salmon + tuna + avocado + rice).
+- **Review:** reuse the existing candidate-picker / `fieldReview` pattern — show each parsed item with its match and editable quantity; unresolved items flagged, never silently guessed.
+- **Log:** write each resolved item as its own ad-hoc meal entry sharing the slot (same shape as generated main/side plan pairings), or optionally compose into one "plate" food.
+- **Candidate APIs to evaluate:** Nutritionix `/natural/nutrients` (free tier, attribution), Edamam Food Database natural-language endpoint — both parse quantities natively but have thin prepared-food coverage; USDA+FNDDS likely covers most needs without new keys.
+
+**Acceptance**
+
+- "1x salmon nigiri, 4x salmon tuna avocado maki" produces two reviewable items with sensible macro estimates.
+- Every logged item traces to a real food entry or an explicit user-confirmed estimate — no silent fabrication.
+- Works for both quick-log and recipe/plan flows.
+
+**Tests**
+
+- Unit: segmentation patterns (counts, commas, "and", mixed units), resolver precedence (library > USDA > OFF), unmatched-item handling.
+- Integration: description → review payload → logged entries → dashboard totals.
+
+**Files (expected):** new `server/src/domain/mealTextParse.ts` (+ maybe `mealTextResolve.ts`), `usda.ts` dataType widening, `logRoutes.ts` or new route, `AddLogPage.tsx`.
+
+---
+
 ## Phase 9 — Offline PWA + sync (full implementation)
 
 **Status:** Done (2026-09-30) — shell cache, pins, outbox (meals/hydration/delete), Background Sync hook, library/dashboard cache.
@@ -538,6 +569,7 @@ Phase 8 Polish              ► Done (core)
 Optional Instacart export   ► when partner IDP access exists
 Optional OFF barcode        ► type-code first, camera scan later
 Optional ecosystem fuzzy   ► brand ≈ ecosystem name on recipe import
+Phase 14 Free-text meals   ► after 12/13, needs resolver + review UI
 Phase 11 Data + backup      ► Done
 Phase 12 Multi-label import ► next feature track
 Phase 13 Tags               ► after 12
