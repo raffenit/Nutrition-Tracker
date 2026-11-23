@@ -519,6 +519,8 @@ export function fillRowLabelsByCanonicalOrder(labels: Array<string | null>): Arr
 }
 
 const READABLE_AMOUNT = /^<?\s*\d+(?:\.\d+)?(?!\d|\.|\s*%)/;
+/** The "Daily Value" header words, even when OCR garbles them or reads the % as a digit ("1 Dally Walue"). */
+const DAILY_VALUE_WORDS = /d[a-z]{2,4}\s*[vw][a-z]{2,4}/i;
 
 function leadingNumber(text: string): string | null {
   return text.match(/\d+(?:\.\d+)?/)?.[0] ?? null;
@@ -546,7 +548,9 @@ export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: 
     // it is the topmost amount, so a unitless number below another amount (a "50%" that lost
     // its sign in the Sodium row) is not one.
     const calorieCount = /^(\d{2,4})\s*(?:k?cal)?$/i.exec(normalized);
-    const topmostAmount = primary.slice(0, i).every((above) => !READABLE_AMOUNT.test(normalizeCellDigits(above)));
+    const topmostAmount = primary
+      .slice(0, i)
+      .every((above) => DAILY_VALUE_WORDS.test(above) || !READABLE_AMOUNT.test(normalizeCellDigits(above)));
     const caloriesRead =
       topmostAmount && calorieCount && Number(calorieCount[1]) >= 50 && Number(calorieCount[1]) % 10 === 0;
     if (!caloriesRead && !/^<?\s*[\d.]+\s*(?:m?c?g\b|\S*\s+\d{1,3}\s*%)/i.test(normalized)) return slice;

@@ -310,3 +310,10 @@ test('a unitless number below another amount is not taken as a calorie count', (
     ['150', '9g 12%', 'lOmg', '20g 7%'],
   );
 });
+
+test('a garbled Daily Value header above the calorie band does not block a unitless calorie count', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['1 Dally Walue', 'Sl', '9g 12%'], ['1 Daily Value', '140', '9g 12%']),
+    ['1 Dally Walue', '140', '9g 12%'],
+  );
+});
