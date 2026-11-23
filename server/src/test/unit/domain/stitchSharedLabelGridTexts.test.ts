@@ -259,3 +259,10 @@ test('header split still shifts when Fat and Sat Fat share an amount but not a %
   const out = splitMergedDailyValueHeaderSlices(columns);
   assert.deepEqual(out[1], ['90', '%Dally Value 4%', '3g 4%', '3g 15%', '0g']);
 });
+
+test('a slice with digits but no readable amount takes the agreeing alternate amount', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['Omg 0', 'lOmg 52', '25g 9%'], ['‘omg 0%', '110mg 5%', '259 9%']),
+    ['Omg 0', '110mg 5%', '25g 9%'],
+  );
+});

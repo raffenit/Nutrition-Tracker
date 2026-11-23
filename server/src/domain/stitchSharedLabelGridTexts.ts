@@ -525,7 +525,8 @@ export function fillUnreadSlicesFromAlternateRead(primary: string[], alternate: 
     i >= 0 && i < primary.length && leadingNumber(primary[i]!) !== null &&
     leadingNumber(primary[i]!) === leadingNumber(alternate[i] ?? '');
   return primary.map((slice, i) => {
-    if (/\d/.test(normalizeCellDigits(slice)) || dailyValueTextInSlice(slice)) return slice;
+    // "lOmg 52" has digits but no readable amount, so it counts as unread too.
+    if (READABLE_AMOUNT.test(normalizeCellDigits(slice)) || dailyValueTextInSlice(slice)) return slice;
     // EasyOCR drops empty bands at the column ends, so a short alternate is padded, not refused.
     const candidate = (alternate[i] ?? '').trim();
     // Only an amount fills the cell; a lone "2%" is a daily value, not a mass.

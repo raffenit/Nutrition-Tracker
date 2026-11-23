@@ -1136,7 +1136,11 @@ async function ocrSharedLabelGridColumns(
           } else {
             const slices = rowBandSliceTexts.valueSlices[job.sliceTarget.index];
             if (slices) {
-              rowBandSliceTexts.valueSlices[job.sliceTarget.index] = lines.slice(0, job.sliceTarget.count);
+              // EasyOCR won the column overall; rows it left unread keep Tesseract's amount.
+              rowBandSliceTexts.valueSlices[job.sliceTarget.index] = fillUnreadSlicesFromAlternateRead(
+                lines.slice(0, job.sliceTarget.count),
+                slices,
+              );
             }
           }
         }
