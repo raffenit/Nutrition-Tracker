@@ -34,6 +34,7 @@ export function shouldUseHeaderColumnCalories(headerColumnTexts: string[] | unde
 
 /** Display kcal above % Daily Value — not present in body value strips on many variety packs. */
 export function pickPlausibleCalorieFromValueColumnPreamble(text: string): string {
+  let afterJunkFallback = '';
   for (const raw of text.replace(/\r/g, '\n').split('\n')) {
     const line = raw.trim();
     if (!line) continue;
@@ -44,11 +45,12 @@ export function pickPlausibleCalorieFromValueColumnPreamble(text: string): strin
     }
     const solo = line.match(/^(\d{2,4})\s*$/);
     if (solo) return solo[1]!;
-    // Stray rule / glare glyphs ahead of the count ("| Sl 80").
-    const afterJunk = line.match(/^(?:[^\d\s]{1,3}\s+){1,2}(\d{2,4})\s*$/);
-    if (afterJunk) return afterJunk[1]!;
+    // Stray rule / glare glyphs ahead of the count ("| Sl 80"); words like "Bar 17" don't count,
+    // and a clean count later in the preamble still wins.
+    const afterJunk = line.match(/^(?:[^\d\s]{1,2}\s+){1,2}(\d{2,4})\s*$/);
+    if (afterJunk && !afterJunkFallback) afterJunkFallback = afterJunk[1]!;
   }
-  return '';
+  return afterJunkFallback;
 }
 
 /**
