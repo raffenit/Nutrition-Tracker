@@ -102,3 +102,14 @@ test('protein %DV does not rewrite the gram amount', () => {
   assert.equal(columns[0]!.nutrients.protein, 15);
   assert.equal(columns[1]!.nutrients.protein, 10);
 });
+
+test('a "g" read as a trailing 0 is undone when the printed %DV confirms it', () => {
+  assert.equal(reconcileAmountWithDailyValue('150 8%', 20), 1.5);
+  assert.equal(reconcileAmountWithDailyValue('10g 4%', 275), 10);
+  assert.equal(reconcileAmountWithDailyValue('40mg 2%', 2300), 40);
+});
+
+test('T beside a 1-glyph before a unit reads as 11', () => {
+  assert.equal(normalizeCellDigits('Tig 4%'), '11g 4%');
+  assert.equal(normalizeCellDigits('Tlg'), '11g');
+});

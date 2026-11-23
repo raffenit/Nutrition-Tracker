@@ -86,11 +86,9 @@ export async function buildColumnStripOcrVariants(bytes: Buffer): Promise<Buffer
 
 /** One horizontal nutrient row — upscale height, skip adaptive threshold on tiny crops. */
 export async function buildRowBandOcrVariants(bytes: Buffer): Promise<Buffer[]> {
-  const scaled = await upscaleColumnStripSource(
-    sharp(bytes).rotate(),
-    COLUMN_STRIP_OCR_TARGET_WIDTH,
-    ROW_BAND_OCR_MIN_HEIGHT,
-  );
+  // Height drives the scale: forcing a wide target width blows tall rows (Calories) up past
+  // the glyph sizes Tesseract reads well.
+  const scaled = await upscaleColumnStripSource(sharp(bytes).rotate(), 0, ROW_BAND_OCR_MIN_HEIGHT);
   const primary = await scaled.clone().greyscale().normalize().png().toBuffer();
   if (process.env.TESSERACT_ROW_BAND_DUAL_VARIANT === '1') {
     return uniqueBuffers([

@@ -187,6 +187,7 @@ export function normalizeCellDigits(cell: string): string {
     .replace(/^[Oo](?=\s*m?g\b)/, '0')
     .replace(/(?<=\d)[Oo]+(?=\s*m?g\b)/, (zeros) => '0'.repeat(zeros.length))
     .replace(/^[Il|]+(?=[\d.]|\s*m?g\b)/, (ones) => '1'.repeat(ones.length))
+    .replace(/^T[Iil|](?=\s*m?g\b)/, '11')
     .replace(/(?<=\d)[Il|]+(?=\s*m?g\b)/, (ones) => '1'.repeat(ones.length));
 }
 
@@ -219,7 +220,8 @@ export function reconcileAmountWithDailyValue(cell: string, dailyValue: number):
   const literal = match[1]!;
   const percent = Number(match[2]);
   const options = new Set<number>([Number(literal)]);
-  const stripped = /^\d+9$/.test(literal) ? literal.slice(0, -1) : null;
+  // "g" read as a trailing 9 or 0 ("150 8%" is "1.5g 8%").
+  const stripped = /^\d+[90]$/.test(literal) ? literal.slice(0, -1) : null;
   for (const base of [literal, stripped]) {
     if (!base || base.includes('.')) continue;
     options.add(Number(base));

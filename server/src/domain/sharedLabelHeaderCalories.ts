@@ -44,6 +44,9 @@ export function pickPlausibleCalorieFromValueColumnPreamble(text: string): strin
     }
     const solo = line.match(/^(\d{2,4})\s*$/);
     if (solo) return solo[1]!;
+    // Stray rule / glare glyphs ahead of the count ("| Sl 80").
+    const afterJunk = line.match(/^(?:[^\d\s]{1,3}\s+){1,2}(\d{2,4})\s*$/);
+    if (afterJunk) return afterJunk[1]!;
   }
   return '';
 }
