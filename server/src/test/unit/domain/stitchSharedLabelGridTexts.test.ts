@@ -303,3 +303,10 @@ test('an alternate calorie count without a unit still fills an unread calorie sl
     ['Sl', '9g 12%', '3g 15%'],
   );
 });
+
+test('a unitless number below another amount is not taken as a calorie count', () => {
+  assert.deepEqual(
+    fillUnreadSlicesFromAlternateRead(['150', '9g 12%', 'lOmg', '20g 7%'], ['150', '9g 12%', '50', '20g 7%']),
+    ['150', '9g 12%', 'lOmg', '20g 7%'],
+  );
+});
