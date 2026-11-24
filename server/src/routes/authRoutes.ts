@@ -22,6 +22,7 @@ import {
   saveTargets,
   type MultiLabelImportDefault,
 } from '../db/users.js';
+import { readBuildInfo } from '../config.js';
 import { HttpError } from '../http/errors.js';
 import { clearSessionCookie, readCookie, sessionCookie, SESSION_COOKIE } from '../http/cookies.js';
 import { requireAdmin, requireUser } from '../http/access.js';
@@ -43,6 +44,7 @@ export function authRoutes(): Route[] {
         householdEstablishedOnDisk: marker !== null,
         dataUnexpectedlyEmpty: marker !== null && setupRequired,
         lastBackup: readLastBackupMeta(ctx.config.dataDir),
+        build: readBuildInfo(),
       });
     }),
     route('GET', '/api/session', async (ctx) => {

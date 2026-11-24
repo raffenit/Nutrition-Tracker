@@ -638,6 +638,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [instructions, setInstructions] = useState('');
   const [labelNutrients, setLabelNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [bookletCards, setBookletCards] = useState<RecipeCardImport[]>([]);
   const [bookletIndex, setBookletIndex] = useState(0);
   const [bookletSaved, setBookletSaved] = useState<number[]>([]);
@@ -821,6 +822,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
 
   async function uploadRecipeCard(file: File): Promise<void> {
     setImportStatus(null);
+    setImportError(null);
     setError(null);
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     const processSteps = isPdf ? RECIPE_CARD_PDF_IMPORT_STEPS : RECIPE_CARD_IMAGE_IMPORT_STEPS;
@@ -831,7 +833,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       });
       applyRecipeImport(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Import failed');
+      setImportError(caught instanceof Error ? caught.message : 'Import failed');
     }
   }
 
@@ -922,6 +924,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         </button>
         {importProgress && <ImportProgress progress={importProgress} compact />}
         {importStatus && !importProgress && <p className="muted">{importStatus}</p>}
+        {importError && !importProgress && <p className="notice" role="alert">Import failed: {importError}</p>}
         {bookletCards.length > 1 && !importProgress && (
           <label className="recipe-booklet-picker">
             Recipe from this booklet ({bookletSaved.length} of {bookletCards.length} saved)

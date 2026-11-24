@@ -207,6 +207,10 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   const kind = uploadKind(file.mime, file.filename);
   if (!kind) throw new HttpError(400, 'Upload a JPEG, PNG, WEBP, or PDF');
   const flow = kind === 'pdf' ? 'pdf' : 'image';
+  const uploadLabel = `${path.basename(file.filename).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 80) || 'upload'} (${kind}, ${(file.bytes.length / 1024 / 1024).toFixed(1)} MB)`;
+  const startedAt = Date.now();
+  const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+  console.log(`[upload] received ${uploadLabel}`);
   try {
     await runWithImportJob(jobId, user.id, flow, async () => {
       reportImportJobStep('Receive', 'File received…', path.basename(file.filename).slice(0, 180) || 'upload');
@@ -237,6 +241,9 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
         createdBy: user.id,
       });
       finishImportJob(jobId);
+      console.log(
+        `[upload] done ${uploadLabel} in ${elapsed()}: ocr=${extracted.usedOcr ? 'yes' : 'no'}, recipe cards=${built.recipeCards?.length ?? (built.recipeCard ? 1 : 0)}, text chars=${extracted.text.length}${warning ? `, warning: ${warning}` : ''}`,
+      );
       sendImportJson(ctx.res, {
         uploadId: saved.id,
         kind,
@@ -249,6 +256,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof HttpError ? error.message : 'Import failed';
+    console.error(`[upload] failed ${uploadLabel} after ${elapsed()}: ${error instanceof Error ? error.message : String(error)}`);
     failImportJob(jobId, message);
     throw error;
   }
