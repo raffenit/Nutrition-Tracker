@@ -311,6 +311,20 @@ test('custom recipes return ingredient lines for editing', async () => {
     assert.equal(edited.body.food.name, 'Moroccan Chicken Bowls (edited)');
     assert.equal(edited.body.food.nutrients.calories, 640);
     assert.equal(edited.body.food.nutrients.protein, 42);
+
+    // A card label with only sodium still beats an all-zero total from text-only lines.
+    const sodiumOnly = await api<{ food: { nutrients: { sodium: number } } }>(port, '/api/foods/compose', {
+      method: 'POST',
+      cookie: setup.cookie,
+      body: {
+        name: 'Broth',
+        makesServings: 1,
+        nutrients: { calories: 0, protein: 0, fiber: 0, fat: 0, carbs: 0, sodium: 700 },
+        ingredients: [{ name: 'Stock', servings: 1, foodId: null }],
+      },
+    });
+    assert.equal(sodiumOnly.status, 201);
+    assert.equal(sodiumOnly.body.food.nutrients.sodium, 700);
   });
 });
 

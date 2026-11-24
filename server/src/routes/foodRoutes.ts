@@ -548,7 +548,11 @@ function recipeNutrients(lines: Array<{ servings: number; nutrients: Nutrients; 
   const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(lines), makesServings));
   const complete = lines.every((line) => line.hasNutrition);
   if (complete && hasMacroTotals(fromIngredients)) return fromIngredients;
-  return label && hasMacroTotals(label) ? label : fromIngredients;
+  return label && hasAnyNutrient(label) ? label : fromIngredients;
+}
+
+function hasAnyNutrient(nutrients: Nutrients): boolean {
+  return hasMacroTotals(nutrients) || nutrients.fiber > 0 || nutrients.sodium > 0;
 }
 
 function hasMacroTotals(nutrients: Nutrients): boolean {
