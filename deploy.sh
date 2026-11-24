@@ -11,8 +11,9 @@ cd "$(dirname "$0")"
 
 SCRIPT_DIR="$(pwd)"
 FAILURE_REPORT_NAME="DEPLOY"
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/scripts/lib-failure-report.sh"
+# Strip CR on load: this runs before WSL preflight repairs CRLF line endings.
+# shellcheck disable=SC1090
+source <(sed 's/\r$//' "$SCRIPT_DIR/scripts/lib-failure-report.sh")
 failure_report_step "Starting deploy (WSL preflight, .env)"
 
 # Windows/WSL host checks (CRLF, Docker, .env hints) — skip on Linux server or SKIP_WSL_PREFLIGHT=1
