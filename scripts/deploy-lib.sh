@@ -240,8 +240,7 @@ deploy_restart_infra() {
     echo "WARNING: --infra but infrastructure compose not found at: $infra_compose"
     return 0
   fi
-  echo ""
-  echo "[infra] Restarting shared Caddy stack..."
+  deploy_step "[infra] Restarting shared Caddy stack..."
   docker compose -f "$infra_compose" up -d
 }
 
