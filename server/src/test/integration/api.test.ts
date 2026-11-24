@@ -287,6 +287,30 @@ test('custom recipes return ingredient lines for editing', async () => {
     assert.equal(kitRecipe.status, 201);
     assert.equal(kitRecipe.body.food.nutrients.calories, 640);
     assert.equal(kitRecipe.body.food.nutrients.protein, 42);
+
+    // Editing it (text-only lines, one now linked) keeps the card's label nutrition.
+    const edited = await api<{ food: { name: string; nutrients: { calories: number; protein: number } } }>(port, `/api/foods/${kitRecipe.body.food.id}`, {
+      method: 'PATCH',
+      cookie: setup.cookie,
+      body: {
+        name: 'Moroccan Chicken Bowls (edited)',
+        kind: 'custom',
+        makesServings: 2,
+        servingLabel: '1 serving',
+        nutrients: { calories: 640, protein: 42, fiber: 8, fat: 22, carbs: 61, sodium: 980 },
+        source: 'composed',
+        isDrink: false,
+        drinkMl: null,
+        ingredients: [
+          { name: 'Greek yogurt', servings: 1, foodId: yogurt.body.food.id },
+          { name: 'Quinoa', servings: 1, foodId: null },
+        ],
+      },
+    });
+    assert.equal(edited.status, 200);
+    assert.equal(edited.body.food.name, 'Moroccan Chicken Bowls (edited)');
+    assert.equal(edited.body.food.nutrients.calories, 640);
+    assert.equal(edited.body.food.nutrients.protein, 42);
   });
 });
 

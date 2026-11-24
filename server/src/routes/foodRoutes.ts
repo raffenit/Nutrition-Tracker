@@ -155,12 +155,11 @@ async function composeFood(ctx: Ctx): Promise<void> {
   const ingredientRows = mergeRecipeIngredientsWithEcosystem(
     ctx.db,
     ecosystemId,
-    parsedLines.map(({ nutrients: _nutrients, ...line }) => line),
+    parsedLines.map(({ nutrients: _nutrients, hasNutrition: _hasNutrition, ...line }) => line),
   );
   const makesServings = requiredNumber(body.makesServings, 'Servings');
-  const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(parsedLines), makesServings));
-  const fromLabel = isRecord(body.nutrients) ? roundNutrients(readNutrients(body.nutrients)) : fromIngredients;
-  const nutrients = hasMacroTotals(fromIngredients) ? fromIngredients : fromLabel;
+  const label = isRecord(body.nutrients) ? roundNutrients(readNutrients(body.nutrients)) : null;
+  const nutrients = recipeNutrients(parsedLines, makesServings, label);
   const instructions = optionalInstructions(body.instructions);
   const food = insertFood(ctx.db, {
     createdBy: user.id,
@@ -380,6 +379,8 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   name: string;
   servings: number;
   nutrients: ReturnType<typeof readNutrients>;
+  /** False for text-only lines (e.g. imported meal-kit rows) that carry no nutrition. */
+  hasNutrition: boolean;
   sourceRef: string | null;
   childFoodId: string | null;
   componentRole: 'main' | 'side' | null;
@@ -400,6 +401,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
       name: food.name,
       servings,
       nutrients: food.nutrients,
+      hasNutrition: true,
       sourceRef: food.sourceRef,
       childFoodId,
       componentRole,
@@ -410,8 +412,8 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   return {
     name: requiredText(value.name, 'Ingredient'),
     servings,
-    // Unlinked lines (e.g. imported meal-kit card rows) carry no nutrition; the recipe uses its label totals.
     nutrients: value.nutrients == null ? emptyNutrients() : readNutrients(value.nutrients),
+    hasNutrition: value.nutrients != null,
     sourceRef: typeof value.sourceRef === 'string' ? value.sourceRef : null,
     childFoodId: null,
     componentRole,
@@ -435,7 +437,7 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
     return input;
   }
   const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
-  const nutrients = roundNutrients(perServing(sumIngredientNutrients(lines), input.makesServings));
+  const nutrients = recipeNutrients(lines, input.makesServings, input.nutrients);
   const baseIngredients = lines.map(({ name, servings, sourceRef, childFoodId, componentRole, shopEquivalentFoodId, shopEquivalentLabel }) => ({
     name,
     servings,
@@ -539,6 +541,14 @@ async function readExtractedText(
       pageTexts: null,
     };
   }
+}
+
+/** Ingredient totals when every line has nutrition; otherwise the recipe's label (e.g. a meal-kit card) when it has one. */
+function recipeNutrients(lines: Array<{ servings: number; nutrients: Nutrients; hasNutrition: boolean }>, makesServings: number, label: Nutrients | null): Nutrients {
+  const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(lines), makesServings));
+  const complete = lines.every((line) => line.hasNutrition);
+  if (complete && hasMacroTotals(fromIngredients)) return fromIngredients;
+  return label && hasMacroTotals(label) ? label : fromIngredients;
 }
 
 function hasMacroTotals(nutrients: Nutrients): boolean {
