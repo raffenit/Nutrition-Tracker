@@ -139,12 +139,12 @@ async function fastOcrPdfPages(
 }
 
 export async function extractPdfTextWithOcrFallback(
-  bytes: Buffer,
+  data: Buffer | string,
   tessdataDir: string,
   easyocrModelDir?: string,
 ): Promise<PdfOcrResult> {
   const { extractPdfText } = await import('./extractText.js');
-  const embeddedRaw = stripPdfPageMarkers(await extractPdfText(bytes));
+  const embeddedRaw = stripPdfPageMarkers(await extractPdfText(data));
   const embeddedPages = splitEmbeddedPdfPages(embeddedRaw);
   const embedded = embeddedRaw.replace(/\s+/g, ' ').trim();
   reportImportJobStep('PDF', 'Reading PDF on server…', 'Extracting embedded text when available.');
@@ -152,7 +152,7 @@ export async function extractPdfTextWithOcrFallback(
     return { text: embedded, usedOcr: false, pageTexts: embeddedPages, pageLayouts: null };
   }
   reportImportJobStep('OCR', 'Scanning PDF pages…', 'Rasterizing and running OCR — large files can take a minute.');
-  const { pageTexts, pageLayouts } = await ocrPdfPageTexts(bytes, tessdataDir, easyocrModelDir);
+  const { pageTexts, pageLayouts } = await ocrPdfPageTexts(data, tessdataDir, easyocrModelDir);
   const ocrText = pageTexts.join('\n\n');
   if (ocrText.trim()) return { text: ocrText, usedOcr: true, pageTexts, pageLayouts };
   return { text: embedded, usedOcr: false, pageTexts: embeddedPages, pageLayouts: null };
@@ -170,17 +170,20 @@ export function stripPdfPageMarkers(text: string): string {
 }
 
 async function ocrPdfPageTexts(
-  bytes: Buffer,
+  data: Buffer | string,
   tessdataDir: string,
   easyocrModelDir?: string,
 ): Promise<{ pageTexts: string[]; pageLayouts: Array<RecipePageLayout | null> | null }> {
   const dir = await mkdtemp(path.join(tmpdir(), 'nt-pdf-ocr-'));
-  const inputPath = path.join(dir, 'input.pdf');
+  // A string is a path to an already-stored upload — rasterize it in place
+  // rather than buffering a copy. Buffers still get written for callers
+  // that only have bytes (tests, URL imports).
+  const inputPath = typeof data === 'string' ? data : path.join(dir, 'input.pdf');
   const prefix = path.join(dir, 'page');
   const fullPipelineOptions = easyocrModelDir ? { easyocrModelDir } : undefined;
   try {
-    await writeFile(inputPath, bytes);
-    await execFileAsync('pdftoppm', ['-png', '-r', '200', inputPath, prefix], { timeout: 120_000 });
+    if (typeof data !== 'string') await writeFile(inputPath, data);
+    await execFileAsync('pdftoppm', ['-png', '-r', '200', inputPath, prefix], { timeout: 600_000 });
     const files = (await readdir(dir))
       .filter((name) => name.startsWith('page') && name.endsWith('.png'))
       .sort();
