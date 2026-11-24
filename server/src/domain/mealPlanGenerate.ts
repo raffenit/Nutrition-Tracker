@@ -108,7 +108,8 @@ export function planCandidatesFromFoods(foods: Food[]): { mains: PlanCandidate[]
         role: 'main',
         proteinTags: food.proteinTags as ProteinTag[],
         sourceRecipeId: null,
-        servings: 1,
+        // Recipes default to cooking the whole batch ("Makes N"); single foods stay at 1.
+        servings: food.kind === 'custom' ? Math.max(1, food.makesServings) : 1,
       });
       continue;
     }

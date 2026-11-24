@@ -158,3 +158,13 @@ test('duplicate child foods across kits dedupe into one candidate with unioned t
   assert.equal(parts.length, 1);
   assert.deepEqual(parts[0]!.proteinTags.sort(), ['chicken']);
 });
+
+test('whole recipes default plan servings to their batch size', () => {
+  const batch = food('r-batch', 'Two-person chili', { makesServings: 2 });
+  const { mains } = planCandidatesFromFoods([batch]);
+  const candidate = mains.find((item) => item.foodId === 'r-batch');
+  assert.equal(candidate?.servings, 2);
+  const single = food('f-single', 'Yogurt cup', { kind: 'packaged', makesServings: 1 });
+  const { mains: singles } = planCandidatesFromFoods([single]);
+  assert.equal(singles.find((item) => item.foodId === 'f-single')?.servings, 1);
+});

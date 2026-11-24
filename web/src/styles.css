@@ -1421,6 +1421,13 @@ label.import-field-review,
 .add-log-toolbar { margin-bottom: 4px; }
 .add-log-toolbar .linkish { margin-left: auto; flex-shrink: 0; }
 .slot-tabs { margin-bottom: 4px; }
+.plan-meal-servings {
+  width: 3.4rem;
+  min-height: 1.75rem;
+  padding: 0 0.3rem;
+  font-size: 0.82rem;
+  text-align: center;
+}
 .recipe-line { flex-wrap: wrap; align-items: center; }
 .recipe-qty { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.85rem; }
 .recipe-qty input { width: 4.5rem; min-height: 36px; }
