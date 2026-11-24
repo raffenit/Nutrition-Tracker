@@ -101,15 +101,19 @@ export function resolveShoppingLine(
   };
 }
 
-export function formatGroceryMarkdown(weekStart: string, weekEnd: string, items: GroceryLineItem[], meals: PlannedMeal[]): string {
+export function formatGroceryMarkdown(weekStart: string, weekEnd: string, items: GroceryLineItem[], meals: PlannedMeal[], recipeNames: string[] = []): string {
   const lines: string[] = [
     `# Grocery list`,
     ``,
     `Week of ${weekStart} – ${weekEnd}`,
     ``,
-    `## Shopping`,
-    ``,
   ];
+  if (recipeNames.length > 0) {
+    lines.push(`## Recipes`, ``);
+    for (const name of recipeNames) lines.push(`- ${name}`);
+    lines.push(``);
+  }
+  lines.push(`## Shopping`, ``);
   if (items.length === 0) {
     lines.push(`- _(nothing planned yet)_`, ``);
   } else {

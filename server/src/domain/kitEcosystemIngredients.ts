@@ -1,7 +1,7 @@
 import type { IngredientLine } from '../types.js';
 import type { KitIngredientMapping } from '../db/mealKitEcosystems.js';
 import { kitLineKeyFromText } from './kitLineKey.js';
-import { splitIngredientPrefix } from './parseIngredientLine.js';
+import { parseLeadingQuantityUnit, splitIngredientPrefix } from './parseIngredientLine.js';
 
 export type KitMappingLookup = (ecosystemId: string, lineName: string) => KitIngredientMapping | null;
 
@@ -10,7 +10,10 @@ export function effectiveIngredientLine(line: IngredientLine, mapping: KitIngred
   // Canonical name replaces only the ingredient-name portion — the line's own
   // leading quantity/unit ("2 cups …") is preserved so amounts aren't lost.
   const split = splitIngredientPrefix(line.name);
-  const canonicalName = split ? `${split.prefix} ${mapping.kitLineName}` : mapping.kitLineName;
+  // Legacy sheet rows may still carry a qty/unit prefix in the canonical name —
+  // strip it so the rewrite can't double-prefix ("2 cup 1 cup ranch").
+  const canonicalBase = parseLeadingQuantityUnit(mapping.kitLineName)?.name ?? mapping.kitLineName;
+  const canonicalName = split ? `${split.prefix} ${canonicalBase}` : canonicalBase;
   return {
     name: canonicalName,
     servings: line.servings,

@@ -1241,6 +1241,15 @@ label.import-field-review,
   gap: 8px;
   align-items: center;
 }
+.kit-rename-hint {
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: var(--raise);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 6px;
+}
 .recipe-ingredient-shop {
   display: flex;
   flex-direction: column;

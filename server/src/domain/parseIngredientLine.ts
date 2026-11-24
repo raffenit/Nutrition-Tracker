@@ -8,17 +8,17 @@ const UNICODE_FRACTIONS: Record<string, number> = {
   '⅙': 1 / 6, '⅚': 5 / 6,
 };
 
-const QTY_TOKEN = String.raw`(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+|[${Object.keys(UNICODE_FRACTIONS).join('')}]|(?:\d+\s*)?[${Object.keys(UNICODE_FRACTIONS).join('')}])`;
+const QTY_TOKEN = String.raw`(?:\d+\s+\d+\s*\/\s*\d+|\d+(?:\.\d+)?|\d+\s*\/\s*\d+|[${Object.keys(UNICODE_FRACTIONS).join('')}]|(?:\d+\s*)?[${Object.keys(UNICODE_FRACTIONS).join('')}])`;
 
 const LEADING_QTY_UNIT = new RegExp(
-  String.raw`^(${QTY_TOKEN})\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|kilograms?|ml|milliliters?|l|liters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|cloves?|cans?|bunches?|heads?|packages?|pkgs?|slices?|pinch|pinches)\.?\s+(.+)$`,
+  String.raw`^(${QTY_TOKEN})\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|kilograms?|ml|milliliters?|l|liters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|cloves?|cans?|bunches?|heads?|packages?|pkgs?|slices?|sprigs?|pinch|pinches|x|×)\.?\s+(.+)$`,
   'i',
 );
 
 /** Bare count with no unit word: "2 eggs" → quantity 2, unit 'unit', name 'eggs'.
- *  Restricted to lowercase-leading remainders so capitalized names like
- *  "3 Cheese" are not mistaken for counts. */
-const LEADING_BARE_COUNT = new RegExp(String.raw`^(${QTY_TOKEN})\s+([a-z][^\n]*)$`, 'u');
+ *  Any letter case is allowed so editor round-trips like "2 Eggs" keep their
+ *  quantity; in a recipe line a leading count is almost always a count. */
+const LEADING_BARE_COUNT = new RegExp(String.raw`^(${QTY_TOKEN})\s+(\p{L}[^\n]*)$`, 'u');
 
 const FRACTION = /^(\d+)\s*\/\s*(\d+)$/;
 
@@ -47,7 +47,9 @@ export function splitIngredientPrefix(lineText: string): IngredientPrefixSplit |
     const name = (match[3] ?? '').trim();
     const quantity = parseQuantityToken(match[1] ?? '');
     if (name && quantity !== null && quantity > 0) {
-      return { prefix: `${(match[1] ?? '').trim()} ${(match[2] ?? '').trim()}`, name };
+      const unit = (match[2] ?? '').trim();
+      const glued = unit.toLowerCase() === 'x' || unit === '×' ? '' : ' ';
+      return { prefix: `${(match[1] ?? '').trim()}${glued}${unit}`, name };
     }
   }
   const count = trimmed.match(LEADING_BARE_COUNT);
@@ -85,6 +87,13 @@ export function parseLeadingQuantityUnit(lineText: string): ParsedIngredientLine
 
 function parseQuantityToken(token: string): number | null {
   const trimmed = token.trim();
+  // Mixed number + vulgar fraction, e.g. "1 1/2".
+  const mixedVulgar = trimmed.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixedVulgar) {
+    const den = Number(mixedVulgar[3]);
+    if (den === 0) return null;
+    return Number(mixedVulgar[1]) + Number(mixedVulgar[2]) / den;
+  }
   const fraction = trimmed.match(FRACTION);
   if (fraction) {
     const num = Number(fraction[1]);
@@ -122,6 +131,8 @@ function normalizeUnit(raw: string): string {
   if (lower.startsWith('head')) return 'head';
   if (lower.startsWith('package') || lower.startsWith('pkg')) return 'pkg';
   if (lower.startsWith('slice')) return 'slice';
+  if (lower.startsWith('sprig')) return 'sprig';
   if (lower.startsWith('pinch')) return 'pinch';
+  if (lower === 'x' || lower === '×') return 'x';
   return lower;
 }

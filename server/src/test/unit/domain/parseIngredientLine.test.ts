@@ -33,12 +33,24 @@ test('parseLeadingQuantityUnit reads bare counts as unit', () => {
   assert.deepEqual(parsed, { name: 'eggs, beaten', quantity: 2, unit: 'unit' });
 });
 
-test('parseLeadingQuantityUnit leaves capitalized names alone', () => {
-  assert.equal(parseLeadingQuantityUnit('3 Cheese tortellini'), null);
+test('parseLeadingQuantityUnit reads capitalized bare counts', () => {
+  const parsed = parseLeadingQuantityUnit('2 Eggs');
+  assert.deepEqual(parsed, { name: 'Eggs', quantity: 2, unit: 'unit' });
+});
+
+test('parseLeadingQuantityUnit reads x-counts and sprigs', () => {
+  assert.deepEqual(parseLeadingQuantityUnit('2x eggs'), { name: 'eggs', quantity: 2, unit: 'x' });
+  assert.deepEqual(parseLeadingQuantityUnit('3 sprigs fresh thyme'), { name: 'fresh thyme', quantity: 3, unit: 'sprig' });
+});
+
+test('parseLeadingQuantityUnit reads mixed vulgar fractions', () => {
+  const parsed = parseLeadingQuantityUnit('1 1/2 cups flour');
+  assert.deepEqual(parsed, { name: 'flour', quantity: 1.5, unit: 'cup' });
 });
 
 test('splitIngredientPrefix keeps the raw quantity text', () => {
   assert.deepEqual(splitIngredientPrefix('1/2 cup white quinoa'), { prefix: '1/2 cup', name: 'white quinoa' });
   assert.deepEqual(splitIngredientPrefix('2 eggs, beaten'), { prefix: '2', name: 'eggs, beaten' });
+  assert.deepEqual(splitIngredientPrefix('2x eggs'), { prefix: '2x', name: 'eggs' });
   assert.deepEqual(splitIngredientPrefix('broccoli'), null);
 });

@@ -88,6 +88,12 @@ function groceryPayload(ctx: Ctx, weekStart: string): {
       return getKitMappingByKey(ctx.db, ecosystemId, key);
     },
   );
+  const recipeNames = [...new Set(
+    entries
+      .map((entry) => getFood(ctx.db, entry.foodId))
+      .filter((food) => food?.kind === 'custom')
+      .map((food) => food!.name),
+  )];
   const meals: PlannedMeal[] = entries.map((entry) => ({
     localDate: entry.localDate,
     slot: entry.slot,
@@ -100,7 +106,7 @@ function groceryPayload(ctx: Ctx, weekStart: string): {
     weekEnd,
     customized: stored !== null,
     lineItems,
-    markdown: formatGroceryMarkdown(weekStart, weekEnd, lineItems, meals),
+    markdown: formatGroceryMarkdown(weekStart, weekEnd, lineItems, meals, recipeNames),
   };
 }
 

@@ -15,18 +15,18 @@ const UNICODE_FRACTIONS: Record<string, number> = {
 };
 
 const FRAC_CHARS = Object.keys(UNICODE_FRACTIONS).join('');
-const QTY_TOKEN = String.raw`(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+|[${FRAC_CHARS}]|(?:\d+\s*)?[${FRAC_CHARS}])`;
+const QTY_TOKEN = String.raw`(?:\d+\s+\d+\s*\/\s*\d+|\d+(?:\.\d+)?|\d+\s*\/\s*\d+|[${FRAC_CHARS}]|(?:\d+\s*)?[${FRAC_CHARS}])`;
 
 const LEADING_QTY_UNIT = new RegExp(
-  String.raw`^(${QTY_TOKEN})\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|kilograms?|ml|milliliters?|l|liters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|cloves?|cans?|bunches?|heads?|packages?|pkgs?|slices?|pinch|pinches)\.?\s+(.+)$`,
+  String.raw`^(${QTY_TOKEN})\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|kilograms?|ml|milliliters?|l|liters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|cloves?|cans?|bunches?|heads?|packages?|pkgs?|slices?|sprigs?|pinch|pinches|x|×)\.?\s+(.+)$`,
   'i',
 );
-const LEADING_BARE_COUNT = new RegExp(String.raw`^(${QTY_TOKEN})\s+([a-z][^\n]*)$`, 'u');
+const LEADING_BARE_COUNT = new RegExp(String.raw`^(${QTY_TOKEN})\s+(\p{L}[^\n]*)$`, 'u');
 
-/** Units offered in the editor; 'unit' covers countables ("2 eggs" → 2 unit). */
+/** Units offered in the editor; 'unit'/'x' cover countables ("2 eggs", "2x eggs"). */
 export const INGREDIENT_UNIT_OPTIONS = [
-  'unit', 'cup', 'tbsp', 'tsp', 'oz', 'lb', 'g', 'kg', 'ml', 'L',
-  'clove', 'can', 'bunch', 'head', 'pkg', 'slice', 'pinch',
+  'unit', 'x', 'cup', 'tbsp', 'tsp', 'oz', 'lb', 'g', 'kg', 'ml', 'L',
+  'clove', 'can', 'bunch', 'head', 'pkg', 'slice', 'sprig', 'pinch',
 ] as const;
 
 export type IngredientParts = {
@@ -64,6 +64,7 @@ export function composeIngredientName(parts: IngredientParts): string {
   const quantity = parts.quantity.trim();
   if (!quantity) return name;
   const unit = parts.unit.trim();
+  if (unit === 'x') return `${quantity}x ${name}`.trim();
   const unitWord = unit && unit !== 'unit' && unit !== 'item' && unit !== 'each' ? ` ${unit}` : '';
   return `${quantity}${unitWord} ${name}`.trim();
 }
@@ -92,6 +93,8 @@ function normalizeUnit(raw: string): string {
   if (lower.startsWith('head')) return 'head';
   if (lower.startsWith('package') || lower.startsWith('pkg')) return 'pkg';
   if (lower.startsWith('slice')) return 'slice';
+  if (lower.startsWith('sprig')) return 'sprig';
   if (lower.startsWith('pinch')) return 'pinch';
+  if (lower === 'x' || lower === '×') return 'x';
   return lower;
 }
