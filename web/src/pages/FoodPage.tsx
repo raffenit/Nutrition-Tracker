@@ -665,6 +665,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const recipeImportRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
   const { busy: recipeSaveBusy, run: runRecipeSave } = useAsyncAction();
   const [lines, setLines] = useState<RecipeEditorLine[]>([]);
+  const [kitMappings, setKitMappings] = useState<Array<KitSheetMapping & { id: string }>>([]);
   const [shopPickIndex, setShopPickIndex] = useState<number | null>(null);
   const [nutritionPickIndex, setNutritionPickIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -676,8 +677,33 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then((result) => setEcosystems(result.ecosystems));
   }, []);
 
+  useEffect(() => {
+    if (!mealKitEcosystemId) {
+      setKitMappings([]);
+      return;
+    }
+    void api<{ mappings: Array<KitSheetMapping & { id: string }> }>(`/api/meal-kits/${mealKitEcosystemId}/mappings`)
+      .then((result) => setKitMappings(result.mappings))
+      .catch(() => setKitMappings([]));
+  }, [mealKitEcosystemId]);
+
+  /** What the server will rename this line to on save, or null when nothing changes. */
+  function kitCanonicalSuggestion(line: RecipeEditorLine): string | null {
+    if (kitMappings.length === 0) return null;
+    const composed = fullLineName(line);
+    const key = kitLineKeyFromText(composed);
+    const map = key ? kitMappings.find((row) => row.nameKey === key) : undefined;
+    if (!map) return null;
+    const parts = parseIngredientParts(composed);
+    const canonical = parseIngredientParts(map.kitLineName).name || map.kitLineName.trim();
+    if (!canonical) return null;
+    const suggested = composeIngredientName({ name: canonical, quantity: parts.quantity, unit: parts.unit });
+    return suggested === composed ? null : suggested;
+  }
+
   async function applyEcosystemMappings(ecosystemId: string, current: RecipeEditorLine[]): Promise<RecipeEditorLine[]> {
     const result = await api<{ mappings: Array<KitSheetMapping & { id: string }> }>(`/api/meal-kits/${ecosystemId}/mappings`);
+    setKitMappings(result.mappings);
     const byKey = new Map(result.mappings.map((row) => [row.nameKey, row]));
     const next: RecipeEditorLine[] = [];
     for (const line of current) {
@@ -1105,7 +1131,9 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         <h2 className="form-section-title">Ingredients {lines.length > 0 ? `(${lines.length})` : ''}</h2>
         {lines.length === 0 && <p className="muted">{importMode ? 'Imported ingredients appear here.' : 'Search above and tap a food to add it.'}</p>}
         <ul className="recipe-ingredients">
-          {lines.map((line, index) => (
+          {lines.map((line, index) => {
+            const kitSuggestion = kitCanonicalSuggestion(line);
+            return (
             <li key={`${line.foodId ?? 'free'}-${index}`} className="recipe-ingredient">
               <div className="recipe-ingredient-main">
                 {line.foodId ? (
@@ -1186,6 +1214,25 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                 </label>
                 <RemoveButton label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))} />
               </div>
+              {kitSuggestion && (
+                <p className="kit-rename-hint">
+                  Kit sheet will rename this to <strong>{kitSuggestion}</strong> on save.{' '}
+                  {!line.foodId && (
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => {
+                        const parts = parseIngredientParts(kitSuggestion);
+                        const next = [...lines];
+                        next[index] = { ...line, name: parts.name, quantity: parts.quantity, unit: parts.unit };
+                        setLines(next);
+                      }}
+                    >
+                      Use canonical name
+                    </button>
+                  )}
+                </p>
+              )}
               <div className="recipe-ingredient-shop">
                 <label className="recipe-shop-label">
                   Buy at store
@@ -1264,7 +1311,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                 )}
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
         </section>
       </div>

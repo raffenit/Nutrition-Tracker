@@ -9,6 +9,7 @@ export const PROTEIN_TAGS = [
   'chicken',
   'turkey',
   'beef',
+  'lamb',
   'pork',
   'fish',
   'shellfish',

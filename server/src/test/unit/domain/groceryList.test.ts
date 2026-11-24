@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { aggregateGroceryLineItems } from '../../../domain/groceryList.js';
+import { aggregateGroceryLineItems, formatGroceryMarkdown } from '../../../domain/groceryList.js';
 import { kitLineKeyFromText } from '../../../domain/kitLineKey.js';
 import type { Food } from '../../../types.js';
 
@@ -207,4 +207,13 @@ test('aggregateGroceryLineItems keeps different units on separate lines', () => 
   const broccoli = items.filter((item) => item.name.toLowerCase() === 'broccoli');
   assert.equal(broccoli.length, 2);
   assert.deepEqual(broccoli.map((item) => item.unit).sort(), ['cup', 'oz']);
+});
+
+test('formatGroceryMarkdown lists recipe names before shopping items', () => {
+  const markdown = formatGroceryMarkdown('2026-01-05', '2026-01-11', [], [], ['Turkey chili', 'Steak kit']);
+  const recipesAt = markdown.indexOf('## Recipes');
+  const shoppingAt = markdown.indexOf('## Shopping');
+  assert.ok(recipesAt > -1 && shoppingAt > recipesAt);
+  assert.ok(markdown.indexOf('- Turkey chili') > recipesAt);
+  assert.ok(markdown.indexOf('- Steak kit') > recipesAt);
 });
