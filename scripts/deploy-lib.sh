@@ -1,6 +1,18 @@
 # Shared deploy steps for standalone-deploy.sh and external-deploy.sh
 # shellcheck shell=bash
 
+FAILURE_REPORT_NAME="${FAILURE_REPORT_NAME:-DEPLOY}"
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/lib-failure-report.sh"
+failure_report_step "Loading .env and options"
+
+# Print a numbered deploy step and remember it for the failure banner.
+deploy_step() {
+  failure_report_step "$*"
+  echo ""
+  echo "$*"
+}
+
 RUN_TEST=true
 RUN_GIT=true
 PULL=false
@@ -151,7 +163,9 @@ deploy_compose() {
   fi
   cmd+=("$@")
   deploy_export_build_info "$script_dir"
+  FAILURE_REPORT_DETAIL="${cmd[*]}"
   "${cmd[@]}"
+  FAILURE_REPORT_DETAIL=""
 }
 
 # Stamp the image with the commit being deployed (shown in /api/health and after deploy).
@@ -257,8 +271,7 @@ deploy_restart_infra() {
     echo "WARNING: --infra but infrastructure compose not found at: $infra_compose"
     return 0
   fi
-  echo ""
-  echo "[infra] Restarting shared Caddy stack..."
+  deploy_step "[infra] Restarting shared Caddy stack..."
   docker compose -f "$infra_compose" up -d
 }
 

@@ -25,6 +25,10 @@ Some teams keep a **second local path** (SSHFS, sync, or remote-only) that mirro
 1. Change code in your dev clone → `npm test` → commit → push.
 2. On the **production host** (SSH or on-box shell), in the stack directory: `git pull`, `./deploy.sh --skip-git` (or full `./deploy.sh`).
 
+## When a deploy or test run fails
+
+`deploy.sh`, `standalone-deploy.sh`, `external-deploy.sh`, `scripts/run-tests.sh` and `scripts/run-tests-quick.sh` source `scripts/lib-failure-report.sh`. Any non-zero exit prints a red `DEPLOY FAILED` / `TEST RUN FAILED` banner on stderr with the step (`[3/6] Building…`), the exit code, and the last failing command with `file:line`. A failure can never end the script silently. New deploy steps should use `deploy_step "[n/6] …"` so the banner names them.
+
 ## Before editing a remote/mounted stack tree
 
 1. Confirm the mount or SSH path is the live stack (expected `docker-compose.yml`, populated `data/`).
