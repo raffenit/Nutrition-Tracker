@@ -62,7 +62,9 @@ log "Summary"
 log "  Server typecheck: $([ "$server_typecheck_ok" = true ] && echo PASS || echo FAIL)"
 log "  Server tests:     $([ "$server_tests_ok" = true ] && echo PASS || echo FAIL)"
 log "  Web typecheck:    $([ "$web_typecheck_ok" = true ] && echo PASS || echo FAIL)"
-skipped_tests="$(grep -oE '^# skipped [0-9]+' "$LOG" | tail -1 | awk '{print $3}')"
+# TAP prints "# skipped N", the spec reporter (default on newer Node / TTY) prints "ℹ skipped N".
+# `|| true`: no match must not abort the summary under `set -euo pipefail`.
+skipped_tests="$( (grep -oE '^(#|ℹ) skipped [0-9]+' "$LOG" || true) | tail -1 | awk '{print $3}')"
 if [ -n "${skipped_tests:-}" ] && [ "$skipped_tests" -gt 0 ] 2>/dev/null; then
   log "  Skipped tests:    $skipped_tests (photo-fixture OCR tests self-skip when local/test-images/ is absent — host-specific, gitignored)"
 fi
