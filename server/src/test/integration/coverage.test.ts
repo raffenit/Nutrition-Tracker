@@ -189,6 +189,90 @@ test('meal plan save, grocery list, and log-from-entry', async () => {
   });
 });
 
+test('grocery list supports manual edits, clearing, and regeneration', async () => {
+  await withTestServer(async ({ port }) => {
+    const { cookie, day } = await setupTestHousehold(port);
+    const weekStart = weekStartMonday(day);
+    const food = await api<{ food: { id: string } }>(port, '/api/foods', {
+      method: 'POST',
+      cookie,
+      body: {
+        name: 'PlanOnlyOats',
+        brand: null,
+        kind: 'packaged',
+        servingLabel: '1 bowl',
+        nutrients: { calories: 180, protein: 6, fiber: 4, fat: 3, carbs: 32, sodium: 120, extras: [] },
+        isFavorite: false,
+        isDrink: false,
+        drinkMl: null,
+        source: 'manual',
+      },
+    });
+    assert.equal(food.status, 201);
+    await api(port, '/api/meal-plan', {
+      method: 'PUT',
+      cookie,
+      body: {
+        weekStart,
+        entries: [{ localDate: day, slot: 'meal', foodId: food.body.food.id, servings: 1 }],
+      },
+    });
+
+    type GroceryPayload = {
+      customized: boolean;
+      lineItems: Array<{ key: string; name: string; quantity: number; unit: string }>;
+      markdown: string;
+    };
+
+    const custom = await api<GroceryPayload>(port, '/api/meal-plan/grocery', {
+      method: 'PUT',
+      cookie,
+      body: {
+        weekStart,
+        items: [
+          { key: 'a', name: 'Bananas', quantity: 2, unit: 'unit' },
+          { name: 'Paper towels', quantity: 1, unit: 'pkg' },
+        ],
+      },
+    });
+    assert.equal(custom.status, 200);
+    assert.equal(custom.body.customized, true);
+    assert.equal(custom.body.lineItems.length, 2);
+    assert.equal(custom.body.lineItems[0]?.name, 'Bananas');
+    assert.ok(custom.body.lineItems[1]?.key, 'missing key should be generated');
+    assert.match(custom.body.markdown, /Bananas/);
+    assert.doesNotMatch(custom.body.markdown, /PlanOnlyOats — /);
+
+    const fetched = await api<GroceryPayload>(port, `/api/meal-plan/grocery?week=${weekStart}`, { cookie });
+    assert.equal(fetched.body.customized, true);
+    assert.equal(fetched.body.lineItems.length, 2);
+
+    const cleared = await api<GroceryPayload>(port, '/api/meal-plan/grocery', {
+      method: 'PUT',
+      cookie,
+      body: { weekStart, items: [] },
+    });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.body.customized, true);
+    assert.equal(cleared.body.lineItems.length, 0);
+
+    const regenerated = await api<GroceryPayload>(port, `/api/meal-plan/grocery?week=${weekStart}`, {
+      method: 'DELETE',
+      cookie,
+    });
+    assert.equal(regenerated.status, 200);
+    assert.equal(regenerated.body.customized, false);
+    assert.ok(regenerated.body.lineItems.some((item) => item.name === 'PlanOnlyOats'));
+
+    const invalid = await api<{ error?: string }>(port, '/api/meal-plan/grocery', {
+      method: 'PUT',
+      cookie,
+      body: { weekStart, items: [{ name: 'Bad qty', quantity: 0, unit: 'unit' }] },
+    });
+    assert.equal(invalid.status, 400);
+  });
+});
+
 test('GET /api/push/status when VAPID is not configured', async () => {
   await withTestServer(async ({ port }) => {
     const { cookie } = await setupTestHousehold(port);
