@@ -978,7 +978,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         {importProgress && <ImportProgress progress={importProgress} compact />}
         {importStatus && !importProgress && <p className="muted">{importStatus}</p>}
         {importError && !importProgress && <p className="notice" role="alert">Import failed: {importError}</p>}
-        {bookletCards.length > 1 && !importProgress && bookletSaved.length < bookletCards.length && (
+        {!editId && bookletCards.length > 1 && !importProgress && bookletSaved.length < bookletCards.length && (
           <button type="button" className="settings-secondary-btn" onClick={() => void importAllBookletCards()}>
             Import all {bookletCards.length - bookletSaved.length} recipes
           </button>
