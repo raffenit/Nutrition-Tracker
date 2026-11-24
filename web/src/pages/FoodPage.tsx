@@ -1097,7 +1097,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         {lines.length === 0 && <p className="muted">{importMode ? 'Imported ingredients appear here.' : 'Search above and tap a food to add it.'}</p>}
         <ul className="recipe-ingredients">
           {lines.map((line, index) => (
-            <li key={`${line.foodId ?? line.name}-${index}`} className="recipe-ingredient">
+            <li key={`${line.foodId ?? 'free'}-${index}`} className="recipe-ingredient">
               <div className="recipe-ingredient-main">
                 {line.foodId ? (
                   <>
@@ -1124,7 +1124,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                       className="recipe-ingredient-qty-input"
                       value={line.quantity}
                       placeholder="qty"
-                      inputMode="decimal"
+                      inputMode="text"
                       aria-label={`Quantity of ${line.name || 'ingredient'}`}
                       onChange={(event) => {
                         const next = [...lines];

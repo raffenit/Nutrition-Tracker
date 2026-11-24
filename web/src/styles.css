@@ -1359,44 +1359,32 @@ label.import-field-review,
   align-items: center;
   gap: 4px;
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
 }
-.recipe-ingredient-qty input { width: 3.5rem; min-height: 36px; padding: 0 6px; }
+.recipe-ingredient-qty input { width: 3.75rem; }
 .recipe-ingredient-fields {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
-.recipe-ingredient-qty-input {
-  width: 3.75rem;
+.recipe-ingredient-fields input,
+.recipe-ingredient-fields select,
+.recipe-ingredient-qty input,
+.recipe-ingredient-role select {
+  font-size: 0.9rem;
   min-height: 36px;
-  padding: 0 6px;
-  font: inherit;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--raise);
   color: var(--text);
 }
-.recipe-ingredient-unit {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 4px 6px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--raise);
-  color: var(--text);
-}
+.recipe-ingredient-qty-input { width: 3.75rem; }
+.recipe-ingredient-unit { flex-shrink: 0; }
 .recipe-ingredient-name-input {
   flex: 1;
   min-width: 0;
-  min-height: 36px;
-  padding: 0 8px;
-  font: inherit;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--raise);
-  color: var(--text);
 }
 .sr-only {
   position: absolute;
@@ -2175,14 +2163,6 @@ label.import-field-review,
   display: flex;
   flex-wrap: wrap;
   gap: 6px 14px;
-}
-.recipe-ingredient-role select {
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--raise);
-  color: var(--text);
 }
 .generate-dialog { max-width: 560px; width: min(560px, 92vw); }
 .generate-drafts {

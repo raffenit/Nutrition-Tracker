@@ -1,4 +1,5 @@
 import { parseLeadingQuantityUnit } from './parseIngredientLine.js';
+import { normalizeKitLineKey } from './kitLineKey.js';
 import { effectiveIngredientLine, type KitMappingLookup } from './kitEcosystemIngredients.js';
 import type { Food, IngredientLine, MealSlot } from '../types.js';
 
@@ -44,7 +45,7 @@ export function aggregateGroceryLineItems(
       }
       continue;
     }
-    mergeLine(buckets, food.id, food.name, plan.servings, 'serving', food.id, null);
+    mergeLine(buckets, `name:${normalizeKitLineKey(food.name)}`, food.name, plan.servings, 'serving', food.id, null);
   }
   return [...buckets.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
@@ -88,9 +89,16 @@ export function resolveShoppingLine(
     };
   }
   const child = line.childFoodId ? foodById(line.childFoodId) : null;
-  const name = child?.name ?? line.name;
-  const key = line.childFoodId ?? `name:${name.toLowerCase()}`;
-  return { key, name, foodId: line.childFoodId, recipeLineName: null };
+  // Dedupe on the normalized ingredient name (quantity/unit stripped) so
+  // "1 cup broccoli" and "2 cups broccoli" collapse into one shopping line.
+  const parsed = child ? null : parseLeadingQuantityUnit(line.name);
+  const displayName = (parsed?.name ?? child?.name ?? line.name).trim();
+  return {
+    key: `name:${normalizeKitLineKey(displayName)}`,
+    name: displayName,
+    foodId: line.childFoodId,
+    recipeLineName: null,
+  };
 }
 
 export function formatGroceryMarkdown(weekStart: string, weekEnd: string, items: GroceryLineItem[], meals: PlannedMeal[]): string {
@@ -141,9 +149,12 @@ function mergeLine(
   foodId: string | null,
   recipeLineName: string | null,
 ): void {
-  const prev = buckets.get(key);
+  // Same ingredient in different units can't be summed ("1 cup" + "8 oz") —
+  // bucket per unit so they stay separate lines.
+  const bucketKey = `${key}|${unit}`;
+  const prev = buckets.get(bucketKey);
   if (!prev) {
-    buckets.set(key, { key, name, quantity, unit, foodId, recipeLineName });
+    buckets.set(bucketKey, { key: bucketKey, name, quantity, unit, foodId, recipeLineName });
     return;
   }
   prev.quantity += quantity;
