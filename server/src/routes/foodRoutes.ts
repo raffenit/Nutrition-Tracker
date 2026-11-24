@@ -231,11 +231,9 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       const extracted = kind === 'pdf'
         ? await readExtractedText(kind, storedPath, ctx.config)
         : await readExtractedText(kind, await readFile(storedPath), ctx.config);
-      reportImportJobStep(
-        'Draft',
-        extracted.pageLayouts?.some((layout) => layout && layout.ingredients.length >= 2) ? 'Building recipe drafts…' : 'Building your draft…',
-        extracted.pageLayouts ? undefined : 'Applying parsers and import panels.',
-      );
+      if (kind === 'pdf') {
+        reportImportJobStep('Parse', 'Parsing document…', 'Splitting page text into recipe drafts.');
+      }
       const built = buildNutritionImportWithPanels(extracted.text, kind, null, extracted.pageTexts, {
         varietyPackExpectedColumns: extracted.varietyPackExpectedColumns,
         recipePageLayouts: extracted.pageLayouts,
@@ -247,6 +245,11 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
       }
       if (extracted.serving && !varietyPackPanels) applyVotedServing(built.draft, extracted.serving);
       const warning = [extracted.warning, built.warning].filter(Boolean).join(' ') || null;
+      reportImportJobStep(
+        'Draft',
+        extracted.pageLayouts?.some((layout) => layout && layout.ingredients.length >= 2) ? 'Building recipe drafts…' : 'Building your draft…',
+        extracted.pageLayouts ? undefined : 'Applying parsers and import panels.',
+      );
       const saved = insertUpload(ctx.db, {
         kind,
         originalName: path.basename(file.filename).slice(0, 180) || 'upload',

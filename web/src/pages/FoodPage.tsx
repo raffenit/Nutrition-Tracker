@@ -16,6 +16,7 @@ import type { ImportFieldReviewMap } from '../importFieldReview';
 import { FoodLibraryPicker } from '../components/FoodLibraryPicker';
 import { RemoveButton } from '../components/RemoveButton';
 import { kitLineKeyFromText } from '../kitLineKey';
+import { composeIngredientName, ingredientUnitOptions, parseIngredientParts } from '../lib/ingredientLine';
 import { navigate } from '../nav';
 import {
   addLabelExtra,
@@ -621,12 +622,21 @@ type KitSheetMapping = {
 type RecipeEditorLine = {
   foodId: string | null;
   name: string;
+  /** Editable quantity text for unlinked lines ("1/2", "2", "½"); '' when unset. */
+  quantity: string;
+  /** Editable unit for unlinked lines ('cup', 'unit', …). */
+  unit: string;
   servings: number;
   servingLabel: string;
   componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string;
 };
+
+/** Stored line text: recompose editable qty+unit+name (linked lines keep their fields too, so nothing is lost on unlink). */
+function fullLineName(line: RecipeEditorLine): string {
+  return composeIngredientName({ name: line.name, quantity: line.quantity, unit: line.unit });
+}
 
 function RecipeEditor({ editId }: { editId: string | null }) {
   const [name, setName] = useState('');
@@ -642,6 +652,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [bookletCards, setBookletCards] = useState<RecipeCardImport[]>([]);
   const [bookletIndex, setBookletIndex] = useState(0);
   const [bookletSaved, setBookletSaved] = useState<number[]>([]);
+  const [importMode, setImportMode] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
   const recipeImportRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
   const { busy: recipeSaveBusy, run: runRecipeSave } = useAsyncAction();
@@ -661,7 +672,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     const byKey = new Map(result.mappings.map((row) => [row.nameKey, row]));
     const next: RecipeEditorLine[] = [];
     for (const line of current) {
-      const key = kitLineKeyFromText(line.name);
+      const key = kitLineKeyFromText(fullLineName(line));
       const map = key ? byKey.get(key) : undefined;
       if (!map) {
         next.push(line);
@@ -680,9 +691,12 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       } else if (!shopLabel.trim() && map.shopEquivalentLabel) {
         shopLabel = map.shopEquivalentLabel;
       }
+      const kitParts = parseIngredientParts(map.kitLineName);
       next.push({
         ...line,
-        name: map.kitLineName,
+        name: kitParts.name,
+        quantity: kitParts.quantity || line.quantity,
+        unit: kitParts.quantity ? kitParts.unit : line.unit,
         foodId: nutritionId,
         servingLabel,
         shopEquivalentFoodId: line.shopEquivalentFoodId ?? map.shopEquivalentFoodId,
@@ -696,6 +710,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     if (!editId) return;
     void api<{ food: Food }>(`/api/foods/${editId}`).then(async (result) => {
       const food = result.food;
+      setImportMode(false);
       setName(food.name);
       setBrand(food.brand ?? '');
       setMealKitEcosystemId(food.mealKitEcosystemId);
@@ -715,11 +730,12 @@ function RecipeEditor({ editId }: { editId: string | null }) {
           shopEquivalentFoodId: line.shopEquivalentFoodId,
           shopEquivalentLabel: shopLabel,
         };
+        const parts = parseIngredientParts(line.name);
         if (line.childFoodId) {
           const hit = await api<{ food: Food }>(`/api/foods/${line.childFoodId}`);
-          return { foodId: line.childFoodId, name: line.name, servingLabel: hit.food.servingLabel, ...base };
+          return { foodId: line.childFoodId, name: parts.name, quantity: parts.quantity, unit: parts.unit, servingLabel: hit.food.servingLabel, ...base };
         }
-        return { foodId: null, name: line.name, servingLabel: '1 item', ...base };
+        return { foodId: null, name: parts.name, quantity: parts.quantity, unit: parts.unit, servingLabel: '1 item', ...base };
       }));
       setLines(nextLines);
       setLoading(false);
@@ -739,6 +755,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       return [...prev, {
         foodId: food.id,
         name: food.name,
+        quantity: '',
+        unit: 'unit',
         servings: 1,
         servingLabel: food.servingLabel,
         componentRole: null,
@@ -749,15 +767,20 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   }
 
   function recipeCardLines(card: RecipeCardImport): RecipeEditorLine[] {
-    return card.ingredients.map((line) => ({
-      foodId: null,
-      name: line.name,
-      servings: line.servings,
-      servingLabel: '1 item',
-      componentRole: null,
-      shopEquivalentFoodId: null,
-      shopEquivalentLabel: '',
-    }));
+    return card.ingredients.map((line) => {
+      const parts = parseIngredientParts(line.name);
+      return {
+        foodId: null,
+        name: parts.name,
+        quantity: parts.quantity,
+        unit: parts.unit,
+        servings: line.servings,
+        servingLabel: '1 item',
+        componentRole: null,
+        shopEquivalentFoodId: null,
+        shopEquivalentLabel: '',
+      };
+    });
   }
 
   function ecosystemForBrand(ecos: MealKitEcosystem[], brandName: string | null): MealKitEcosystem | undefined {
@@ -825,6 +848,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   }
 
   function loadRecipeCard(card: RecipeCardImport, status: string | null): void {
+    setImportMode(true);
     setName(card.name);
     const importedBrand = card.brand ?? '';
     setBrand(importedBrand);
@@ -1058,37 +1082,83 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         </label>
       </section>
 
-      <div className="food-form-layout">
+      <div className={importMode ? 'food-form-layout food-form-layout-single' : 'food-form-layout'}>
+        {!importMode && (
         <section className="card form-section food-form-column">
           <h2 className="form-section-title">Add from food library</h2>
           <p className="muted">Tap a food to add it as an ingredient. Search or scroll the list.</p>
           <FoodLibraryPicker shelf="foods" onSelect={addLibraryIngredient} excludeIds={excludeIds} />
           <button type="button" className="linkish" onClick={() => navigate('/foods/new')}>New food from label</button>
         </section>
+        )}
 
         <section className="card form-section food-form-column food-form-column-side">
         <h2 className="form-section-title">Ingredients {lines.length > 0 ? `(${lines.length})` : ''}</h2>
-        {lines.length === 0 && <p className="muted">Search above and tap a food to add it.</p>}
+        {lines.length === 0 && <p className="muted">{importMode ? 'Imported ingredients appear here.' : 'Search above and tap a food to add it.'}</p>}
         <ul className="recipe-ingredients">
           {lines.map((line, index) => (
             <li key={`${line.foodId ?? line.name}-${index}`} className="recipe-ingredient">
               <div className="recipe-ingredient-main">
-                <span className="recipe-ingredient-name">{line.name}</span>
-                <label className="recipe-ingredient-qty">
-                  <span className="sr-only">Servings of {line.name}</span>
-                  <DecimalInput
-                    min="0.25"
-                    step="0.25"
-                    value={line.servings}
-                    aria-label={`Servings of ${line.name}`}
-                    onValueChange={(value) => {
-                      const next = [...lines];
-                      next[index] = { ...line, servings: value };
-                      setLines(next);
-                    }}
-                  />
-                  <span className="muted">× {line.servingLabel}</span>
-                </label>
+                {line.foodId ? (
+                  <>
+                    <span className="recipe-ingredient-name">{line.name}</span>
+                    <label className="recipe-ingredient-qty">
+                      <span className="sr-only">Servings of {line.name}</span>
+                      <DecimalInput
+                        min="0.25"
+                        step="0.25"
+                        value={line.servings}
+                        aria-label={`Servings of ${line.name}`}
+                        onValueChange={(value) => {
+                          const next = [...lines];
+                          next[index] = { ...line, servings: value };
+                          setLines(next);
+                        }}
+                      />
+                      <span className="muted">× {line.servingLabel}</span>
+                    </label>
+                  </>
+                ) : (
+                  <div className="recipe-ingredient-fields">
+                    <input
+                      className="recipe-ingredient-qty-input"
+                      value={line.quantity}
+                      placeholder="qty"
+                      inputMode="decimal"
+                      aria-label={`Quantity of ${line.name || 'ingredient'}`}
+                      onChange={(event) => {
+                        const next = [...lines];
+                        next[index] = { ...line, quantity: event.target.value };
+                        setLines(next);
+                      }}
+                    />
+                    <select
+                      className="recipe-ingredient-unit"
+                      value={line.unit}
+                      aria-label={`Unit for ${line.name || 'ingredient'}`}
+                      onChange={(event) => {
+                        const next = [...lines];
+                        next[index] = { ...line, unit: event.target.value };
+                        setLines(next);
+                      }}
+                    >
+                      {ingredientUnitOptions(line.unit).map((unit) => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
+                    </select>
+                    <input
+                      className="recipe-ingredient-name-input"
+                      value={line.name}
+                      placeholder="Ingredient name"
+                      aria-label={`Ingredient name ${index + 1}`}
+                      onChange={(event) => {
+                        const next = [...lines];
+                        next[index] = { ...line, name: event.target.value };
+                        setLines(next);
+                      }}
+                    />
+                  </div>
+                )}
                 <label className="recipe-ingredient-role">
                   <span className="sr-only">Component role for {line.name}</span>
                   <select
@@ -1100,7 +1170,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                       setLines(next);
                     }}
                   >
-                    <option value="">Part</option>
+                    <option value="">Ingredient</option>
                     <option value="main">Main</option>
                     <option value="side">Side</option>
                   </select>
@@ -1137,7 +1207,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                   </p>
                 ) : (
                   <button type="button" className="linkish" onClick={() => setShopPickIndex(shopPickIndex === index ? null : index)}>
-                    {shopPickIndex === index ? 'Cancel link' : 'Link library food instead'}
+                    {shopPickIndex === index ? 'Cancel link' : 'Link store item instead'}
                   </button>
                 )}
                 {shopPickIndex === index && (
@@ -1163,7 +1233,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                     className="linkish"
                     onClick={() => setNutritionPickIndex(nutritionPickIndex === index ? null : index)}
                   >
-                    {nutritionPickIndex === index ? 'Cancel nutrition link' : 'Link library food for nutrition rollup'}
+                    {nutritionPickIndex === index ? 'Cancel link' : 'Link nutrition source'}
                   </button>
                 )}
                 {line.foodId && (
@@ -1231,7 +1301,7 @@ function recipeComposePayload(fields: {
     drinkMl: null,
     source: 'composed' as const,
     ingredients: fields.lines.map((line) => ({
-      name: line.name,
+      name: fullLineName(line),
       servings: line.servings,
       foodId: line.foodId,
       componentRole: line.componentRole,
