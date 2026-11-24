@@ -26,43 +26,37 @@ echo "========================================"
 echo "Caddy: bundled (caddy/Caddyfile)"
 echo "Compose: ${COMPOSE_FILES[*]}"
 
+failure_report_step "Preflight (compose files, .env)"
 deploy_preflight_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}"
 
 if $RUN_TEST; then
-  echo ""
-  echo "[0/6] Running npm test..."
+  deploy_step "[0/6] Running npm test..."
   deploy_run_tests "$SCRIPT_DIR"
 fi
 
 if $RUN_GIT; then
-  echo ""
-  echo "[1/6] Git commit and push..."
+  deploy_step "[1/6] Git commit and push..."
   deploy_run_git "$SCRIPT_DIR" "$COMMIT_MSG"
 fi
 
 if $DOWN; then
-  echo ""
-  echo "[2/6] Stopping stack..."
+  deploy_step "[2/6] Stopping stack..."
   deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" down
 fi
 
 if $PULL; then
-  echo ""
-  echo "[2/6] Pulling base images..."
+  deploy_step "[2/6] Pulling base images..."
   deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" pull
 fi
 
-echo ""
-echo "[3/6] Building and starting (app + Caddy)..."
+deploy_step "[3/6] Building and starting (app + Caddy)..."
 deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" up -d --build
 
-echo ""
-echo "[4/6] Service status..."
+deploy_step "[4/6] Service status..."
 sleep 2
 deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" ps
 
-echo ""
-echo "[5/6] Health check..."
+deploy_step "[5/6] Health check..."
 deploy_health_check "$SCRIPT_DIR"
 
 deploy_https_smoke "$SCRIPT_DIR"
