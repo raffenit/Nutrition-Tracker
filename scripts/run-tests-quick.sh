@@ -4,6 +4,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+FAILURE_REPORT_NAME="QUICK TEST RUN"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/lib-failure-report.sh"
 LOG="$ROOT/local/test-last-run-quick.log"
 
 mkdir -p "$ROOT/local"
@@ -16,6 +19,7 @@ log() {
 run_phase() {
   local label=$1
   shift
+  failure_report_step "$label"
   log ""
   log "----------------------------------------"
   log "$label"
@@ -57,6 +61,7 @@ if ! run_phase "[3/3] Web — TypeScript (tsc --noEmit)" npm --prefix "$ROOT/web
   web_typecheck_ok=false
 fi
 
+failure_report_step "Summary (all phases finished; see PASS/FAIL lines)"
 log ""
 log "========================================"
 log "Summary (quick)"

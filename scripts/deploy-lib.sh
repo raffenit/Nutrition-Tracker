@@ -1,6 +1,18 @@
 # Shared deploy steps for standalone-deploy.sh and external-deploy.sh
 # shellcheck shell=bash
 
+FAILURE_REPORT_NAME="${FAILURE_REPORT_NAME:-DEPLOY}"
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/lib-failure-report.sh"
+failure_report_step "Loading .env and options"
+
+# Print a numbered deploy step and remember it for the failure banner.
+deploy_step() {
+  failure_report_step "$*"
+  echo ""
+  echo "$*"
+}
+
 RUN_TEST=true
 RUN_GIT=true
 PULL=false
@@ -150,7 +162,9 @@ deploy_compose() {
     exit 1
   fi
   cmd+=("$@")
+  FAILURE_REPORT_DETAIL="${cmd[*]}"
   "${cmd[@]}"
+  FAILURE_REPORT_DETAIL=""
 }
 
 deploy_preflight_compose() {

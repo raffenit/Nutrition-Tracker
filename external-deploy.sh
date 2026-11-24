@@ -27,6 +27,7 @@ echo "========================================"
 echo "Caddy: shared infrastructure (not this repo)"
 echo "Compose: docker-compose.yml"
 
+failure_report_step "Preflight (compose files, .env)"
 deploy_preflight_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}"
 
 if ! docker network inspect media-network >/dev/null 2>&1; then
@@ -37,44 +38,37 @@ if ! docker network inspect media-network >/dev/null 2>&1; then
 fi
 
 if $RUN_TEST; then
-  echo ""
-  echo "[0/6] Running npm test..."
+  deploy_step "[0/6] Running npm test..."
   deploy_run_tests "$SCRIPT_DIR"
 fi
 
 if $RUN_GIT; then
-  echo ""
-  echo "[1/6] Git commit and push..."
+  deploy_step "[1/6] Git commit and push..."
   deploy_run_git "$SCRIPT_DIR" "$COMMIT_MSG"
 fi
 
 if $DOWN; then
-  echo ""
-  echo "[2/6] Stopping nutrition-tracker..."
+  deploy_step "[2/6] Stopping nutrition-tracker..."
   deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" down
 fi
 
 if $PULL; then
-  echo ""
-  echo "[2/6] Pulling base images..."
+  deploy_step "[2/6] Pulling base images..."
   deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" pull
 fi
 
-echo ""
-echo "[3/6] Building and starting nutrition-tracker..."
+deploy_step "[3/6] Building and starting nutrition-tracker..."
 deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" up -d --build
 
 if $RESTART_INFRA; then
   deploy_restart_infra "$SCRIPT_DIR"
 fi
 
-echo ""
-echo "[4/6] Service status..."
+deploy_step "[4/6] Service status..."
 sleep 2
 deploy_compose "$SCRIPT_DIR" "${COMPOSE_FILES[@]}" ps
 
-echo ""
-echo "[5/6] Health check..."
+deploy_step "[5/6] Health check..."
 deploy_health_check "$SCRIPT_DIR"
 
 deploy_https_smoke "$SCRIPT_DIR"
