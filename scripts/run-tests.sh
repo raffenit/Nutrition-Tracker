@@ -87,7 +87,8 @@ if $server_typecheck_ok && $server_tests_ok && $web_typecheck_ok; then
   exit 0
 fi
 
-failure_report_step "Failed: $(printf '%s; ' "${failed_phases[@]}")"
+failed_summary="$(printf '%s; ' "${failed_phases[@]}")"
+failure_report_step "Failed: ${failed_summary%; }"
 log "  Overall:          FAIL"
 log "Finished: $(date -Iseconds)"
 log "========================================"
