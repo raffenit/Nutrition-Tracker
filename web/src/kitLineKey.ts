@@ -1,11 +1,10 @@
-const LEADING_QTY_UNIT =
-  /^(\d+(?:\.\d+)?|\d+\s*\/\s*\d+)\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|kilograms?|ml|milliliters?|l|liters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|cloves?|cans?|bunches?|heads?|packages?|pkgs?)\.?\s+(.+)$/i;
+import { parseIngredientParts } from './lib/ingredientLine';
 
+/** Stable lookup key for kit ingredient lines (strips leading qty/unit, normalizes text). */
 export function kitLineKeyFromText(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
-  const match = trimmed.match(LEADING_QTY_UNIT);
-  const core = match?.[3]?.trim() ?? trimmed;
+  const core = parseIngredientParts(trimmed).name || trimmed;
   return core
     .toLowerCase()
     .replace(/[''"]/g, '')
