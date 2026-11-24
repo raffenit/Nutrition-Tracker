@@ -278,7 +278,26 @@ export function PlanPage() {
                       >
                         {entry.foodName}
                       </button>
-                      <span className="muted">{entry.servings} serving{entry.servings === 1 ? '' : 's'}</span>
+                      <input
+                        type="number"
+                        className="plan-meal-servings muted"
+                        defaultValue={entry.servings}
+                        min={0.25}
+                        step={0.25}
+                        aria-label={`Servings of ${entry.foodName}`}
+                        title="Servings to cook"
+                        onBlur={(event) => {
+                          const next = Number(event.target.value);
+                          if (!Number.isFinite(next) || next <= 0 || next === entry.servings) {
+                            event.target.value = String(entry.servings);
+                            return;
+                          }
+                          void saveEntries(entries.map((row) => (row.id === entry.id ? { ...row, servings: next } : row)));
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') event.currentTarget.blur();
+                        }}
+                      />
                     </div>
                     <div className="plan-meal-actions">
                       <button
@@ -543,6 +562,10 @@ function AddPlanMealDialog({
   const [servings, setServings] = useState('2');
   const [slot, setSlot] = useState<PlanEntry['slot']>('meal');
   const recipe = recipes.find((item) => item.id === foodId);
+  useEffect(() => {
+    const food = recipes.find((item) => item.id === foodId);
+    if (food) setServings(String(Math.max(1, food.makesServings)));
+  }, [foodId, recipes]);
   return (
     <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
       <form
