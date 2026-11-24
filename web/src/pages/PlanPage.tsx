@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { RemoveButton } from '../components/RemoveButton';
+import { IconCopy, IconSave } from '../components/NavIcons';
 import { formatDisplayDate } from '../dateFormat';
 import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
 import type { Food, ProteinTag } from '../types';
@@ -57,6 +58,7 @@ export function PlanPage() {
   const [shopItems, setShopItems] = useState<GroceryLineItem[]>([]);
   const [shopDirty, setShopDirty] = useState(false);
   const [shopBusy, setShopBusy] = useState(false);
+  const [shopCopied, setShopCopied] = useState(false);
   const [newShopItem, setNewShopItem] = useState({ name: '', quantity: '1', unit: 'unit' });
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -343,36 +345,46 @@ export function PlanPage() {
       {view === 'shop' && grocery && (
         <section className="card shop-panel shop-layout">
           <div className="shop-toolbar row shop-layout-span">
-            <div className="row">
+            <div className="row shop-actions">
               <button
                 type="button"
-                className="primary"
-                onClick={() => void navigator.clipboard.writeText(grocery.markdown)}
+                className="icon-btn"
+                title={shopCopied ? 'Copied!' : 'Copy markdown'}
+                aria-label="Copy markdown"
+                onClick={() => {
+                  void navigator.clipboard.writeText(grocery.markdown).then(() => {
+                    setShopCopied(true);
+                    window.setTimeout(() => setShopCopied(false), 1500);
+                  });
+                }}
               >
-                Copy Markdown
+                <IconCopy className="icon-btn-icon" />
               </button>
               <button
                 type="button"
-                className="settings-secondary-btn"
+                className="icon-btn"
+                title={shopBusy ? 'Saving…' : shopDirty ? 'Save list' : 'List saved'}
+                aria-label={shopBusy ? 'Saving list' : 'Save list'}
                 disabled={!shopDirty || shopBusy}
                 aria-busy={shopBusy}
                 onClick={() => void saveShopList(shopItems)}
               >
-                {shopBusy ? 'Saving…' : 'Save list'}
+                <IconSave className="icon-btn-icon" />
               </button>
               {grocery.customized && (
                 <button
                   type="button"
                   className="linkish"
+                  title="Regenerate from plan"
                   disabled={shopBusy}
                   onClick={() => void regenerateShopList()}
                 >
-                  Regenerate from plan
+                  Regenerate
                 </button>
               )}
             </div>
-            <span className="muted">
-              {shopItems.length} items{shopDirty ? ' · unsaved changes' : ''}
+            <span className="muted shop-count">
+              {shopItems.length} items{shopDirty ? ' · unsaved' : ''}
             </span>
           </div>
           <div className="shop-main">
