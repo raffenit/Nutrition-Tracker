@@ -27,8 +27,13 @@ run_phase() {
   "$@" 2>&1 | tee -a "$LOG"
   local status=${PIPESTATUS[0]}
   set -e
+  if [[ "$status" -ne 0 ]]; then
+    failed_phases+=("$label (exit $status: $*)")
+  fi
   return "$status"
 }
+
+failed_phases=()
 
 log "========================================"
 log "Nutrition Tracker test run"
@@ -82,6 +87,7 @@ if $server_typecheck_ok && $server_tests_ok && $web_typecheck_ok; then
   exit 0
 fi
 
+failure_report_step "Failed: $(printf '%s; ' "${failed_phases[@]}")"
 log "  Overall:          FAIL"
 log "Finished: $(date -Iseconds)"
 log "========================================"
