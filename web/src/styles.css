@@ -1376,6 +1376,7 @@ label.import-field-review,
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 .recipe-ingredient-fields input,
 .recipe-ingredient-fields select,
@@ -1582,6 +1583,14 @@ label.import-field-review,
 .plan-move-btn { display: none; }
 @media (pointer: coarse) {
   .plan-move-btn { display: inline-block; }
+  /* Compact fields drop below 16px for density — restore iOS-safe size + touch targets. */
+  .shop-edit-name, .shop-edit-qty, .shop-edit-unit,
+  .recipe-ingredient-fields input, .recipe-ingredient-fields select,
+  .recipe-ingredient-qty input, .recipe-ingredient-role select,
+  .plan-meal-servings {
+    font-size: 16px;
+    min-height: 2.5rem;
+  }
 }
 .plan-move-days {
   display: grid;
@@ -1602,7 +1611,7 @@ label.import-field-review,
 }
 .plan-meal-name:hover { color: var(--accent-soft); text-decoration: underline; }
 .plan-meal-slot { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.plan-meal-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.plan-meal-actions { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .plan-empty { padding: 4px 2px; list-style: none; font-size: 0.88rem; }
 .plan-dialog-backdrop {
   position: fixed;
@@ -2228,6 +2237,28 @@ label.import-field-review,
     overflow: auto;
   }
   .auth-screen { max-width: 440px; padding-top: 12vh; }
+  /* Login/setup render .app without the sidebar — undo the desktop row layout. */
+  .app.auth-screen {
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: min(100%, 26rem);
+    max-width: 26rem;
+    margin: 0 auto;
+    padding: 12vh 12px 32px;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .app.auth-screen .card { width: 100%; }
+}
+@media (min-width: 640px) and (max-width: 899px) {
+  .plan-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .shop-layout-span { grid-column: 1 / -1; }
 }
 @media (min-width: 1200px) {
   :root {
