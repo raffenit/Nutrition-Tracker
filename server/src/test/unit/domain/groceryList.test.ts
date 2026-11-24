@@ -158,3 +158,53 @@ test('aggregateGroceryLineItems uses shop equivalent for kit-specific ingredient
   assert.equal(items[0]?.name, 'Greek yogurt');
   assert.equal(items[0]?.recipeLineName, 'Green Chef chimichurri pouch');
 });
+
+function recipeWithLines(id: string, lines: Array<{ name: string; servings?: number }>): Food {
+  return {
+    ...chili,
+    id,
+    name: `Recipe ${id}`,
+    makesServings: 1,
+    ingredients: lines.map((line) => ({
+      name: line.name,
+      servings: line.servings ?? 1,
+      sourceRef: null,
+      childFoodId: null,
+      componentRole: null,
+      shopEquivalentFoodId: null,
+      shopEquivalentLabel: null,
+    })),
+  };
+}
+
+test('aggregateGroceryLineItems merges same ingredient across recipes and quantities', () => {
+  const map = new Map<string, Food>([
+    ['rA', recipeWithLines('rA', [{ name: '1 cup broccoli' }])],
+    ['rB', recipeWithLines('rB', [{ name: '2 cups broccoli' }, { name: 'Broccoli, steamed' }])],
+  ]);
+  // "Broccoli, steamed" normalizes to a different key than "broccoli" — only
+  // the two qty-prefixed lines merge here.
+  const items = aggregateGroceryLineItems(
+    [{ foodId: 'rA', servings: 1 }, { foodId: 'rB', servings: 1 }],
+    (id) => map.get(id) ?? null,
+  );
+  const broccoli = items.filter((item) => item.name.toLowerCase().includes('broccoli'));
+  const merged = broccoli.find((item) => item.unit === 'cup');
+  assert.ok(merged);
+  assert.equal(merged.quantity, 3);
+  assert.equal(merged.name, 'broccoli');
+});
+
+test('aggregateGroceryLineItems keeps different units on separate lines', () => {
+  const map = new Map<string, Food>([
+    ['rA', recipeWithLines('rA', [{ name: '1 cup broccoli' }])],
+    ['rB', recipeWithLines('rB', [{ name: '8 oz broccoli' }])],
+  ]);
+  const items = aggregateGroceryLineItems(
+    [{ foodId: 'rA', servings: 1 }, { foodId: 'rB', servings: 1 }],
+    (id) => map.get(id) ?? null,
+  );
+  const broccoli = items.filter((item) => item.name.toLowerCase() === 'broccoli');
+  assert.equal(broccoli.length, 2);
+  assert.deepEqual(broccoli.map((item) => item.unit).sort(), ['cup', 'oz']);
+});
