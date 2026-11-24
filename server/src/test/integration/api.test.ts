@@ -10,9 +10,10 @@ async function householdToday(port: number, cookie: string): Promise<string> {
 
 test('health, setup, dashboard, family privacy, and trends', async () => {
   await withTestServer(async ({ port }) => {
-    const health = await api<{ ok: boolean; setupRequired: boolean }>(port, '/api/health');
+    const health = await api<{ ok: boolean; setupRequired: boolean; build: { commit: string } }>(port, '/api/health');
     assert.equal(health.status, 200);
     assert.equal(health.body.setupRequired, true);
+    assert.equal(typeof health.body.build.commit, 'string');
 
     const setup = await api<{ user: { name: string } }>(port, '/api/setup', {
       method: 'POST',

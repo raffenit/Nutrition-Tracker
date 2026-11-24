@@ -33,3 +33,13 @@ Some teams keep a **second local path** (SSHFS, sync, or remote-only) that mirro
 ## Debugging production
 
 Use [CODE-MAP.md](../CODE-MAP.md) and [label-ocr-and-parsing.md](./label-ocr-and-parsing.md). Confirm running commit (image id, built JS hash). `npm run dev` on a laptop ≠ Docker (EasyOCR, prod build, host `./data`).
+
+## Which build is running?
+
+`./deploy.sh` stamps the image with the deployed commit. The health step prints `Running build: <commit> (built <time>)` and warns if the container reports a different commit than the one just built. Check any time with:
+
+```bash
+curl -s http://127.0.0.1:3010/api/health   # "build": { "commit": "abc1234", "builtAt": "…" }
+```
+
+`unknown` means the image was built without `deploy.sh` (e.g. a bare `docker compose up --build`); a `-dirty` suffix means tracked files had uncommitted edits.

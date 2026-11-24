@@ -150,7 +150,37 @@ deploy_compose() {
     exit 1
   fi
   cmd+=("$@")
+  deploy_export_build_info "$script_dir"
   "${cmd[@]}"
+}
+
+# Stamp the image with the commit being deployed (shown in /api/health and after deploy).
+deploy_export_build_info() {
+  local script_dir="$1"
+  local commit
+  commit="$(git -C "$script_dir" rev-parse --short HEAD 2>/dev/null)" || commit="unknown"
+  if [[ "$commit" != "unknown" && -n "$(git -C "$script_dir" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+    commit="${commit}-dirty"
+  fi
+  export BUILD_COMMIT="$commit"
+  export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+}
+
+# Print the commit the running container reports; warn when it is not what we just built.
+deploy_report_running_build() {
+  local body="$1"
+  local running
+  running="$(node -e '
+const health = JSON.parse(process.argv[1]);
+const build = health.build ?? {};
+process.stdout.write(`${build.commit ?? "unknown"}\t${build.builtAt ?? ""}`);
+' "$body" 2>/dev/null)" || running=$'unknown\t'
+  local commit="${running%%$'\t'*}"
+  local built_at="${running#*$'\t'}"
+  echo "  Running build: ${commit}${built_at:+ (built ${built_at})}"
+  if [[ -n "${BUILD_COMMIT:-}" && "$commit" != "$BUILD_COMMIT" ]]; then
+    echo "  WARNING: expected build ${BUILD_COMMIT} — the container may still be running an older image."
+  fi
 }
 
 deploy_preflight_compose() {
@@ -314,8 +344,10 @@ deploy_health_check() {
   done
   if $ready; then
     echo "  API health: OK"
-    curl -sf "$url" | head -c 200
-    echo ""
+    local body
+    body="$(curl -sf "$url" 2>/dev/null || true)"
+    echo "${body:0:200}"
+    deploy_report_running_build "$body"
     deploy_data_guard "$script_dir"
   else
     echo "  API health: not ready — check logs (docker compose logs -f)"

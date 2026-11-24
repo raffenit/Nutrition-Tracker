@@ -4,7 +4,11 @@
 
 services:
   nutrition:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-}
     container_name: nutrition-tracker
     restart: unless-stopped
     stop_grace_period: 30s
