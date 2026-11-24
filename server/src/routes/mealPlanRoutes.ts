@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { getFood, listFoodsWithIngredients } from '../db/foods.js';
+import { deleteStoredGroceryList, getStoredGroceryList, putStoredGroceryList } from '../db/groceryList.js';
 import { insertMeal } from '../db/logs.js';
 import { getMealPlanEntry, listMealPlanEntries, replaceMealPlanEntries } from '../db/mealPlan.js';
 import { drinkVolume } from '../domain/drinks.js';
 import { getKitMappingByKey } from '../db/mealKitEcosystems.js';
-import { aggregateGroceryLineItems, formatGroceryMarkdown, type PlannedMeal } from '../domain/groceryList.js';
+import { aggregateGroceryLineItems, formatGroceryMarkdown, type GroceryLineItem, type PlannedMeal } from '../domain/groceryList.js';
 import { generateMealPlan, planCandidatesFromFoods } from '../domain/mealPlanGenerate.js';
 import { PROTEIN_TAGS, readProteinTags } from '../domain/proteinTags.js';
 import { kitLineKeyFromText } from '../domain/kitLineKey.js';
@@ -24,6 +26,8 @@ export function mealPlanRoutes(): Route[] {
     route('GET', '/api/meal-plan', readPlan),
     route('PUT', '/api/meal-plan', savePlan),
     route('GET', '/api/meal-plan/grocery', groceryList),
+    route('PUT', '/api/meal-plan/grocery', saveGroceryList),
+    route('DELETE', '/api/meal-plan/grocery', resetGroceryList),
     route('GET', '/api/meal-plan/generate/options', generateOptions),
     route('POST', '/api/meal-plan/generate', generatePlan),
     route('POST', '/api/meal-plan/entries/:id/log', logFromEntry),
@@ -64,13 +68,18 @@ async function savePlan(ctx: Ctx): Promise<void> {
   sendJson(ctx.res, 200, { weekStart, weekEnd: weekEndSunday(weekStart), entries: saved });
 }
 
-function groceryList(ctx: Ctx): Promise<void> {
-  requireUser(ctx.auth);
+function groceryPayload(ctx: Ctx, weekStart: string): {
+  weekStart: string;
+  weekEnd: string;
+  customized: boolean;
+  lineItems: GroceryLineItem[];
+  markdown: string;
+} {
   const zone = householdZone(ctx);
-  const weekStart = weekStartMonday(readLocalDate(ctx.url.searchParams.get('week'), zone));
   const weekEnd = weekEndSunday(weekStart);
   const entries = listMealPlanEntries(ctx.db, weekStart);
-  const lineItems = aggregateGroceryLineItems(
+  const stored = getStoredGroceryList(ctx.db, weekStart);
+  const lineItems = stored ?? aggregateGroceryLineItems(
     entries.map((entry) => ({ foodId: entry.foodId, servings: entry.servings })),
     (id) => getFood(ctx.db, id),
     (ecosystemId, lineName) => {
@@ -86,13 +95,67 @@ function groceryList(ctx: Ctx): Promise<void> {
     servings: entry.servings,
     foodName: entry.foodName,
   }));
-  sendJson(ctx.res, 200, {
+  return {
     weekStart,
     weekEnd,
+    customized: stored !== null,
     lineItems,
     markdown: formatGroceryMarkdown(weekStart, weekEnd, lineItems, meals),
-  });
+  };
+}
+
+function groceryList(ctx: Ctx): Promise<void> {
+  requireUser(ctx.auth);
+  const zone = householdZone(ctx);
+  const weekStart = weekStartMonday(readLocalDate(ctx.url.searchParams.get('week'), zone));
+  sendJson(ctx.res, 200, groceryPayload(ctx, weekStart));
   return Promise.resolve();
+}
+
+async function saveGroceryList(ctx: Ctx): Promise<void> {
+  requireUser(ctx.auth);
+  const body = await readJson(ctx.req);
+  if (!isRecord(body) || !Array.isArray(body.items)) throw new HttpError(400, 'Expected items');
+  const zone = householdZone(ctx);
+  const weekStart = weekStartMonday(readLocalDate(
+    typeof body.weekStart === 'string' ? body.weekStart : ctx.url.searchParams.get('week'),
+    zone,
+  ));
+  const items = readGroceryItems(body.items);
+  putStoredGroceryList(ctx.db, weekStart, items);
+  sendJson(ctx.res, 200, groceryPayload(ctx, weekStart));
+}
+
+function resetGroceryList(ctx: Ctx): Promise<void> {
+  requireUser(ctx.auth);
+  const zone = householdZone(ctx);
+  const weekStart = weekStartMonday(readLocalDate(ctx.url.searchParams.get('week'), zone));
+  deleteStoredGroceryList(ctx.db, weekStart);
+  sendJson(ctx.res, 200, groceryPayload(ctx, weekStart));
+  return Promise.resolve();
+}
+
+function readGroceryItems(value: unknown[]): GroceryLineItem[] {
+  const seen = new Set<string>();
+  return value.map((entry) => {
+    if (!isRecord(entry)) throw new HttpError(400, 'Invalid grocery item');
+    const name = requiredText(entry.name, 'Item name').trim();
+    if (!name) throw new HttpError(400, 'Item name is required');
+    const quantity = requiredNumber(entry.quantity, 'Quantity');
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new HttpError(400, 'Quantity must be greater than zero');
+    const unitRaw = typeof entry.unit === 'string' ? entry.unit.trim() : '';
+    let key = typeof entry.key === 'string' && entry.key.trim() ? entry.key.trim() : `item-${randomUUID()}`;
+    while (seen.has(key)) key = `${key}-${randomUUID().slice(0, 8)}`;
+    seen.add(key);
+    return {
+      key,
+      name,
+      quantity,
+      unit: unitRaw || 'unit',
+      foodId: typeof entry.foodId === 'string' && entry.foodId ? entry.foodId : null,
+      recipeLineName: typeof entry.recipeLineName === 'string' && entry.recipeLineName.trim() ? entry.recipeLineName.trim() : null,
+    };
+  });
 }
 
 async function logFromEntry(ctx: Ctx): Promise<void> {

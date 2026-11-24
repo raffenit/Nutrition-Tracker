@@ -53,7 +53,11 @@ export function PlanPage() {
   const [today, setToday] = useState('');
   const [planFoods, setPlanFoods] = useState<Food[]>([]);
   const [cooking, setCooking] = useState<{ title: string; instructions: string } | null>(null);
-  const [grocery, setGrocery] = useState<{ lineItems: GroceryLineItem[]; markdown: string } | null>(null);
+  const [grocery, setGrocery] = useState<{ weekStart: string; customized: boolean; lineItems: GroceryLineItem[]; markdown: string } | null>(null);
+  const [shopItems, setShopItems] = useState<GroceryLineItem[]>([]);
+  const [shopDirty, setShopDirty] = useState(false);
+  const [shopBusy, setShopBusy] = useState(false);
+  const [newShopItem, setNewShopItem] = useState({ name: '', quantity: '1', unit: 'unit' });
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,8 +74,10 @@ export function PlanPage() {
   }
 
   async function loadGrocery(start = weekStart): Promise<void> {
-    const result = await api<{ lineItems: GroceryLineItem[]; markdown: string }>(`/api/meal-plan/grocery?week=${start}`);
+    const result = await api<{ weekStart: string; customized: boolean; lineItems: GroceryLineItem[]; markdown: string }>(`/api/meal-plan/grocery?week=${start}`);
     setGrocery(result);
+    setShopItems(result.lineItems);
+    setShopDirty(false);
     const stored = localStorage.getItem(checkKey(start));
     setChecks(stored ? JSON.parse(stored) as Record<string, boolean> : {});
   }
@@ -91,6 +97,74 @@ export function PlanPage() {
   function persistChecks(next: Record<string, boolean>): void {
     setChecks(next);
     localStorage.setItem(checkKey(weekStart), JSON.stringify(next));
+  }
+
+  function patchShopItem(key: string, patch: Partial<GroceryLineItem>): void {
+    setShopItems((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+    setShopDirty(true);
+  }
+
+  function addShopItem(): void {
+    const name = newShopItem.name.trim();
+    const quantity = Number(newShopItem.quantity);
+    if (!name || !Number.isFinite(quantity) || quantity <= 0) {
+      setError('New items need a name and a quantity above zero');
+      return;
+    }
+    setShopItems((items) => [
+      ...items,
+      {
+        key: `custom-${crypto.randomUUID()}`,
+        name,
+        quantity,
+        unit: newShopItem.unit.trim() || 'unit',
+        foodId: null,
+        recipeLineName: null,
+      },
+    ]);
+    setNewShopItem({ name: '', quantity: '1', unit: 'unit' });
+    setShopDirty(true);
+    setError(null);
+  }
+
+  async function saveShopList(items: GroceryLineItem[]): Promise<void> {
+    if (items.some((item) => !item.name.trim() || !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+      setError('Every item needs a name and a quantity above zero');
+      return;
+    }
+    setShopBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ weekStart: string; customized: boolean; lineItems: GroceryLineItem[]; markdown: string }>(
+        '/api/meal-plan/grocery',
+        { method: 'PUT', body: JSON.stringify({ weekStart, items }) },
+      );
+      setGrocery(result);
+      setShopItems(result.lineItems);
+      setShopDirty(false);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : 'Could not save grocery list');
+    } finally {
+      setShopBusy(false);
+    }
+  }
+
+  async function regenerateShopList(): Promise<void> {
+    setShopBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ weekStart: string; customized: boolean; lineItems: GroceryLineItem[]; markdown: string }>(
+        `/api/meal-plan/grocery?week=${weekStart}`,
+        { method: 'DELETE' },
+      );
+      setGrocery(result);
+      setShopItems(result.lineItems);
+      setShopDirty(false);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : 'Could not regenerate grocery list');
+    } finally {
+      setShopBusy(false);
+    }
   }
 
   async function saveEntries(next: PlanEntry[]): Promise<void> {
@@ -195,36 +269,112 @@ export function PlanPage() {
       {view === 'shop' && grocery && (
         <section className="card shop-panel shop-layout">
           <div className="shop-toolbar row shop-layout-span">
-            <button
-              type="button"
-              className="primary"
-              onClick={() => void navigator.clipboard.writeText(grocery.markdown)}
-            >
-              Copy Markdown
-            </button>
-            <span className="muted">{grocery.lineItems.length} items</span>
+            <div className="row">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void navigator.clipboard.writeText(grocery.markdown)}
+              >
+                Copy Markdown
+              </button>
+              <button
+                type="button"
+                className="settings-secondary-btn"
+                disabled={!shopDirty || shopBusy}
+                aria-busy={shopBusy}
+                onClick={() => void saveShopList(shopItems)}
+              >
+                {shopBusy ? 'Saving…' : 'Save list'}
+              </button>
+              {grocery.customized && (
+                <button
+                  type="button"
+                  className="linkish"
+                  disabled={shopBusy}
+                  onClick={() => void regenerateShopList()}
+                >
+                  Regenerate from plan
+                </button>
+              )}
+            </div>
+            <span className="muted">
+              {shopItems.length} items{shopDirty ? ' · unsaved changes' : ''}
+            </span>
           </div>
           <ul className="shop-list">
-            {grocery.lineItems.map((item) => (
-              <li key={item.key}>
-                <label className="shop-item">
+            {shopItems.map((item) => {
+              const done = Boolean(checks[item.key]);
+              return (
+                <li key={item.key} className={done ? 'shop-row shop-row-done' : 'shop-row'}>
                   <input
                     type="checkbox"
-                    checked={Boolean(checks[item.key])}
+                    className="shop-check"
+                    checked={done}
                     onChange={(event) => persistChecks({ ...checks, [item.key]: event.target.checked })}
                   />
-                  <span className={checks[item.key] ? 'shop-item-done' : undefined}>
-                    <strong>{item.name}</strong>
-                    <span className="muted"> · {formatQty(item.quantity)} {item.unit}</span>
-                    {item.recipeLineName && (
-                      <span className="muted shop-kit-line"> · recipe: {item.recipeLineName}</span>
-                    )}
-                  </span>
-                </label>
-              </li>
-            ))}
-            {grocery.lineItems.length === 0 && <li className="muted">Add recipes to the week to build a list.</li>}
+                  <input
+                    className="shop-edit-name"
+                    value={item.name}
+                    aria-label="Item name"
+                    onChange={(event) => patchShopItem(item.key, { name: event.target.value })}
+                  />
+                  <input
+                    className="shop-edit-qty"
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={item.quantity}
+                    aria-label="Quantity"
+                    onChange={(event) => patchShopItem(item.key, { quantity: Number(event.target.value) })}
+                  />
+                  <input
+                    className="shop-edit-unit"
+                    value={item.unit}
+                    aria-label="Unit"
+                    onChange={(event) => patchShopItem(item.key, { unit: event.target.value })}
+                  />
+                  <RemoveButton
+                    label={`Remove ${item.name} from list`}
+                    className="remove-icon-btn-danger"
+                    disabled={shopBusy}
+                    onClick={() => {
+                      setShopItems((items) => items.filter((row) => row.key !== item.key));
+                      setShopDirty(true);
+                    }}
+                  />
+                  {item.recipeLineName && (
+                    <span className="muted shop-kit-line">recipe: {item.recipeLineName}</span>
+                  )}
+                </li>
+              );
+            })}
+            {shopItems.length === 0 && <li className="muted">List is empty — add items below or regenerate from the plan.</li>}
           </ul>
+          <div className="shop-add-row">
+            <input
+              className="shop-edit-name"
+              placeholder="Add an item…"
+              value={newShopItem.name}
+              onChange={(event) => setNewShopItem({ ...newShopItem, name: event.target.value })}
+              onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addShopItem(); } }}
+            />
+            <input
+              className="shop-edit-qty"
+              type="number"
+              min={0}
+              step="any"
+              value={newShopItem.quantity}
+              aria-label="Quantity"
+              onChange={(event) => setNewShopItem({ ...newShopItem, quantity: event.target.value })}
+            />
+            <input
+              className="shop-edit-unit"
+              value={newShopItem.unit}
+              aria-label="Unit"
+              onChange={(event) => setNewShopItem({ ...newShopItem, unit: event.target.value })}
+            />
+            <button type="button" className="settings-secondary-btn" onClick={addShopItem}>Add</button>
+          </div>
           <details className="shop-markdown-preview">
             <summary>Markdown preview</summary>
             <pre className="shop-markdown">{grocery.markdown}</pre>
@@ -583,6 +733,4 @@ function slotLabel(slot: PlanEntry['slot']): string {
   return 'Drink';
 }
 
-function formatQty(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
+

@@ -154,6 +154,12 @@ CREATE TABLE IF NOT EXISTS meal_plan_entries (
 );
 
 CREATE INDEX IF NOT EXISTS meal_plan_week ON meal_plan_entries(week_start);
+
+CREATE TABLE IF NOT EXISTS grocery_lists (
+  week_start TEXT PRIMARY KEY,
+  items TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 export function openDatabase(file: string): AppDatabase {

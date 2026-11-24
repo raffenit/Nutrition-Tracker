@@ -1573,16 +1573,26 @@ label.import-field-review,
 .shop-panel { padding: 12px; display: grid; gap: 10px; }
 .shop-toolbar { justify-content: space-between; }
 .shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.shop-item {
+.shop-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 6px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
   border-radius: 8px;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
 }
-.shop-item input { width: 18px; height: 18px; min-height: 0; margin-top: 2px; }
-.shop-item-done { text-decoration: line-through; color: var(--muted); }
+.shop-check { width: 18px; height: 18px; min-height: 0; flex: none; }
+.shop-edit-name { flex: 1; min-width: 0; }
+.shop-edit-qty { width: 5.5rem; flex: none; }
+.shop-edit-unit { width: 6rem; flex: none; }
+.shop-row-done .shop-edit-name { text-decoration: line-through; color: var(--muted); }
+.shop-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shop-kit-line { font-size: 0.8rem; white-space: nowrap; }
 .shop-markdown-preview summary { cursor: pointer; color: var(--accent-soft); font-size: 0.88rem; }
 .shop-markdown {
   margin: 8px 0 0;
