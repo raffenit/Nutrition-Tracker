@@ -44,8 +44,8 @@ COPY --from=server /app/package.json ./package.json
 COPY --from=web /web/dist ./public
 # Stamped last so a new commit doesn't invalidate the cached layers above.
 ARG BUILD_COMMIT=unknown
-ARG BUILD_TIME=
+ARG BUILD_COMMIT_TIME=
 ENV BUILD_COMMIT=$BUILD_COMMIT
-ENV BUILD_TIME=$BUILD_TIME
+ENV BUILD_COMMIT_TIME=$BUILD_COMMIT_TIME
 EXPOSE 3010
 CMD ["node", "dist/index.js"]

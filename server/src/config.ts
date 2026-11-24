@@ -112,11 +112,11 @@ function blankToNull(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-export type BuildInfo = { commit: string; builtAt: string | null };
+export type BuildInfo = { commit: string; committedAt: string | null };
 
 /** Commit and time stamped into the image by deploy.sh (Docker build args). */
 export function readBuildInfo(): BuildInfo {
   const commit = process.env.BUILD_COMMIT?.trim();
-  const builtAt = process.env.BUILD_TIME?.trim();
-  return { commit: commit || 'unknown', builtAt: builtAt || null };
+  const committedAt = process.env.BUILD_COMMIT_TIME?.trim();
+  return { commit: commit || 'unknown', committedAt: committedAt || null };
 }

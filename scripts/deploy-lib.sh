@@ -163,7 +163,8 @@ deploy_export_build_info() {
     commit="${commit}-dirty"
   fi
   export BUILD_COMMIT="$commit"
-  export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  # Commit time, not wall-clock: an unchanged redeploy keeps identical build args, so Compose reuses the image.
+  export BUILD_COMMIT_TIME="$(git -C "$script_dir" log -1 --format=%cI 2>/dev/null || true)"
 }
 
 # Print the commit the running container reports; warn when it is not what we just built.
@@ -173,11 +174,11 @@ deploy_report_running_build() {
   running="$(node -e '
 const health = JSON.parse(process.argv[1]);
 const build = health.build ?? {};
-process.stdout.write(`${build.commit ?? "unknown"}\t${build.builtAt ?? ""}`);
+process.stdout.write(`${build.commit ?? "unknown"}\t${build.committedAt ?? ""}`);
 ' "$body" 2>/dev/null)" || running=$'unknown\t'
   local commit="${running%%$'\t'*}"
-  local built_at="${running#*$'\t'}"
-  echo "  Running build: ${commit}${built_at:+ (built ${built_at})}"
+  local committed_at="${running#*$'\t'}"
+  echo "  Running build: ${commit}${committed_at:+ (committed ${committed_at})}"
   if [[ -n "${BUILD_COMMIT:-}" && "$commit" != "$BUILD_COMMIT" ]]; then
     echo "  WARNING: expected build ${BUILD_COMMIT} — the container may still be running an older image."
   fi
