@@ -274,7 +274,7 @@ export function PlanPage() {
                         type="button"
                         className="linkish plan-meal-name"
                         title="Edit recipe"
-                        onClick={() => navigate(planEditHref(entry, planFoods))}
+                        onClick={() => navigate(planEditHref(entry, planFoods, weekStart))}
                       >
                         {entry.foodName}
                       </button>
@@ -799,9 +799,10 @@ async function logFromPlan(entry: PlanEntry, setError: (value: string | null) =>
   }
 }
 
-function planEditHref(entry: PlanEntry, foods: Food[]): string {
+function planEditHref(entry: PlanEntry, foods: Food[], weekStart: string): string {
   const food = foods.find((item) => item.id === entry.foodId);
-  return food?.kind === 'custom' ? `/recipes/edit?id=${entry.foodId}` : `/foods/edit?id=${entry.foodId}`;
+  const base = food?.kind === 'custom' ? '/recipes/edit' : '/foods/edit';
+  return `${base}?id=${entry.foodId}&from=plan&week=${encodeURIComponent(weekStart)}`;
 }
 
 function checkKey(weekStart: string): string {
