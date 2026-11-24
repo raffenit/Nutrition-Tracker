@@ -748,15 +748,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     });
   }
 
-  function loadRecipeCard(card: RecipeCardImport, status: string | null): void {
-    setName(card.name);
-    const importedBrand = card.brand ?? '';
-    setBrand(importedBrand);
-    setMakesServings(String(card.makesServings));
-    setInstructions(card.instructions);
-    setLabelNutrients(card.nutrients);
-    setProteinTags([]);
-    const importedLines: RecipeEditorLine[] = card.ingredients.map((line) => ({
+  function recipeCardLines(card: RecipeCardImport): RecipeEditorLine[] {
+    return card.ingredients.map((line) => ({
       foodId: null,
       name: line.name,
       servings: line.servings,
@@ -765,12 +758,85 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       shopEquivalentFoodId: null,
       shopEquivalentLabel: '',
     }));
+  }
+
+  function ecosystemForBrand(ecos: MealKitEcosystem[], brandName: string | null): MealKitEcosystem | undefined {
+    if (!brandName) return undefined;
+    return ecos.find((eco) => eco.name.localeCompare(brandName, undefined, { sensitivity: 'accent' }) === 0);
+  }
+
+  async function importAllBookletCards(): Promise<void> {
+    const pending = bookletCards.map((_card, index) => index).filter((index) => !bookletSaved.includes(index));
+    if (pending.length === 0) return;
+    setImportStatus(null);
+    setImportError(null);
+    setError(null);
+    const saved = [...bookletSaved];
+    const failures: string[] = [];
+    try {
+      const { ecosystems: ecos } = await api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits');
+      for (const [position, index] of pending.entries()) {
+        const card = bookletCards[index]!;
+        setImportProgress({
+          phase: 'process',
+          percent: Math.round((position / pending.length) * 100),
+          message: `Saving recipe ${position + 1}/${pending.length}`,
+          detail: card.name,
+        });
+        try {
+          const eco = ecosystemForBrand(ecos, card.brand);
+          const cardLines = eco ? await applyEcosystemMappings(eco.id, recipeCardLines(card)) : recipeCardLines(card);
+          await api('/api/foods/compose', {
+            method: 'POST',
+            body: JSON.stringify(recipeComposePayload({
+              name: card.name,
+              brand: card.brand,
+              mealKitEcosystemId: eco?.id ?? null,
+              proteinTags: [],
+              makesServings: card.makesServings,
+              nutrients: card.nutrients,
+              instructions: card.instructions,
+              lines: cardLines,
+            })),
+          });
+          saved.push(index);
+          setBookletSaved([...saved]);
+        } catch (caught) {
+          failures.push(`${index + 1}. ${card.name}: ${caught instanceof Error ? caught.message : 'Could not save'}`);
+        }
+      }
+    } catch (caught) {
+      failures.push(caught instanceof Error ? caught.message : 'Could not load meal-kit ecosystems');
+    } finally {
+      setImportProgress(null);
+    }
+    if (failures.length === 0) {
+      navigate('/library?shelf=recipes');
+      return;
+    }
+    const nextIndex = bookletCards.findIndex((_card, index) => !saved.includes(index));
+    if (nextIndex >= 0) {
+      setBookletIndex(nextIndex);
+      loadRecipeCard(bookletCards[nextIndex]!, null);
+    }
+    setImportError(
+      `Saved ${saved.length - bookletSaved.length} of ${pending.length} recipes. Fix and save the rest one at a time: ${failures.join('; ')}`,
+    );
+  }
+
+  function loadRecipeCard(card: RecipeCardImport, status: string | null): void {
+    setName(card.name);
+    const importedBrand = card.brand ?? '';
+    setBrand(importedBrand);
+    setMakesServings(String(card.makesServings));
+    setInstructions(card.instructions);
+    setLabelNutrients(card.nutrients);
+    setProteinTags([]);
+    const importedLines = recipeCardLines(card);
     setLines(importedLines);
     void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then(({ ecosystems: ecos }) => {
       setEcosystems(ecos);
-      const brandMatch = importedBrand
-        ? ecos.find((eco) => eco.name.localeCompare(importedBrand, undefined, { sensitivity: 'accent' }) === 0)
-        : undefined;
+      const brandMatch = ecosystemForBrand(ecos, importedBrand);
       if (brandMatch) {
         setMealKitEcosystemId(brandMatch.id);
         void applyEcosystemMappings(brandMatch.id, importedLines).then((mapped) => {
@@ -841,29 +907,16 @@ function RecipeEditor({ editId }: { editId: string | null }) {
 
   function save(): void {
     void runRecipeSave(async () => {
-    const payload = {
+    const payload = recipeComposePayload({
       name,
-      brand: brand.trim() || null,
+      brand,
       mealKitEcosystemId,
       proteinTags,
-      kind: 'custom' as const,
       makesServings: Number(makesServings),
-      servingLabel: '1 serving',
       nutrients: labelNutrients,
-      instructions: instructions.trim() || null,
-      isFavorite: false,
-      isDrink: false,
-      drinkMl: null,
-      source: 'composed' as const,
-      ingredients: lines.map((line) => ({
-        name: line.name,
-        servings: line.servings,
-        foodId: line.foodId,
-        componentRole: line.componentRole,
-        shopEquivalentFoodId: line.shopEquivalentFoodId,
-        shopEquivalentLabel: line.shopEquivalentLabel.trim() || null,
-      })),
-    };
+      instructions,
+      lines,
+    });
     try {
       if (editId) {
         await api(`/api/foods/${editId}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -925,6 +978,11 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         {importProgress && <ImportProgress progress={importProgress} compact />}
         {importStatus && !importProgress && <p className="muted">{importStatus}</p>}
         {importError && !importProgress && <p className="notice" role="alert">Import failed: {importError}</p>}
+        {bookletCards.length > 1 && !importProgress && bookletSaved.length < bookletCards.length && (
+          <button type="button" className="settings-secondary-btn" onClick={() => void importAllBookletCards()}>
+            Import all {bookletCards.length - bookletSaved.length} recipes
+          </button>
+        )}
         {bookletCards.length > 1 && !importProgress && (
           <label className="recipe-booklet-picker">
             Recipe from this booklet ({bookletSaved.length} of {bookletCards.length} saved)
@@ -1147,6 +1205,41 @@ function RecipeEditor({ editId }: { editId: string | null }) {
 }
 
 const EXTRA_UNIT_OPTIONS = ['g', 'mg', 'mcg', 'kcal'] as const;
+
+function recipeComposePayload(fields: {
+  name: string;
+  brand: string | null;
+  mealKitEcosystemId: string | null;
+  proteinTags: ProteinTag[];
+  makesServings: number;
+  nutrients: Nutrients;
+  instructions: string;
+  lines: RecipeEditorLine[];
+}) {
+  return {
+    name: fields.name,
+    brand: fields.brand?.trim() || null,
+    mealKitEcosystemId: fields.mealKitEcosystemId,
+    proteinTags: fields.proteinTags,
+    kind: 'custom' as const,
+    makesServings: fields.makesServings,
+    servingLabel: '1 serving',
+    nutrients: fields.nutrients,
+    instructions: fields.instructions.trim() || null,
+    isFavorite: false,
+    isDrink: false,
+    drinkMl: null,
+    source: 'composed' as const,
+    ingredients: fields.lines.map((line) => ({
+      name: line.name,
+      servings: line.servings,
+      foodId: line.foodId,
+      componentRole: line.componentRole,
+      shopEquivalentFoodId: line.shopEquivalentFoodId,
+      shopEquivalentLabel: line.shopEquivalentLabel.trim() || null,
+    })),
+  };
+}
 
 function importFieldClass(review: ImportFieldReviewMap | null, key: string): string {
   const entry = review?.[key];
