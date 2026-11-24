@@ -107,6 +107,26 @@ export function IconSidebarExpand({ className }: IconProps) {
   );
 }
 
+/** Copy to clipboard */
+export function IconCopy({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" {...stroke} />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" {...stroke} />
+    </svg>
+  );
+}
+
+/** Save / persist */
+export function IconSave({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" {...stroke} />
+      <path d="M17 21v-8H7v8M7 3v5h8" {...stroke} />
+    </svg>
+  );
+}
+
 export function IconTrash({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
