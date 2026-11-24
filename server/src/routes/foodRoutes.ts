@@ -207,7 +207,7 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   const kind = uploadKind(file.mime, file.filename);
   if (!kind) throw new HttpError(400, 'Upload a JPEG, PNG, WEBP, or PDF');
   const flow = kind === 'pdf' ? 'pdf' : 'image';
-  const uploadLabel = `${path.basename(file.filename).slice(0, 80) || 'upload'} (${kind}, ${(file.bytes.length / 1024 / 1024).toFixed(1)} MB)`;
+  const uploadLabel = `${path.basename(file.filename).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 80) || 'upload'} (${kind}, ${(file.bytes.length / 1024 / 1024).toFixed(1)} MB)`;
   const startedAt = Date.now();
   const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
   console.log(`[upload] received ${uploadLabel}`);
