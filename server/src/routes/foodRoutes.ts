@@ -547,7 +547,7 @@ async function readExtractedText(
 function recipeNutrients(lines: Array<{ servings: number; nutrients: Nutrients; hasNutrition: boolean }>, makesServings: number, label: Nutrients | null): Nutrients {
   const fromIngredients = roundNutrients(perServing(sumIngredientNutrients(lines), makesServings));
   const complete = lines.every((line) => line.hasNutrition);
-  if (complete && hasMacroTotals(fromIngredients)) return fromIngredients;
+  if (complete && hasAnyNutrient(fromIngredients)) return fromIngredients;
   return label && hasAnyNutrient(label) ? label : fromIngredients;
 }
 
