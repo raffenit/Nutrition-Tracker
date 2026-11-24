@@ -63,6 +63,8 @@ export function PlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [addDay, setAddDay] = useState<string | null>(null);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [dragEntryId, setDragEntryId] = useState<string | null>(null);
+  const [dropDay, setDropDay] = useState<string | null>(null);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -193,6 +195,12 @@ export function PlanPage() {
     void loadPlan(next);
   }
 
+  function moveEntryToDay(entryId: string, day: string): void {
+    const entry = entries.find((row) => row.id === entryId);
+    if (!entry || entry.localDate === day || busy) return;
+    void saveEntries(entries.map((row) => (row.id === entryId ? { ...row, localDate: day } : row)));
+  }
+
   return (
     <div className="page plan-page">
       <header className="plan-head card">
@@ -220,14 +228,45 @@ export function PlanPage() {
       {view === 'week' && (
         <div className="plan-days">
           {days.map((day) => (
-            <section className="card plan-day" key={day}>
+            <section
+              className={dropDay === day ? 'card plan-day plan-day-drop' : 'card plan-day'}
+              key={day}
+              onDragOver={(event) => {
+                if (!dragEntryId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                setDropDay(day);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropDay(null);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDropDay(null);
+                if (dragEntryId) moveEntryToDay(dragEntryId, day);
+                setDragEntryId(null);
+              }}
+            >
               <header className="plan-day-head">
                 <h2>{dayLabel(day, today)}</h2>
                 <button type="button" className="linkish" onClick={() => setAddDay(day)}>+ Add</button>
               </header>
               <ul className="plan-meal-list">
                 {entries.filter((entry) => entry.localDate === day).map((entry) => (
-                  <li className="plan-meal-row" key={entry.id}>
+                  <li
+                    className={dragEntryId === entry.id ? 'plan-meal-row plan-meal-dragging' : 'plan-meal-row'}
+                    key={entry.id}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', entry.id);
+                      setDragEntryId(entry.id);
+                    }}
+                    onDragEnd={() => {
+                      setDragEntryId(null);
+                      setDropDay(null);
+                    }}
+                  >
                     <div className="plan-meal-main">
                       <span className="plan-meal-slot">{slotLabel(entry.slot)}</span>
                       <strong>{entry.foodName}</strong>
