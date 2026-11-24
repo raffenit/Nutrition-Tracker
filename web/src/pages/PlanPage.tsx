@@ -270,7 +270,14 @@ export function PlanPage() {
                   >
                     <div className="plan-meal-main">
                       <span className="plan-meal-slot">{slotLabel(entry.slot)}</span>
-                      <strong>{entry.foodName}</strong>
+                      <button
+                        type="button"
+                        className="linkish plan-meal-name"
+                        title="Edit recipe"
+                        onClick={() => navigate(planEditHref(entry, planFoods))}
+                      >
+                        {entry.foodName}
+                      </button>
                       <span className="muted">{entry.servings} serving{entry.servings === 1 ? '' : 's'}</span>
                     </div>
                     <div className="plan-meal-actions">
@@ -790,6 +797,11 @@ async function logFromPlan(entry: PlanEntry, setError: (value: string | null) =>
   } catch (caught: unknown) {
     setError(caught instanceof Error ? caught.message : 'Could not log this meal');
   }
+}
+
+function planEditHref(entry: PlanEntry, foods: Food[]): string {
+  const food = foods.find((item) => item.id === entry.foodId);
+  return food?.kind === 'custom' ? `/recipes/edit?id=${entry.foodId}` : `/foods/edit?id=${entry.foodId}`;
 }
 
 function checkKey(weekStart: string): string {
