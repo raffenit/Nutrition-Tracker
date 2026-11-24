@@ -12,6 +12,8 @@ export function pollImportJob(
     if (stopped) return;
     try {
       const snapshot = await api<ImportJobSnapshot>(`/api/import-jobs/${jobId}`);
+      // A poll still in flight when the import finished must not re-show the progress card.
+      if (stopped) return;
       onUpdate(snapshot);
       if (snapshot.done) stopped = true;
     } catch {

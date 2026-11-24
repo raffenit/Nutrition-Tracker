@@ -10,7 +10,7 @@ import type { RecipePageLayout } from '../domain/recipeCardLayout.js';
 import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readComponentRole, readProteinTags } from '../domain/proteinTags.js';
-import { applySlotMergedNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
+import { applySlotMergedNutrients, emptyNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
 import {
@@ -410,7 +410,8 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   return {
     name: requiredText(value.name, 'Ingredient'),
     servings,
-    nutrients: readNutrients(value.nutrients),
+    // Unlinked lines (e.g. imported meal-kit card rows) carry no nutrition; the recipe uses its label totals.
+    nutrients: value.nutrients == null ? emptyNutrients() : readNutrients(value.nutrients),
     sourceRef: typeof value.sourceRef === 'string' ? value.sourceRef : null,
     childFoodId: null,
     componentRole,

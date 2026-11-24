@@ -269,6 +269,24 @@ test('custom recipes return ingredient lines for editing', async () => {
     assert.equal(loaded.body.food.ingredients.length, 1);
     assert.equal(loaded.body.food.ingredients[0]?.name, 'Greek yogurt');
     assert.equal(loaded.body.food.ingredients[0]?.childFoodId, yogurt.body.food.id);
+
+    // Imported meal-kit card: unlinked text lines, nutrition from the card label.
+    const kitRecipe = await api<{ food: { id: string; nutrients: { calories: number; protein: number } } }>(port, '/api/foods/compose', {
+      method: 'POST',
+      cookie: setup.cookie,
+      body: {
+        name: 'Moroccan Chicken Bowls',
+        makesServings: 2,
+        nutrients: { calories: 640, protein: 42, fiber: 8, fat: 22, carbs: 61, sodium: 980 },
+        ingredients: [
+          { name: 'Chicken breasts', servings: 2, foodId: null },
+          { name: 'Quinoa', servings: 1, foodId: null },
+        ],
+      },
+    });
+    assert.equal(kitRecipe.status, 201);
+    assert.equal(kitRecipe.body.food.nutrients.calories, 640);
+    assert.equal(kitRecipe.body.food.nutrients.protein, 42);
   });
 });
 
