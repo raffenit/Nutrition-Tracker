@@ -65,6 +65,7 @@ export function PlanPage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [dragEntryId, setDragEntryId] = useState<string | null>(null);
   const [dropDay, setDropDay] = useState<string | null>(null);
+  const [moveEntry, setMoveEntry] = useState<PlanEntry | null>(null);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -275,6 +276,14 @@ export function PlanPage() {
                     <div className="plan-meal-actions">
                       <button
                         type="button"
+                        className="library-action plan-move-btn"
+                        aria-label={`Move ${entry.foodName} to another day`}
+                        onClick={() => setMoveEntry(entry)}
+                      >
+                        Move
+                      </button>
+                      <button
+                        type="button"
                         className="library-action"
                         onClick={() => void openCooking(entry, setCooking, setError)}
                       >
@@ -340,6 +349,7 @@ export function PlanPage() {
               {shopItems.length} items{shopDirty ? ' · unsaved changes' : ''}
             </span>
           </div>
+          <div className="shop-main">
           <ul className="shop-list">
             {shopItems.map((item) => {
               const done = Boolean(checks[item.key]);
@@ -414,11 +424,37 @@ export function PlanPage() {
             />
             <button type="button" className="settings-secondary-btn" onClick={addShopItem}>Add</button>
           </div>
+          </div>
           <details className="shop-markdown-preview">
             <summary>Markdown preview</summary>
             <pre className="shop-markdown">{grocery.markdown}</pre>
           </details>
         </section>
+      )}
+
+      {moveEntry && (
+        <div className="plan-dialog-backdrop" role="presentation" onClick={() => setMoveEntry(null)}>
+          <div className="card plan-dialog" onClick={(event) => event.stopPropagation()}>
+            <h2>Move {moveEntry.foodName}</h2>
+            <div className="plan-move-days">
+              {days.map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  className={day === moveEntry.localDate ? 'plan-move-day current' : 'plan-move-day'}
+                  disabled={day === moveEntry.localDate || busy}
+                  onClick={() => {
+                    moveEntryToDay(moveEntry.id, day);
+                    setMoveEntry(null);
+                  }}
+                >
+                  {formatDisplayDate(day, 'mdy')}{day === today ? ' · Today' : ''}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => setMoveEntry(null)}>Cancel</button>
+          </div>
+        </div>
       )}
 
       {cooking && (
