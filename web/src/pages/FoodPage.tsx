@@ -84,6 +84,13 @@ export function FoodPage({ custom = false, editId = null }: FoodPageProps) {
   return custom ? <RecipeEditor editId={editId} /> : <FoodEditor editId={editId} />;
 }
 
+function planReturnHref(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from') !== 'plan') return null;
+  const week = params.get('week');
+  return `/plan${week ? `?week=${encodeURIComponent(week)}` : ''}`;
+}
+
 function FoodEditor({ editId }: { editId: string | null }) {
   const [nutrients, setNutrients] = useState<Nutrients>(EMPTY_NUTRIENTS);
   const [nutrientUnits, setNutrientUnits] = useState<CoreNutrientUnits>({ ...DEFAULT_CORE_NUTRIENT_UNITS });
@@ -115,6 +122,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [nativeLabelCamera] = useState(() => supportsNativeLabelCamera());
+  const exitToPlan = planReturnHref();
   const importRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
   const { busy: saveBusy, run: runSave } = useAsyncAction();
   const multiLabelDefaultRef = useRef<MultiLabelImportDefault | null>(null);
@@ -283,7 +291,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
         });
       }
       setLabelPanels([]);
-      navigate('/library?shelf=foods');
+      navigate(exitToPlan ?? '/library?shelf=foods');
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : 'Could not import all labels');
     } finally {
@@ -386,7 +394,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
       } else {
         await api('/api/foods', { method: 'POST', body: JSON.stringify(payload) });
       }
-      navigate('/library?shelf=foods');
+      navigate(exitToPlan ?? '/library?shelf=foods');
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : 'Could not save');
     }
@@ -398,7 +406,7 @@ function FoodEditor({ editId }: { editId: string | null }) {
   return (
     <form className="page food-form" onSubmit={(event) => save(event)}>
       <header className="form-head">
-        <button type="button" className="back-link" onClick={() => navigate('/library?shelf=foods')}>← Foods</button>
+        <button type="button" className="back-link" onClick={() => navigate(exitToPlan ?? '/library?shelf=foods')}>{exitToPlan ? '← Plan' : '← Foods'}</button>
         <h1>{editId ? 'Edit food' : 'Add food'}</h1>
       </header>
 
@@ -662,6 +670,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(editId));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const exitToPlan = planReturnHref();
 
   useEffect(() => {
     void api<{ ecosystems: MealKitEcosystem[] }>('/api/meal-kits').then((result) => setEcosystems(result.ecosystems));
@@ -834,7 +843,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       setImportProgress(null);
     }
     if (failures.length === 0) {
-      navigate('/library?shelf=recipes');
+      navigate(exitToPlan ?? '/library?shelf=recipes');
       return;
     }
     const nextIndex = bookletCards.findIndex((_card, index) => !saved.includes(index));
@@ -961,7 +970,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
           return;
         }
       }
-      navigate('/library?shelf=recipes');
+      navigate(exitToPlan ?? '/library?shelf=recipes');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save');
     }
@@ -973,7 +982,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   return (
     <div className="page food-form">
       <header className="form-head">
-        <button type="button" className="back-link" onClick={() => navigate('/library?shelf=recipes')}>← Recipes</button>
+        <button type="button" className="back-link" onClick={() => navigate(exitToPlan ?? '/library?shelf=recipes')}>{exitToPlan ? '← Plan' : '← Recipes'}</button>
         <h1>{editId ? 'Edit recipe' : 'New recipe'}</h1>
       </header>
 
