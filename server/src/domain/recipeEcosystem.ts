@@ -16,10 +16,12 @@ export function mergeRecipeIngredientsWithEcosystem(
     return getKitMappingByKey(db, ecosystemId, key);
   };
   const merged = applyKitMappingsToIngredients(lines, lookup);
+  // Sync from the pre-mapping lines: merged names are canonicalized, so their
+  // keys would drift from the match keys the sheet is indexed by.
   syncKitMappingsFromIngredients(
     db,
     ecosystemId,
-    merged.map((line) => ({
+    lines.map((line) => ({
       name: line.name,
       childFoodId: line.childFoodId,
       shopEquivalentFoodId: line.shopEquivalentFoodId,

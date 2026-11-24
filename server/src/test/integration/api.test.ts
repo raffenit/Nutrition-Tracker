@@ -312,6 +312,20 @@ test('custom recipes return ingredient lines for editing', async () => {
     assert.equal(edited.body.food.nutrients.calories, 640);
     assert.equal(edited.body.food.nutrients.protein, 42);
 
+    // PATCH must persist ingredient edits too — name text, amounts, and links.
+    const reloaded = await api<{
+      food: {
+        ingredients: Array<{ name: string; servings: number; childFoodId: string | null; shopEquivalentLabel: string | null }>;
+        instructions: string | null;
+      };
+    }>(port, `/api/foods/${kitRecipe.body.food.id}`, { cookie: setup.cookie });
+    assert.equal(reloaded.status, 200);
+    assert.equal(reloaded.body.food.ingredients.length, 2);
+    assert.equal(reloaded.body.food.ingredients[0]?.name, 'Greek yogurt');
+    assert.equal(reloaded.body.food.ingredients[0]?.childFoodId, yogurt.body.food.id);
+    assert.equal(reloaded.body.food.ingredients[1]?.name, 'Quinoa');
+    assert.equal(reloaded.body.food.ingredients[1]?.childFoodId, null);
+
     // A card label with only sodium still beats an all-zero total from text-only lines.
     const sodiumOnly = await api<{ food: { nutrients: { sodium: number } } }>(port, '/api/foods/compose', {
       method: 'POST',
