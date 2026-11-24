@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseLeadingQuantityUnit } from '../../../domain/parseIngredientLine.js';
+import { parseLeadingQuantityUnit, splitIngredientPrefix } from '../../../domain/parseIngredientLine.js';
 
 test('parseLeadingQuantityUnit reads oz and name', () => {
   const parsed = parseLeadingQuantityUnit('12 oz boneless chicken thighs');
@@ -35,4 +35,10 @@ test('parseLeadingQuantityUnit reads bare counts as unit', () => {
 
 test('parseLeadingQuantityUnit leaves capitalized names alone', () => {
   assert.equal(parseLeadingQuantityUnit('3 Cheese tortellini'), null);
+});
+
+test('splitIngredientPrefix keeps the raw quantity text', () => {
+  assert.deepEqual(splitIngredientPrefix('1/2 cup white quinoa'), { prefix: '1/2 cup', name: 'white quinoa' });
+  assert.deepEqual(splitIngredientPrefix('2 eggs, beaten'), { prefix: '2', name: 'eggs, beaten' });
+  assert.deepEqual(splitIngredientPrefix('broccoli'), null);
 });

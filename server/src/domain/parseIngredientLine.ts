@@ -31,6 +31,36 @@ export type ParsedIngredientLine = {
   unit: string;
 };
 
+export type IngredientPrefixSplit = {
+  /** Raw leading quantity+unit text as written ("1/2 cup", "2"), without trailing space. */
+  prefix: string;
+  /** Remainder after the prefix — the ingredient name proper. */
+  name: string;
+};
+
+/** Split off a leading quantity/unit prefix, preserving the raw text for recomposition. */
+export function splitIngredientPrefix(lineText: string): IngredientPrefixSplit | null {
+  const trimmed = lineText.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(LEADING_QTY_UNIT);
+  if (match) {
+    const name = (match[3] ?? '').trim();
+    const quantity = parseQuantityToken(match[1] ?? '');
+    if (name && quantity !== null && quantity > 0) {
+      return { prefix: `${(match[1] ?? '').trim()} ${(match[2] ?? '').trim()}`, name };
+    }
+  }
+  const count = trimmed.match(LEADING_BARE_COUNT);
+  if (count) {
+    const name = (count[2] ?? '').trim();
+    const quantity = parseQuantityToken(count[1] ?? '');
+    if (name && quantity !== null && quantity > 0) {
+      return { prefix: (count[1] ?? '').trim(), name };
+    }
+  }
+  return null;
+}
+
 export function parseLeadingQuantityUnit(lineText: string): ParsedIngredientLine | null {
   const trimmed = lineText.trim();
   if (!trimmed) return null;

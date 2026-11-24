@@ -1,13 +1,18 @@
 import type { IngredientLine } from '../types.js';
 import type { KitIngredientMapping } from '../db/mealKitEcosystems.js';
 import { kitLineKeyFromText } from './kitLineKey.js';
+import { splitIngredientPrefix } from './parseIngredientLine.js';
 
 export type KitMappingLookup = (ecosystemId: string, lineName: string) => KitIngredientMapping | null;
 
 export function effectiveIngredientLine(line: IngredientLine, mapping: KitIngredientMapping | null): IngredientLine {
   if (!mapping) return line;
+  // Canonical name replaces only the ingredient-name portion — the line's own
+  // leading quantity/unit ("2 cups …") is preserved so amounts aren't lost.
+  const split = splitIngredientPrefix(line.name);
+  const canonicalName = split ? `${split.prefix} ${mapping.kitLineName}` : mapping.kitLineName;
   return {
-    name: mapping.kitLineName,
+    name: canonicalName,
     servings: line.servings,
     sourceRef: line.sourceRef,
     childFoodId: line.childFoodId ?? mapping.nutritionFoodId,

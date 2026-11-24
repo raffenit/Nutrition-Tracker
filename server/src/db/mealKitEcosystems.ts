@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { kitLineKeyFromText } from '../domain/kitLineKey.js';
+import { parseLeadingQuantityUnit } from '../domain/parseIngredientLine.js';
 import type { AppDatabase } from './database.js';
 
 export type MealKitEcosystem = {
@@ -170,18 +171,20 @@ export function saveKitMappingRow(
     nutritionFoodId: string | null;
   },
 ): KitIngredientMapping {
-  const kitLineName = mapping.kitLineName.trim();
-  const nameKey = kitLineKeyForDb(kitLineName);
+  // Canonical names are display text — strip any leading qty/unit so applying
+  // the mapping can't double-prefix a recipe line ("2 cups 1/2 cup rice").
+  const kitLineName = parseLeadingQuantityUnit(mapping.kitLineName.trim())?.name ?? mapping.kitLineName.trim();
   if (mapping.id) {
+    // name_key is the stable match key learned when the mapping was created —
+    // renaming the canonical display name must not orphan recipe-line matching.
     const result = db.prepare(
       `UPDATE meal_kit_ingredient_maps SET
-        kit_line_name = ?, name_key = ?,
+        kit_line_name = ?,
         shop_equivalent_food_id = ?, shop_equivalent_label = ?, nutrition_food_id = ?,
         updated_at = ?
        WHERE id = ? AND ecosystem_id = ?`,
     ).run(
       kitLineName,
-      nameKey,
       mapping.shopEquivalentFoodId,
       mapping.shopEquivalentLabel,
       mapping.nutritionFoodId,
@@ -194,6 +197,7 @@ export function saveKitMappingRow(
       return toMapping(row);
     }
   }
+  const nameKey = kitLineKeyForDb(kitLineName);
   return upsertKitMapping(db, ecosystemId, nameKey, {
     kitLineName,
     shopEquivalentFoodId: mapping.shopEquivalentFoodId,
@@ -220,13 +224,18 @@ export function syncKitMappingsFromIngredients(
     for (const line of lines) {
       const nameKey = kitLineKeyFromText(line.name);
       if (!nameKey) continue;
-      const hasShop = Boolean(line.shopEquivalentFoodId || (line.shopEquivalentLabel && line.shopEquivalentLabel.trim()));
-      if (!hasShop && !line.childFoodId) continue;
       const existing = getKitMappingByKey(db, ecosystemId, nameKey);
+      // Every ingredient name gets a sheet row (canonical name editable even
+      // without shop/nutrition links). Existing links are preserved when the
+      // line carries none — a text-only line must not erase sheet mappings.
+      const cleanName = (parseLeadingQuantityUnit(line.name)?.name ?? line.name).trim();
+      if (!cleanName) continue;
       upsertKitMapping(db, ecosystemId, nameKey, {
-        kitLineName: existing?.kitLineName ?? line.name.trim(),
-        shopEquivalentFoodId: line.shopEquivalentFoodId,
-        shopEquivalentLabel: line.shopEquivalentLabel,
+        kitLineName: existing?.kitLineName ?? cleanName,
+        shopEquivalentFoodId: line.shopEquivalentFoodId ?? existing?.shopEquivalentFoodId ?? null,
+        shopEquivalentLabel: line.shopEquivalentLabel?.trim()
+          ? line.shopEquivalentLabel
+          : (existing?.shopEquivalentLabel ?? null),
         nutritionFoodId: line.childFoodId ?? existing?.nutritionFoodId ?? null,
       });
     }
