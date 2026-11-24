@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { PDFParse } from 'pdf-parse';
 import { PSM, type Worker } from 'tesseract.js';
 import sharp from 'sharp';
@@ -136,8 +137,10 @@ type StitchedColumnOcrResult = {
   expectedColumns: number;
 };
 
-export async function extractPdfText(bytes: Buffer): Promise<string> {
-  const parser = new PDFParse({ data: bytes });
+export async function extractPdfText(data: Buffer | string): Promise<string> {
+  const parser = new PDFParse(
+    typeof data === 'string' ? { url: pathToFileURL(data).href } : { data },
+  );
   try {
     const result = await parser.getText();
     return result.text ?? '';

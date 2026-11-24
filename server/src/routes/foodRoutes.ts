@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import Busboy from 'busboy';
 import { attachUpload, findUpload, insertUpload } from '../db/uploads.js';
@@ -37,7 +38,9 @@ import type { LabelServingFields } from '../domain/labelServingVote.js';
 // Scanned recipe-card PDFs (multi-page, no text layer) legitimately reach
 // ~40 MB per file; 64 MB covers those while still bounding memory (busboy
 // buffers the upload in RAM).
-const MAX_UPLOAD = 64 * 1024 * 1024;
+const MAX_UPLOAD = 256 * 1024 * 1024;
+/** Images are decoded into memory for OCR, so they keep a tighter cap than streamed PDFs. */
+const MAX_IMAGE_UPLOAD = 64 * 1024 * 1024;
 
 export function foodRoutes(): Route[] {
   return [
@@ -204,9 +207,16 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
   const jobId = parseImportJobId(ctx.req.headers, null);
   const file = await readUpload(ctx);
   const kind = uploadKind(file.mime, file.filename);
-  if (!kind) throw new HttpError(400, 'Upload a JPEG, PNG, WEBP, or PDF');
+  if (!kind) {
+    await rm(file.path, { force: true });
+    throw new HttpError(400, 'Upload a JPEG, PNG, WEBP, or PDF');
+  }
+  if (kind === 'image' && file.size > MAX_IMAGE_UPLOAD) {
+    await rm(file.path, { force: true });
+    throw new HttpError(413, 'Image is larger than 64 MB');
+  }
   const flow = kind === 'pdf' ? 'pdf' : 'image';
-  const uploadLabel = `${path.basename(file.filename).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 80) || 'upload'} (${kind}, ${(file.bytes.length / 1024 / 1024).toFixed(1)} MB)`;
+  const uploadLabel = `${path.basename(file.filename).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 80) || 'upload'} (${kind}, ${(file.size / 1024 / 1024).toFixed(1)} MB)`;
   const startedAt = Date.now();
   const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
   console.log(`[upload] received ${uploadLabel}`);
@@ -214,8 +224,13 @@ async function receiveUpload(ctx: Ctx): Promise<void> {
     await runWithImportJob(jobId, user.id, flow, async () => {
       reportImportJobStep('Receive', 'File received…', path.basename(file.filename).slice(0, 180) || 'upload');
       const storedName = `${randomUUID()}${kind === 'pdf' ? '.pdf' : extensionFor(file.filename)}`;
-      await writeFile(path.join(ctx.config.uploadDir, storedName), file.bytes);
-      const extracted = await readExtractedText(kind, file.bytes, ctx.config);
+      const storedPath = path.join(ctx.config.uploadDir, storedName);
+      await rename(file.path, storedPath);
+      // PDFs stay on disk — extraction and OCR read from the path. Images are
+      // small enough to buffer for the OCR pipeline.
+      const extracted = kind === 'pdf'
+        ? await readExtractedText(kind, storedPath, ctx.config)
+        : await readExtractedText(kind, await readFile(storedPath), ctx.config);
       reportImportJobStep(
         'Draft',
         extracted.pageLayouts?.some((layout) => layout && layout.ingredients.length >= 2) ? 'Building recipe drafts…' : 'Building your draft…',
@@ -489,7 +504,7 @@ function extensionFor(filename: string): string {
 
 async function readExtractedText(
   kind: 'image' | 'pdf',
-  bytes: Buffer,
+  data: Buffer | string,
   config: { tessdataDir: string; easyocrModelDir: string; easyocrEnabled: boolean },
 ): Promise<{
   text: string;
@@ -505,7 +520,7 @@ async function readExtractedText(
     if (kind === 'pdf') {
       const { extractPdfTextWithOcrFallback } = await import('../integrations/ocrScannedPdf.js');
       const { text, usedOcr, pageTexts, pageLayouts } = await extractPdfTextWithOcrFallback(
-        bytes,
+        data,
         config.tessdataDir,
         config.easyocrEnabled ? config.easyocrModelDir : undefined,
       );
@@ -514,8 +529,9 @@ async function readExtractedText(
       else if (usedOcr) warning = 'Scanned PDF — text came from OCR. Review ingredients and instructions carefully.';
       return { text, warning, slotMergedNutrients: null, usedOcr, pageTexts, pageLayouts };
     }
+    const imageBytes = typeof data === 'string' ? await readFile(data) : data;
     const { text, slotMergedNutrients, varietyPackExpectedColumns, serving } = await extractImageLabel(
-      bytes,
+      imageBytes,
       config.tessdataDir,
       {
         easyocrModelDir: config.easyocrEnabled ? config.easyocrModelDir : undefined,
@@ -565,22 +581,37 @@ function optionalInstructions(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; bytes: Buffer }> {
+function readUpload(ctx: Ctx): Promise<{ filename: string; mime: string; path: string; size: number }> {
   return new Promise((resolve, reject) => {
     const parser = Busboy({ headers: ctx.req.headers, limits: { files: 1, fileSize: MAX_UPLOAD } });
-    let file: { filename: string; mime: string; bytes: Buffer } | null = null;
+    let file: { filename: string; mime: string; path: string; size: number } | null = null;
+    let fileClosed: Promise<void> = Promise.resolve();
     let tooBig = false;
     parser.on('file', (_name, stream, info) => {
-      const chunks: Buffer[] = [];
+      // Stream to disk — scanned recipe PDFs can exceed 100 MB and buffering
+      // them in memory is what used to cap uploads at 64 MB.
+      const tempPath = path.join(ctx.config.uploadDir, `.upload-${randomUUID()}`);
+      const out = createWriteStream(tempPath);
+      const record = { filename: info.filename, mime: info.mimeType, path: tempPath, size: 0 };
+      file = record;
       stream.on('limit', () => { tooBig = true; });
-      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-      stream.on('close', () => { file = { filename: info.filename, mime: info.mimeType, bytes: Buffer.concat(chunks) }; });
+      stream.on('data', (chunk: Buffer) => { record.size += chunk.length; });
+      stream.pipe(out);
+      out.on('error', reject);
+      fileClosed = new Promise<void>((resolveClosed, rejectClosed) => {
+        out.on('close', () => resolveClosed());
+        out.on('error', rejectClosed);
+      });
     });
     parser.on('error', reject);
     parser.on('finish', () => {
-      if (tooBig) reject(new HttpError(413, 'File is larger than 64 MB'));
-      else if (!file) reject(new HttpError(400, 'Choose a file'));
-      else resolve(file);
+      void fileClosed.then(() => {
+        if (tooBig) {
+          if (file) void rm(file.path, { force: true });
+          reject(new HttpError(413, 'File is larger than 256 MB'));
+        } else if (!file) reject(new HttpError(400, 'Choose a file'));
+        else resolve(file);
+      }).catch(reject);
     });
     ctx.req.pipe(parser);
   });
