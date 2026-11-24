@@ -4,6 +4,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+FAILURE_REPORT_NAME="QUICK TEST RUN"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/lib-failure-report.sh"
 LOG="$ROOT/local/test-last-run-quick.log"
 
 mkdir -p "$ROOT/local"
@@ -16,6 +19,7 @@ log() {
 run_phase() {
   local label=$1
   shift
+  failure_report_step "$label"
   log ""
   log "----------------------------------------"
   log "$label"
@@ -24,8 +28,13 @@ run_phase() {
   "$@" 2>&1 | tee -a "$LOG"
   local status=${PIPESTATUS[0]}
   set -e
+  if [[ "$status" -ne 0 ]]; then
+    failed_phases+=("$label (exit $status: $*)")
+  fi
   return "$status"
 }
+
+failed_phases=()
 
 log "========================================"
 log "Nutrition Tracker — quick test run"
@@ -57,6 +66,7 @@ if ! run_phase "[3/3] Web — TypeScript (tsc --noEmit)" npm --prefix "$ROOT/web
   web_typecheck_ok=false
 fi
 
+failure_report_step "Summary (all phases finished; see PASS/FAIL lines)"
 log ""
 log "========================================"
 log "Summary (quick)"
@@ -78,6 +88,8 @@ if $server_typecheck_ok && $server_tests_ok && $web_typecheck_ok; then
   exit 0
 fi
 
+failed_summary="$(printf '%s; ' "${failed_phases[@]}")"
+failure_report_step "Failed: ${failed_summary%; }"
 log "  Overall:          FAIL"
 log "Finished: $(date -Iseconds)"
 log "========================================"
