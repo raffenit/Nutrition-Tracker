@@ -13,6 +13,23 @@ deploy_step() {
   echo "$*"
 }
 
+# Status colors for pass/fail lines — only on a real terminal (piped logs stay plain).
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-dumb}" != "dumb" ]]; then
+  DEPLOY_GREEN=$'\033[32m'
+  DEPLOY_RED=$'\033[31m'
+  DEPLOY_YELLOW=$'\033[33m'
+  DEPLOY_RESET=$'\033[0m'
+else
+  DEPLOY_GREEN=""
+  DEPLOY_RED=""
+  DEPLOY_YELLOW=""
+  DEPLOY_RESET=""
+fi
+
+deploy_ok()   { printf '%s%s%s\n' "$DEPLOY_GREEN" "$1" "$DEPLOY_RESET"; }
+deploy_fail() { printf '%s%s%s\n' "$DEPLOY_RED" "$1" "$DEPLOY_RESET" >&2; }
+deploy_warn() { printf '%s%s%s\n' "$DEPLOY_YELLOW" "$1" "$DEPLOY_RESET"; }
+
 RUN_TEST=true
 RUN_GIT=true
 PULL=false
@@ -220,10 +237,10 @@ deploy_run_tests() {
     exit 1
   fi
   if ! npm test; then
-    echo "Tests failed. Full log: $script_dir/local/test-last-run.log"
+    deploy_fail "Tests failed. Full log: $script_dir/local/test-last-run.log"
     exit 1
   fi
-  echo "  Tests: OK (log: local/test-last-run.log)"
+  deploy_ok "  Tests: OK (log: local/test-last-run.log)"
 }
 
 deploy_run_git() {
@@ -285,11 +302,11 @@ deploy_https_smoke() {
   echo ""
   echo "[6/6] Tailscale HTTPS smoke (when .env uses https:// or *.ts.net)..."
   if bash "$script_dir/scripts/test-https-smoke.sh"; then
-    echo "  Tailscale HTTPS: OK"
+    deploy_ok "  Tailscale HTTPS: OK"
     return 0
   fi
   echo ""
-  echo "  WARNING: Tailscale HTTPS smoke failed — deploy finished; fix tailscale serve and phones may still need HTTP :3010."
+  deploy_warn "  WARNING: Tailscale HTTPS smoke failed — deploy finished; fix tailscale serve and phones may still need HTTP :3010."
   echo "  Set SKIP_HTTPS_SMOKE=1 in .env to hide this step."
   return 0
 }
@@ -321,7 +338,7 @@ process.exit(bad ? 1 : 0);
 ' "$body"; then
     echo ""
     echo "========================================================================"
-    echo "DEPLOY STOPPED — HOUSEHOLD DATA LOOKS MISSING"
+    deploy_fail "DEPLOY STOPPED — HOUSEHOLD DATA LOOKS MISSING"
     echo "========================================================================"
     echo ""
     echo "The file data/.household-established.json says this install had a household,"
@@ -340,7 +357,7 @@ process.exit(bad ? 1 : 0);
     echo ""
     exit 1
   fi
-  echo "  Data guard: OK"
+  deploy_ok "  Data guard: OK"
 }
 
 deploy_health_check() {
@@ -357,14 +374,14 @@ deploy_health_check() {
     sleep 2
   done
   if $ready; then
-    echo "  API health: OK"
+    deploy_ok "  API health: OK"
     local body
     body="$(curl -sf "$url" 2>/dev/null || true)"
     echo "${body:0:200}"
     deploy_report_running_build "$body"
     deploy_data_guard "$script_dir"
   else
-    echo "  API health: not ready — check logs (docker compose logs -f)"
+    deploy_fail "  API health: not ready — check logs (docker compose logs -f)"
     exit 1
   fi
 }
