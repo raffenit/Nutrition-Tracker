@@ -58,7 +58,7 @@ const jobContext = new AsyncLocalStorage<{ jobId: string; userId: string }>();
 
 const FLOW_STEPS: Record<ImportJobFlow, string[]> = {
   image: ['Receive', 'Preprocess', 'OCR', 'Parse', 'Draft'],
-  pdf: ['Receive', 'PDF', 'OCR', 'Parse', 'Draft'],
+  pdf: ['Receive', 'Load', 'Scan', 'OCR', 'Parse', 'Draft'],
   url: ['Request', 'Fetch', 'Read', 'Parse', 'Draft'],
 };
 

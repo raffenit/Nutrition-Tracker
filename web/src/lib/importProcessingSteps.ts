@@ -41,19 +41,24 @@ export const IMAGE_IMPORT_STEPS: ImportProcessStep[] = [
 
 export const PDF_IMPORT_STEPS: ImportProcessStep[] = [
   {
-    short: 'PDF',
-    message: 'Reading PDF on server…',
-    detail: 'Extracting embedded text from your document.',
+    short: 'Load',
+    message: 'Loading PDF…',
+    detail: 'Reading embedded text from your document when a text layer exists.',
+  },
+  {
+    short: 'Scan',
+    message: 'Scanning PDF pages…',
+    detail: 'Rasterizing pages so OCR can read them — large scanned files take longer.',
   },
   {
     short: 'OCR',
-    message: 'Scanning pages if needed…',
-    detail: 'Menus and scans without a text layer are rasterized and sent through OCR — large files can take up to a minute.',
+    message: 'Reading page text…',
+    detail: 'Menus and scans without a text layer go through OCR page by page — big booklets can take a while.',
   },
   {
     short: 'Parse',
     message: 'Looking for nutrition facts…',
-    detail: 'Detecting label layout or menu tables in the text.',
+    detail: 'Detecting label layout, menu tables, or recipe cards in the text.',
   },
   {
     short: 'Draft',
@@ -65,9 +70,14 @@ export const PDF_IMPORT_STEPS: ImportProcessStep[] = [
 /** Meal-kit recipe card import (PDF — may rasterize + OCR). */
 export const RECIPE_CARD_PDF_IMPORT_STEPS: ImportProcessStep[] = [
   {
-    short: 'PDF',
+    short: 'Load',
     message: 'Opening recipe card PDF…',
     detail: 'Reading embedded text or preparing scanned pages for OCR.',
+  },
+  {
+    short: 'Scan',
+    message: 'Scanning pages…',
+    detail: 'Rasterizing PDF pages so OCR can read recipe cards.',
   },
   {
     short: 'OCR',

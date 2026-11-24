@@ -147,11 +147,11 @@ export async function extractPdfTextWithOcrFallback(
   const embeddedRaw = stripPdfPageMarkers(await extractPdfText(data));
   const embeddedPages = splitEmbeddedPdfPages(embeddedRaw);
   const embedded = embeddedRaw.replace(/\s+/g, ' ').trim();
-  reportImportJobStep('PDF', 'Reading PDF on server…', 'Extracting embedded text when available.');
+  reportImportJobStep('Load', 'Loading PDF…', 'Reading embedded text when available.');
   if (embedded.length >= MIN_TEXT_LAYER_CHARS) {
     return { text: embedded, usedOcr: false, pageTexts: embeddedPages, pageLayouts: null };
   }
-  reportImportJobStep('OCR', 'Scanning PDF pages…', 'Rasterizing and running OCR — large files can take a minute.');
+  reportImportJobStep('Scan', 'Scanning PDF pages…', 'Rasterizing pages for OCR — large files can take a minute.');
   const { pageTexts, pageLayouts } = await ocrPdfPageTexts(data, tessdataDir, easyocrModelDir);
   const ocrText = pageTexts.join('\n\n');
   if (ocrText.trim()) return { text: ocrText, usedOcr: true, pageTexts, pageLayouts };
@@ -188,6 +188,7 @@ async function ocrPdfPageTexts(
       .filter((name) => name.startsWith('page') && name.endsWith('.png'))
       .sort();
     const pageCount = files.length;
+    reportImportJobStep('Scan', `Scanned ${pageCount} pages`, 'Running OCR on each page.');
     const images = await Promise.all(files.map((name) => readFile(path.join(dir, name))));
 
     // Cheap plain-text pass on the first pages decides the document mode.
@@ -196,7 +197,13 @@ async function ocrPdfPageTexts(
     let perCard: number | null = null;
     const reportFast = (offset: number) => (done: number) => {
       const pagesDone = offset + done;
-      reportImportJobProgress('OCR', recipeImportProgressMessage(pagesDone, pageCount, perCard), `Page ${pagesDone} of ${pageCount}`, pagesDone, pageCount);
+      reportImportJobProgress(
+        'OCR',
+        `OCR page ${pagesDone}/${pageCount}`,
+        perCard ? recipeImportProgressMessage(pagesDone, pageCount, perCard) : `Page ${pagesDone} of ${pageCount}`,
+        pagesDone,
+        pageCount,
+      );
     };
     const pool = await openTesseractPool(tessdataDir, pdfOcrWorkerCount(pageCount), 'pdf-doc-text');
     let probe: FastPage[];
@@ -224,7 +231,7 @@ async function ocrPdfPageTexts(
         let pageText = page.text;
         // Still-thin pages may be rotated scans or dense labels — give them the full pipeline.
         if (pageText.trim().length < MIN_PLAINTEXT_PAGE_CHARS) {
-          reportImportJobStep('OCR', `OCR page ${pageIndex + 1}/${pageCount}…`, path.basename(files[pageIndex]!));
+          reportImportJobProgress('OCR', `OCR page ${pageIndex + 1}/${pageCount}`, path.basename(files[pageIndex]!), pageIndex + 1, pageCount);
           pageText = await extractImageText(images[pageIndex]!, tessdataDir, fullPipelineOptions);
         }
         if (!pageText.trim()) continue;
@@ -237,7 +244,7 @@ async function ocrPdfPageTexts(
     // Label mode stays sequential: the full pipeline may start heavy EasyOCR workers per page.
     for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
       appendImportJobDebug(`pdf ocr: page ${pageIndex + 1}/${pageCount}`);
-      reportImportJobStep('OCR', `OCR page ${pageIndex + 1}/${pageCount}…`, path.basename(files[pageIndex]!));
+      reportImportJobProgress('OCR', `OCR page ${pageIndex + 1}/${pageCount}`, path.basename(files[pageIndex]!), pageIndex + 1, pageCount);
       const pageText = await extractImageText(images[pageIndex]!, tessdataDir, fullPipelineOptions);
       if (pageText.trim()) pageTexts.push(pageText.trim());
     }
