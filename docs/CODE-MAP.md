@@ -67,6 +67,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | Import field confidence (UI) | `server/src/domain/labelFieldReview.ts` | review map for draft fields |
 | Candidate scoring | `server/src/domain/labelSlots.ts`, `labelSlotExtract.ts` | `scoreLabelExtraction`; `primaryCandidateIndex` |
 | URL / PDF text import | `server/src/integrations/importUrl.ts`, `htmlText.ts` | `importNutritionFromUrl` |
+| Recipe web pages (JSON-LD + text fallback) | `server/src/integrations/recipeJsonLd.ts`, `jsonLd.ts`, `server/src/domain/parseRecipePage.ts` | `recipeCardFromJsonLd`, `recipeCardFromPageText`, `pageTitleFromHtml` |
 | Scanned PDF OCR (text vs label mode, worker pool) | `server/src/integrations/ocrScannedPdf.ts` | `extractPdfTextWithOcrFallback`, `classifyPdfPages`, `stripPdfPageMarkers`, `pdfOcrWorkerCount` |
 | Recipe-card front geometry (ingredient table from word boxes) | `server/src/domain/recipeCardLayout.ts` | `reconstructRecipePageLayout`, `findPageTitle` |
 | Recipe booklets (front/back cards → one draft each) | `server/src/domain/recipeBooklet.ts`, `nutritionImport.ts` | `groupRecipeBookletCards`, `buildRecipeBookletDraft`, `cleanRecipeStepText`, `normalizeKitQuantity` |
@@ -85,6 +86,7 @@ End-to-end: **`POST /api/uploads`** → OCR candidates → slot merge → **`bui
 | --- | --- | --- |
 | Label / PDF / URL import page | `web/src/pages/FoodPage.tsx` | `FoodEditor`, `uploadFile`, `startProcessMessages` |
 | Drop zone, camera, URL field | `web/src/components/FoodImportPanel.tsx` | `FoodImportPanel` |
+| Recipe editor + link/card import | `web/src/pages/FoodPage.tsx` | `RecipeEditor`, `importRecipeLink`, `applyRecipeImport` |
 | Progress bar + steps | `web/src/components/ImportProgress.tsx` | `ImportProgress`, `ImportProgressState` |
 | Step copy (image/PDF/URL) | `web/src/lib/importProcessingSteps.ts` | `IMAGE_IMPORT_STEPS`, … |
 | Field-level review flags | `web/src/importFieldReview.ts` | maps server review → form |
