@@ -1,3 +1,5 @@
+import { jsonLdDocuments } from './jsonLd.js';
+
 export function htmlToText(html: string): string {
   let text = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -15,16 +17,9 @@ export function htmlToText(html: string): string {
 }
 
 function extractJsonLdNutrition(html: string): string | null {
-  const blocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-  if (!blocks) return null;
   const lines: string[] = [];
-  for (const block of blocks) {
-    const inner = block.replace(/^[\s\S]*?>/, '').replace(/<\/script>$/, '').trim();
-    try {
-      collectNutritionJson(JSON.parse(inner), lines);
-    } catch {
-      continue;
-    }
+  for (const doc of jsonLdDocuments(html)) {
+    collectNutritionJson(doc, lines);
   }
   return lines.length > 0 ? lines.join('\n') : null;
 }

@@ -14,6 +14,7 @@ import { readComponentRole, readProteinTags } from '../domain/proteinTags.js';
 import { applySlotMergedNutrients, emptyNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
 import { DEFAULT_CORE_NUTRIENT_UNITS } from '../domain/nutrientUnits.js';
 import { buildNutritionImportWithPanels, type NutritionImportDraft } from '../domain/nutritionImport.js';
+import { recipeCardFromPageText } from '../domain/parseRecipePage.js';
 import {
   failImportJob,
   finishImportJob,
@@ -26,6 +27,7 @@ import {
 import { extractImageLabel } from '../integrations/extractText.js';
 import { importNutritionFromUrl } from '../integrations/importUrl.js';
 import { importNutritionFromUrlWithImageFallback } from '../integrations/urlLabelImages.js';
+import { pageTitleFromHtml, recipeCardFromJsonLd } from '../integrations/recipeJsonLd.js';
 import { searchOpenFoodFacts } from '../integrations/openFoodFacts.js';
 import { searchUsda } from '../integrations/usda.js';
 import { HttpError } from '../http/errors.js';
@@ -294,8 +296,21 @@ async function importFromUrl(ctx: Ctx): Promise<void> {
       let kind: 'pdf' | 'html' | 'image' = fetched.kind;
       let html = fetched.html;
       let built = buildNutritionImportWithPanels(text, kind, html);
+      const recipeCard = kind === 'html'
+        ? recipeCardFromJsonLd(html) ?? recipeCardFromPageText(text, pageTitleFromHtml(html))
+        : null;
+      if (recipeCard) {
+        built = {
+          ...built,
+          candidates: [],
+          menuItems: [],
+          labelPanels: [],
+          recipeCard,
+          warning: 'Found a recipe on that page. Review the ingredients and steps, then save.',
+        };
+      }
       let usedOcr = false;
-      if (!importDraftHasNutrition(built)) {
+      if (!built.recipeCard && !importDraftHasNutrition(built)) {
         const fallback = await importNutritionFromUrlWithImageFallback(fetched, {
           extractImageLabel,
           tessdataDir: ctx.config.tessdataDir,

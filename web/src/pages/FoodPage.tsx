@@ -661,6 +661,7 @@ function RecipeEditor({ editId }: { editId: string | null }) {
   const [bookletIndex, setBookletIndex] = useState(0);
   const [bookletSaved, setBookletSaved] = useState<number[]>([]);
   const [importMode, setImportMode] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
   const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
   const recipeImportRunner = useMemo(() => createImportProgressRunner(setImportProgress), []);
   const { busy: recipeSaveBusy, run: runRecipeSave } = useAsyncAction();
@@ -962,6 +963,24 @@ function RecipeEditor({ editId }: { editId: string | null }) {
     }
   }
 
+  async function importRecipeLink(): Promise<void> {
+    const url = importUrl.trim();
+    if (!url) {
+      setImportStatus('Paste a recipe link first.');
+      return;
+    }
+    setImportStatus(null);
+    setImportError(null);
+    setError(null);
+    try {
+      const result = await recipeImportRunner.runUrlImport<ImportResult>(url, URL_IMPORT_STEPS);
+      applyRecipeImport(result);
+      setImportUrl('');
+    } catch (caught) {
+      setImportError(caught instanceof Error ? caught.message : 'Import failed');
+    }
+  }
+
   const recipeImportBusy = importProgress !== null;
 
   function save(): void {
@@ -1013,8 +1032,36 @@ function RecipeEditor({ editId }: { editId: string | null }) {
       </header>
 
       <section className="card form-section">
-        <h2 className="form-section-title">Import meal-kit card</h2>
-        <p className="muted">Upload a scanned recipe card PDF or photo (e.g. Green Chef). We OCR it and pull ingredients, steps, and nutrition into this recipe.</p>
+        <h2 className="form-section-title">Import recipe</h2>
+        <p className="muted">Paste a recipe link, or upload a scanned meal-kit card PDF or photo (e.g. Green Chef). We pull ingredients, steps, and nutrition into this recipe.</p>
+        <div className="import-url-block">
+          <div className="import-url-row">
+            <input
+              value={importUrl}
+              disabled={recipeImportBusy}
+              onChange={(event) => setImportUrl(event.target.value)}
+              placeholder="https://…"
+              inputMode="url"
+              autoComplete="off"
+              aria-label="Recipe URL"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void importRecipeLink();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="primary import-url-btn"
+              disabled={recipeImportBusy || !importUrl.trim()}
+              aria-busy={recipeImportBusy}
+              onClick={() => void importRecipeLink()}
+            >
+              {recipeImportBusy ? '…' : 'Import'}
+            </button>
+          </div>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
