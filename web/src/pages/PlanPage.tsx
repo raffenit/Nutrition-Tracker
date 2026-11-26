@@ -6,6 +6,7 @@ import { formatDisplayDate } from '../dateFormat';
 import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
 import type { Food, ProteinTag } from '../types';
 import { PROTEIN_TAGS } from '../types';
+import { scaledIngredientDisplay } from '../lib/ingredientLine';
 import { weekDays, weekEndSunday, weekStartMonday } from '../weekPlan';
 
 type PlanEntry = {
@@ -53,7 +54,7 @@ export function PlanPage() {
   const [entries, setEntries] = useState<PlanEntry[]>([]);
   const [today, setToday] = useState('');
   const [planFoods, setPlanFoods] = useState<Food[]>([]);
-  const [cooking, setCooking] = useState<{ title: string; instructions: string } | null>(null);
+  const [cooking, setCooking] = useState<CookingSession | null>(null);
   const [grocery, setGrocery] = useState<{ weekStart: string; customized: boolean; lineItems: GroceryLineItem[]; markdown: string } | null>(null);
   const [shopItems, setShopItems] = useState<GroceryLineItem[]>([]);
   const [shopDirty, setShopDirty] = useState(false);
@@ -495,15 +496,7 @@ export function PlanPage() {
         </div>
       )}
 
-      {cooking && (
-        <div className="plan-dialog-backdrop" role="presentation" onClick={() => setCooking(null)}>
-          <div className="card plan-dialog cooking-dialog" onClick={(event) => event.stopPropagation()}>
-            <h2>{cooking.title}</h2>
-            <pre className="cooking-instructions">{cooking.instructions}</pre>
-            <button type="button" className="primary" onClick={() => setCooking(null)}>Done</button>
-          </div>
-        </div>
-      )}
+      {cooking && <CookingDialog session={cooking} onClose={() => setCooking(null)} />}
 
       {generateOpen && (
         <GeneratePlanDialog
@@ -573,7 +566,18 @@ function AddPlanMealDialog({
   const [foodId, setFoodId] = useState(recipes[0]?.id ?? '');
   const [servings, setServings] = useState('2');
   const [slot, setSlot] = useState<PlanEntry['slot']>('meal');
+  const [query, setQuery] = useState('');
   const recipe = recipes.find((item) => item.id === foodId);
+  const filteredRecipes = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return recipes;
+    return recipes.filter((item) => item.name.toLowerCase().includes(needle));
+  }, [recipes, query]);
+  useEffect(() => {
+    if (filteredRecipes.length > 0 && !filteredRecipes.some((item) => item.id === foodId)) {
+      setFoodId(filteredRecipes[0]!.id);
+    }
+  }, [filteredRecipes, foodId]);
   useEffect(() => {
     const food = recipes.find((item) => item.id === foodId);
     if (food) setServings(String(Math.max(1, food.makesServings)));
@@ -596,11 +600,21 @@ function AddPlanMealDialog({
           <>
             <label>
               Food or recipe
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={`Search ${recipes.length} items…`}
+                aria-label="Search foods and recipes"
+              />
               <select value={foodId} onChange={(event) => setFoodId(event.target.value)}>
-                {recipes.map((item) => (
+                {filteredRecipes.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}{item.kind === 'packaged' ? ' (packaged)' : ''}</option>
                 ))}
               </select>
+              {query.trim() && filteredRecipes.length === 0 && (
+                <span className="muted">No matches for “{query.trim()}”.</span>
+              )}
             </label>
             <label>
               Slot
@@ -803,23 +817,95 @@ function GeneratePlanDialog({
   );
 }
 
+type CookingSession = {
+  title: string;
+  instructions: string;
+  ingredients: Food['ingredients'];
+  /** plannedServings / food.makesServings — scales ingredient quantities for display. */
+  factor: number;
+  makesServings: number;
+  plannedServings: number;
+};
+
 async function openCooking(
   entry: PlanEntry,
-  setCooking: (value: { title: string; instructions: string } | null) => void,
+  setCooking: (value: CookingSession | null) => void,
   setError: (value: string | null) => void,
 ): Promise<void> {
   try {
     const result = await api<{ food: Food }>(`/api/foods/${entry.foodId}`);
-    const text = result.food.instructions?.trim();
-    if (!text) {
-      setError('This item has no cooking instructions. Edit the recipe to add steps from the meal card.');
+    const food = result.food;
+    const instructions = food.instructions?.trim() ?? '';
+    const hasIngredients = food.kind === 'custom' && food.ingredients.length > 0;
+    if (!instructions && !hasIngredients) {
+      setError('This item has no cooking instructions or ingredients. Edit the recipe to add them.');
       return;
     }
-    setCooking({ title: entry.foodName, instructions: text });
+    setCooking({
+      title: entry.foodName,
+      instructions,
+      ingredients: food.ingredients,
+      factor: entry.servings / Math.max(food.makesServings, 1),
+      makesServings: food.makesServings,
+      plannedServings: entry.servings,
+    });
     setError(null);
   } catch (caught: unknown) {
-    setError(caught instanceof Error ? caught.message : 'Could not load instructions');
+    setError(caught instanceof Error ? caught.message : 'Could not load recipe');
   }
+}
+
+function CookingDialog({ session, onClose }: { session: CookingSession; onClose: () => void }) {
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const scaled = session.ingredients.map((line) => scaledIngredientDisplay(line, session.factor));
+  const scaledNote = session.plannedServings !== session.makesServings
+    ? `Amounts shown for ${session.plannedServings} serving${session.plannedServings === 1 ? '' : 's'} (recipe makes ${session.makesServings}).`
+    : null;
+  return (
+    <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
+      <div className="card plan-dialog cooking-dialog" onClick={(event) => event.stopPropagation()}>
+        <h2>{session.title}</h2>
+        {session.ingredients.length > 0 && (
+          <section className="cooking-ingredients">
+            <h3 className="form-section-title">Ingredients</h3>
+            {scaledNote && <p className="muted cooking-scale-note">{scaledNote}</p>}
+            <ul className="cooking-ingredient-list">
+              {scaled.map((line, index) => (
+                <li key={index} className={checked.has(index) ? 'is-checked' : undefined}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={checked.has(index)}
+                      onChange={(event) => {
+                        const next = new Set(checked);
+                        if (event.target.checked) next.add(index);
+                        else next.delete(index);
+                        setChecked(next);
+                      }}
+                    />
+                    <span className="cooking-ingredient-text">
+                      {line.text}
+                      {line.notes && <span className="cooking-ingredient-note"> ({line.notes})</span>}
+                      {line.alternates.map((alt) => (
+                        <span key={alt} className="cooking-ingredient-alt"> ({alt})</span>
+                      ))}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {session.instructions && (
+          <section className="cooking-steps">
+            <h3 className="form-section-title">Instructions</h3>
+            <pre className="cooking-instructions">{session.instructions}</pre>
+          </section>
+        )}
+        <button type="button" className="primary" onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
 }
 
 async function logFromPlan(entry: PlanEntry, setError: (value: string | null) => void): Promise<void> {

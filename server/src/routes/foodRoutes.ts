@@ -8,7 +8,7 @@ import { deleteFood, getFood, insertFood, listFoods, setFavorite, updateFood, ty
 import { perServing, sumIngredientNutrients } from '../domain/compose.js';
 import { mergeRecipeIngredientsWithEcosystem } from '../domain/recipeEcosystem.js';
 import type { RecipePageLayout } from '../domain/recipeCardLayout.js';
-import { favoriteOnly, readFoodInput } from '../domain/foodInput.js';
+import { favoriteOnly, readFoodInput, readIngredientExtras } from '../domain/foodInput.js';
 import { isRecord, optionalText, requiredNumber, requiredText } from '../domain/guards.js';
 import { readComponentRole, readProteinTags } from '../domain/proteinTags.js';
 import { applySlotMergedNutrients, emptyNutrients, readNutrients, roundNutrients } from '../domain/nutrients.js';
@@ -34,7 +34,7 @@ import { HttpError } from '../http/errors.js';
 import { requireUser } from '../http/access.js';
 import { readJson, sendJson } from '../http/respond.js';
 import { route, type Ctx, type Route } from '../http/router.js';
-import type { Food, Nutrients, SearchHit } from '../types.js';
+import type { Food, IngredientMeasure, Nutrients, SearchHit } from '../types.js';
 import type { LabelServingFields } from '../domain/labelServingVote.js';
 
 // Scanned recipe-card PDFs (multi-page, no text layer) legitimately reach
@@ -419,6 +419,8 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string | null;
+  notes: string | null;
+  altMeasurements: IngredientMeasure[];
 } {
   if (!isRecord(value)) throw new HttpError(400, 'Each ingredient needs a name');
   const servings = requiredNumber(value.servings, 'Ingredient amount');
@@ -427,6 +429,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
   const shopEquivalentLabel = optionalText(value.shopEquivalentLabel);
   const childFoodId = typeof value.foodId === 'string' ? value.foodId : null;
   const componentRole = readComponentRole(value.componentRole);
+  const extras = readIngredientExtras(value);
   if (childFoodId) {
     const food = getFood(ctx.db, childFoodId);
     if (!food) throw new HttpError(400, 'Unknown ingredient');
@@ -440,6 +443,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
       componentRole,
       shopEquivalentFoodId,
       shopEquivalentLabel,
+      ...extras,
     };
   }
   return {
@@ -452,6 +456,7 @@ function ingredientLine(ctx: Ctx, value: unknown): {
     componentRole,
     shopEquivalentFoodId,
     shopEquivalentLabel,
+    ...extras,
   };
 }
 
@@ -471,7 +476,7 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
   }
   const lines = body.ingredients.map((line) => ingredientLine(ctx, line));
   const nutrients = recipeNutrients(lines, input.makesServings, input.nutrients);
-  const baseIngredients = lines.map(({ name, servings, sourceRef, childFoodId, componentRole, shopEquivalentFoodId, shopEquivalentLabel }) => ({
+  const baseIngredients = lines.map(({ name, servings, sourceRef, childFoodId, componentRole, shopEquivalentFoodId, shopEquivalentLabel, notes, altMeasurements }) => ({
     name,
     servings,
     sourceRef,
@@ -479,6 +484,8 @@ function recomputeRecipeNutrients(ctx: Ctx, body: unknown, input: ReturnType<typ
     componentRole,
     shopEquivalentFoodId,
     shopEquivalentLabel,
+    notes,
+    altMeasurements,
   }));
   const ingredients = mergeRecipeIngredientsWithEcosystem(ctx.db, input.mealKitEcosystemId, baseIngredients);
   return {

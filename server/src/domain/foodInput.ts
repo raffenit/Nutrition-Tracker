@@ -1,7 +1,7 @@
 import type { NewFood } from '../db/foods.js';
 import { HttpError } from '../http/errors.js';
 import { readComponentRole, readProteinTags } from './proteinTags.js';
-import type { FoodKind, FoodSource, IngredientLine } from '../types.js';
+import type { FoodKind, FoodSource, IngredientLine, IngredientMeasure } from '../types.js';
 import { isRecord, nonNegative, optionalText, requiredNumber, requiredText } from './guards.js';
 import { readNutrients } from './nutrients.js';
 import { readNutrientsWithUnits } from './nutrientUnits.js';
@@ -79,7 +79,25 @@ function readIngredient(value: unknown): IngredientLine {
     componentRole: readComponentRole(value.componentRole),
     shopEquivalentFoodId: optionalText(value.shopEquivalentFoodId),
     shopEquivalentLabel: optionalText(value.shopEquivalentLabel),
+    ...readIngredientExtras(value),
   };
+}
+
+const MAX_ALT_MEASUREMENTS = 6;
+
+/** Notes + alternate measures for an ingredient line (shared by compose + food save paths). */
+export function readIngredientExtras(value: Record<string, unknown>): Pick<IngredientLine, 'notes' | 'altMeasurements'> {
+  const altMeasurements: IngredientMeasure[] = [];
+  const raw = value.altMeasurements;
+  if (Array.isArray(raw)) {
+    for (const item of raw.slice(0, MAX_ALT_MEASUREMENTS)) {
+      if (!isRecord(item)) continue;
+      const quantity = optionalText(item.quantity)?.slice(0, 24);
+      const unit = optionalText(item.unit)?.slice(0, 24);
+      if (quantity && unit) altMeasurements.push({ quantity, unit });
+    }
+  }
+  return { notes: optionalText(value.notes), altMeasurements };
 }
 
 function requiredBoolean(value: unknown, label: string): boolean {

@@ -14,6 +14,8 @@ function line(overrides: Partial<IngredientLine>): IngredientLine {
     componentRole: null,
     shopEquivalentFoodId: null,
     shopEquivalentLabel: null,
+    notes: null,
+    altMeasurements: [],
     ...overrides,
   };
 }

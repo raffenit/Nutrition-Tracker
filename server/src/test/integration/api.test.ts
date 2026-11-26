@@ -326,6 +326,27 @@ test('custom recipes return ingredient lines for editing', async () => {
     assert.equal(reloaded.body.food.ingredients[1]?.name, 'Quinoa');
     assert.equal(reloaded.body.food.ingredients[1]?.childFoodId, null);
 
+    // Ingredient notes + alternate measures persist through compose and PATCH.
+    const measured = await api<{ food: { id: string } }>(port, '/api/foods/compose', {
+      method: 'POST',
+      cookie: setup.cookie,
+      body: {
+        name: 'Pasta night',
+        makesServings: 4,
+        ingredients: [
+          { name: '2 cups flour', servings: 1, foodId: null, notes: 'sifted', altMeasurements: [{ quantity: '250', unit: 'g' }] },
+        ],
+      },
+    });
+    assert.equal(measured.status, 201);
+    const measuredLoaded = await api<{
+      food: { ingredients: Array<{ name: string; notes: string | null; altMeasurements: Array<{ quantity: string; unit: string }> }> };
+    }>(port, `/api/foods/${measured.body.food.id}`, { cookie: setup.cookie });
+    assert.equal(measuredLoaded.status, 200);
+    assert.equal(measuredLoaded.body.food.ingredients[0]?.name, '2 cups flour');
+    assert.equal(measuredLoaded.body.food.ingredients[0]?.notes, 'sifted');
+    assert.deepEqual(measuredLoaded.body.food.ingredients[0]?.altMeasurements, [{ quantity: '250', unit: 'g' }]);
+
     // A card label with only sodium still beats an all-zero total from text-only lines.
     const sodiumOnly = await api<{ food: { nutrients: { sodium: number } } }>(port, '/api/foods/compose', {
       method: 'POST',

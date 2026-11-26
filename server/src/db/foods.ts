@@ -4,6 +4,7 @@ import { parseStoredComponentRole, parseStoredProteinTags, type ProteinTag } fro
 import { DEFAULT_CORE_NUTRIENT_UNITS, readCoreNutrientUnits } from '../domain/nutrientUnits.js';
 import { parseStoredExtras } from '../domain/nutrients.js';
 import type { AppDatabase } from './database.js';
+import type { IngredientMeasure } from '../types.js';
 
 export type NewFood = {
   createdBy: string;
@@ -148,8 +149,8 @@ function mustFood(db: AppDatabase, id: string): Food {
 function replaceIngredients(db: AppDatabase, parentId: string, lines: IngredientLine[]): void {
   db.prepare('DELETE FROM food_ingredients WHERE parent_id = ?').run(parentId);
   const insert = db.prepare(
-    `INSERT INTO food_ingredients (id, parent_id, name, servings, source_ref, child_food_id, component_role, shop_equivalent_food_id, shop_equivalent_label)
-     VALUES (@id, @parentId, @name, @servings, @sourceRef, @childFoodId, @componentRole, @shopEquivalentFoodId, @shopEquivalentLabel)`,
+    `INSERT INTO food_ingredients (id, parent_id, name, servings, source_ref, child_food_id, component_role, shop_equivalent_food_id, shop_equivalent_label, notes, alt_measurements_json)
+     VALUES (@id, @parentId, @name, @servings, @sourceRef, @childFoodId, @componentRole, @shopEquivalentFoodId, @shopEquivalentLabel, @notes, @altMeasurementsJson)`,
   );
   for (const line of lines) {
     insert.run({
@@ -162,13 +163,32 @@ function replaceIngredients(db: AppDatabase, parentId: string, lines: Ingredient
       componentRole: line.componentRole,
       shopEquivalentFoodId: line.shopEquivalentFoodId,
       shopEquivalentLabel: line.shopEquivalentLabel,
+      notes: line.notes,
+      altMeasurementsJson: JSON.stringify(line.altMeasurements ?? []),
     });
+  }
+}
+
+function parseAltMeasurements(raw: string | null): IngredientMeasure[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const record = item as Record<string, unknown>;
+      const quantity = typeof record.quantity === 'string' ? record.quantity.trim() : '';
+      const unit = typeof record.unit === 'string' ? record.unit.trim() : '';
+      return quantity && unit ? [{ quantity, unit }] : [];
+    });
+  } catch {
+    return [];
   }
 }
 
 function ingredientsFor(db: AppDatabase, parentId: string): IngredientLine[] {
   const rows = db.prepare(
-    `SELECT name, servings, source_ref, child_food_id, component_role, shop_equivalent_food_id, shop_equivalent_label
+    `SELECT name, servings, source_ref, child_food_id, component_role, shop_equivalent_food_id, shop_equivalent_label, notes, alt_measurements_json
      FROM food_ingredients WHERE parent_id = ?`,
   ).all(parentId) as Array<{
     name: string;
@@ -178,6 +198,8 @@ function ingredientsFor(db: AppDatabase, parentId: string): IngredientLine[] {
     component_role: string | null;
     shop_equivalent_food_id: string | null;
     shop_equivalent_label: string | null;
+    notes: string | null;
+    alt_measurements_json: string | null;
   }>;
   return rows.map((row) => ({
     name: row.name,
@@ -187,6 +209,8 @@ function ingredientsFor(db: AppDatabase, parentId: string): IngredientLine[] {
     componentRole: parseStoredComponentRole(row.component_role),
     shopEquivalentFoodId: row.shop_equivalent_food_id,
     shopEquivalentLabel: row.shop_equivalent_label,
+    notes: row.notes,
+    altMeasurements: parseAltMeasurements(row.alt_measurements_json),
   }));
 }
 

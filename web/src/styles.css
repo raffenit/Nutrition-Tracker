@@ -1257,6 +1257,64 @@ label.import-field-review,
   padding-inline-start: 0.25rem;
   border-inline-start: 2px solid var(--line);
 }
+.recipe-ingredient-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-inline-start: 0.25rem;
+}
+.recipe-ingredient-note-input {
+  font-size: 0.82rem;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  max-width: 22rem;
+}
+.recipe-ingredient-note-input::placeholder { color: var(--muted); }
+.recipe-ingredient-alts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.recipe-ingredient-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.recipe-ingredient-alt .recipe-ingredient-qty-input { width: 3rem; }
+.recipe-ingredient-alt select { font-size: 0.82rem; min-height: 32px; }
+.cooking-ingredients,
+.cooking-steps { display: grid; gap: 0.5rem; }
+.cooking-scale-note { margin: 0; font-size: 0.82rem; }
+.cooking-ingredient-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.cooking-ingredient-list label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.cooking-ingredient-list input[type='checkbox'] { flex-shrink: 0; }
+.cooking-ingredient-text { min-width: 0; }
+.cooking-ingredient-list li.is-checked .cooking-ingredient-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.cooking-ingredient-note,
+.cooking-ingredient-alt {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+}
 .recipe-shop-label {
   display: grid;
   gap: 0.25rem;
@@ -1347,6 +1405,7 @@ label.import-field-review,
     grid-template-columns: 1fr;
   }
 }
+.cooking-dialog { width: min(100%, 36rem); }
 .cooking-dialog .cooking-instructions {
   white-space: pre-wrap;
   font: inherit;
