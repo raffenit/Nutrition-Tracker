@@ -49,8 +49,9 @@ type DraftMeal = {
 
 export function PlanPage() {
   const href = usePath();
+  const path = href.split('?')[0] ?? '/';
   const weekParam = new URLSearchParams(href.includes('?') ? href.split('?')[1] : '').get('week');
-  const [view, setView] = useState<PlanView>('week');
+  const view: PlanView = path === '/shop' ? 'shop' : 'week';
   const [weekStart, setWeekStart] = useState(() => weekStartMonday(weekParam ?? new Date().toISOString().slice(0, 10)));
   const [entries, setEntries] = useState<PlanEntry[]>([]);
   const [today, setToday] = useState('');
@@ -224,7 +225,7 @@ export function PlanPage() {
 
   function shiftWeek(delta: number): void {
     const next = shiftDate(weekStart, delta * 7);
-    navigate(`/plan?week=${next}`);
+    navigate(`${path}?week=${next}`);
     void loadPlan(next);
   }
 
@@ -246,8 +247,8 @@ export function PlanPage() {
           <button type="button" className="datebar-arrow" aria-label="Next week" onClick={() => shiftWeek(1)}>›</button>
         </div>
         <div className="segmented compact" role="tablist" aria-label="Plan views">
-          <button type="button" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>Week</button>
-          <button type="button" role="tab" aria-selected={view === 'shop'} className={view === 'shop' ? 'active' : ''} onClick={() => setView('shop')}>Shopping list</button>
+          <button type="button" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'active' : ''} onClick={() => navigate(`/plan?week=${weekStart}`)}>Week</button>
+          <button type="button" role="tab" aria-selected={view === 'shop'} className={view === 'shop' ? 'active' : ''} onClick={() => navigate(`/shop?week=${weekStart}`)}>Shopping list</button>
         </div>
         {view === 'week' && (
           <button type="button" className="settings-secondary-btn plan-generate-btn" onClick={() => setGenerateOpen(true)}>

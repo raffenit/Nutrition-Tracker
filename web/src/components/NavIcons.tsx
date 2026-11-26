@@ -23,11 +23,23 @@ export function IconHome({ className }: IconProps) {
 /** @deprecated use IconHome */
 export const IconToday = IconHome;
 
+/** Log / journal — a notebook with written lines */
 export function IconLog({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" {...stroke} />
-      <path d="M12 8v8M8 12h8" {...stroke} />
+      <path {...stroke} d="M6 3.5h12a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5Z" />
+      <path {...stroke} d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" />
+    </svg>
+  );
+}
+
+/** Shopping list — a cart */
+export function IconShop({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path {...stroke} d="M3.5 5h2.2l2.3 11a1 1 0 0 0 1 .8h8.5a1 1 0 0 0 1-.8L21 8.5H7" />
+      <circle cx="10" cy="20" r="1.4" {...stroke} />
+      <circle cx="17.5" cy="20" r="1.4" {...stroke} />
     </svg>
   );
 }
