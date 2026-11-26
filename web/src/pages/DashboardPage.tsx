@@ -14,6 +14,7 @@ import { saveTargetsCache } from '../offline/db';
 import { applyPendingToTotals, pendingHydrationEntries, pendingHydrationMl, pendingPreviewsForDate } from '../offline/pending';
 import { SYNC_COMPLETE_EVENT } from '../offline/register';
 import { useAsyncAction } from '../lib/useAsyncAction';
+import { IconGroup, IconPerson } from '../components/NavIcons';
 import { FamilyBoard } from './FamilyPage';
 import { navigate, nowLocalInput } from '../nav';
 import type { DayTotals, GoalAlert, HydrationEntry, MealLog, Targets, WeightStatus } from '../types';
@@ -97,8 +98,7 @@ export function DashboardPage() {
   if (view === 'family') {
     return (
       <div className="page family-page">
-        <HomeViewToggle view="family" />
-        <FamilyBoard kiosk={false} datePath="/" query="view=family" />
+        <FamilyBoard kiosk={false} datePath="/" query="view=family" leading={<HomeViewToggle view="family" />} />
       </div>
     );
   }
@@ -124,9 +124,14 @@ export function DashboardPage() {
     <>
     <div className="page dashboard-page">
       <div className="page-layout-span stack">
-        <HomeViewToggle view="me" />
         {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
-        <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
+        <DateBar
+          path="/"
+          date={day.date}
+          today={day.today}
+          dateFormat={day.targets.dateFormat ?? 'mdy_long'}
+          leading={<HomeViewToggle view="me" />}
+        />
         {error && <p className="notice">{error}</p>}
         {day.weight.enabled && day.weight.reminderDue && !offline && (
           <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />
@@ -164,10 +169,25 @@ export function DashboardPage() {
 }
 
 function HomeViewToggle({ view }: { view: 'me' | 'family' }) {
+  const options = [
+    { value: 'me' as const, label: 'My log', Icon: IconPerson, href: '/' },
+    { value: 'family' as const, label: 'Family view', Icon: IconGroup, href: '/?view=family' },
+  ];
   return (
-    <div className="segmented home-view-toggle" role="group" aria-label="Home view">
-      <button type="button" className={view === 'me' ? 'active' : ''} onClick={() => navigate('/')}>Me</button>
-      <button type="button" className={view === 'family' ? 'active' : ''} onClick={() => navigate('/?view=family')}>Family</button>
+    <div className="home-view-toggle" role="group" aria-label="Home view">
+      {options.map(({ value, label, Icon, href }) => (
+        <button
+          key={value}
+          type="button"
+          className={view === value ? 'home-view-btn is-active' : 'home-view-btn'}
+          aria-label={label}
+          aria-pressed={view === value}
+          title={label}
+          onClick={() => navigate(href)}
+        >
+          <Icon />
+        </button>
+      ))}
     </div>
   );
 }
