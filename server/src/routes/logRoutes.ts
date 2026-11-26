@@ -12,7 +12,7 @@ import { route, type Ctx, type Route } from '../http/router.js';
 import type { MealSlot } from '../types.js';
 import { householdZone } from './household.js';
 
-const SLOTS = ['meal', 'snack', 'dessert', 'drink'] as const;
+const SLOTS = ['meal', 'side', 'snack', 'dessert', 'drink'] as const;
 
 export function logRoutes(): Route[] {
   return [

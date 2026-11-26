@@ -143,7 +143,7 @@ function usualMealTimes(
     buckets.set(row.slot, list);
   }
 
-  const order: MealSlot[] = ['meal', 'snack', 'dessert', 'drink'];
+  const order: MealSlot[] = ['meal', 'side', 'snack', 'dessert', 'drink'];
   return order
     .filter((slot) => buckets.has(slot))
     .map((slot) => {
