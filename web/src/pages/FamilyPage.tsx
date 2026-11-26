@@ -25,6 +25,15 @@ type Family = {
 };
 
 export function FamilyPage({ kiosk }: { kiosk: boolean }) {
+  return (
+    <div className="page family-page">
+      <FamilyBoard kiosk={kiosk} datePath="/family" />
+    </div>
+  );
+}
+
+/** Family board content — also embedded as the home screen's Family mode. */
+export function FamilyBoard({ kiosk, datePath, query }: { kiosk: boolean; datePath: string; query?: string }) {
   const [board, setBoard] = useState<Family | null>(null);
   const date = new URLSearchParams(window.location.search).get('date');
   useEffect(() => {
@@ -37,8 +46,8 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
     ?? formatMonthLabel(board.date);
 
   return (
-    <div className="page family-page">
-      <DateBar path="/family" date={board.date} today={board.today} dateFormat={board.dateFormat} />
+    <>
+      <DateBar path={datePath} query={query} date={board.date} today={board.today} dateFormat={board.dateFormat} />
       <h1 className="page-title">{familyPageTitle(board.householdName, monthLabel)}</h1>
       <FamilySummary members={board.members} />
       <div className="grid family-member-grid">
@@ -60,7 +69,7 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
         })}
       </div>
       {kiosk && <p className="muted family-kiosk-note">Family board — weight and personal settings stay private.</p>}
-    </div>
+    </>
   );
 }
 

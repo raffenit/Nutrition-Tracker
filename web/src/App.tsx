@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api/client';
 import { AppShell } from './components/AppShell';
-import { usePath } from './nav';
+import { navigate, usePath } from './nav';
 import { AddLogPage } from './pages/AddLogPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { FamilyPage } from './pages/FamilyPage';
@@ -48,9 +48,11 @@ export function App() {
   }
   return (
     <AppShell path={path} kiosk={session.mode === 'kiosk'}>
-      {path === '/family' && <FamilyPage kiosk={session.mode === 'kiosk'} />}
+      {path === '/family' && session.mode !== 'kiosk' && <FamilyHomeRedirect />}
+      {path === '/family' && session.mode === 'kiosk' && <FamilyPage kiosk />}
       {path === '/add' && <AddLogPage />}
       {path === '/plan' && <PlanPage />}
+      {path === '/shop' && <PlanPage />}
       {path === '/library' && <LibraryPage />}
       {path === '/settings' && session.user && (
         <SettingsPage user={session.user} household={session.household} onSessionChange={setSession} />
@@ -63,4 +65,12 @@ export function App() {
       {path === '/login' && <LoginPage onReady={setSession} />}
     </AppShell>
   );
+}
+
+/** Family view moved onto the home screen — keep /family links working. */
+function FamilyHomeRedirect() {
+  useEffect(() => {
+    navigate('/?view=family');
+  }, []);
+  return <p className="app">Loading…</p>;
 }

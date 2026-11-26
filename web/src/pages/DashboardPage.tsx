@@ -14,7 +14,8 @@ import { saveTargetsCache } from '../offline/db';
 import { applyPendingToTotals, pendingHydrationEntries, pendingHydrationMl, pendingPreviewsForDate } from '../offline/pending';
 import { SYNC_COMPLETE_EVENT } from '../offline/register';
 import { useAsyncAction } from '../lib/useAsyncAction';
-import { nowLocalInput } from '../nav';
+import { FamilyBoard } from './FamilyPage';
+import { navigate, nowLocalInput } from '../nav';
 import type { DayTotals, GoalAlert, HydrationEntry, MealLog, Targets, WeightStatus } from '../types';
 
 type Dashboard = {
@@ -40,7 +41,9 @@ export function DashboardPage() {
   const [staleLabel, setStaleLabel] = useState<string | null>(null);
   const [trendDays, setTrendDays] = useState(7);
   const { offline } = useOfflineStatus();
-  const date = new URLSearchParams(window.location.search).get('date');
+  const search = new URLSearchParams(window.location.search);
+  const date = search.get('date');
+  const view = search.get('view') === 'family' ? 'family' : 'me';
 
   const applyPending = useCallback(async (payload: Dashboard): Promise<Dashboard> => {
     const previews = await pendingPreviewsForDate(payload.date);
@@ -91,6 +94,15 @@ export function DashboardPage() {
     return () => window.removeEventListener(SYNC_COMPLETE_EVENT, onSync);
   }, [load]);
 
+  if (view === 'family') {
+    return (
+      <div className="page family-page">
+        <HomeViewToggle view="family" />
+        <FamilyBoard kiosk={false} datePath="/" query="view=family" />
+      </div>
+    );
+  }
+
   if (!day) return <p>{error ?? 'Loading today…'}</p>;
 
   async function removeLog(id: string): Promise<void> {
@@ -112,6 +124,7 @@ export function DashboardPage() {
     <>
     <div className="page dashboard-page">
       <div className="page-layout-span stack">
+        <HomeViewToggle view="me" />
         {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
         <DateBar path="/" date={day.date} today={day.today} dateFormat={day.targets.dateFormat ?? 'mdy_long'} />
         {error && <p className="notice">{error}</p>}
@@ -147,6 +160,15 @@ export function DashboardPage() {
       />
     </div>
     </>
+  );
+}
+
+function HomeViewToggle({ view }: { view: 'me' | 'family' }) {
+  return (
+    <div className="segmented home-view-toggle" role="group" aria-label="Home view">
+      <button type="button" className={view === 'me' ? 'active' : ''} onClick={() => navigate('/')}>Me</button>
+      <button type="button" className={view === 'family' ? 'active' : ''} onClick={() => navigate('/?view=family')}>Family</button>
+    </div>
   );
 }
 

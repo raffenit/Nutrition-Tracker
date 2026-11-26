@@ -4,11 +4,11 @@ import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
 import { navigate } from '../nav';
 import { HelixMark } from './HelixMark';
 import {
-  IconFamily,
-  IconHome,
   IconLibrary,
+  IconLog,
   IconPlan,
   IconSettings,
+  IconShop,
   IconSidebarCollapse,
   IconSidebarExpand,
   IconSignIn,
@@ -16,10 +16,10 @@ import {
 import { OfflineBanner } from './OfflineBanner';
 
 const LINKS = [
-  { href: '/', label: 'Home', Icon: IconHome },
+  { href: '/', label: 'Log', Icon: IconLog },
   { href: '/plan', label: 'Plan', Icon: IconPlan },
+  { href: '/shop', label: 'Shop', Icon: IconShop },
   { href: '/library', label: 'Library', Icon: IconLibrary },
-  { href: '/family', label: 'Family', Icon: IconFamily },
   { href: '/settings', label: 'Settings', Icon: IconSettings },
 ] as const;
 
