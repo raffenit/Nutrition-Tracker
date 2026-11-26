@@ -1287,23 +1287,45 @@ label.import-field-review,
 }
 .recipe-ingredient-alt .recipe-ingredient-qty-input { width: 3rem; }
 .recipe-ingredient-alt select { font-size: 0.82rem; min-height: 32px; }
+.cooking-columns {
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+.cooking-columns > section { min-width: 0; }
+@media (min-aspect-ratio: 1/1) and (min-width: 36rem) {
+  .cooking-columns {
+    grid-template-columns: minmax(14rem, 2fr) minmax(0, 3fr);
+    align-items: stretch;
+  }
+  .cooking-columns > section {
+    min-height: 0;
+    overflow: auto;
+  }
+}
 .cooking-ingredients,
-.cooking-steps { display: grid; gap: 0.5rem; }
+.cooking-steps { display: grid; gap: 0.5rem; align-content: start; }
 .cooking-scale-note { margin: 0; font-size: 0.82rem; }
 .cooking-ingredient-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.4rem;
+  gap: 0.15rem;
 }
 .cooking-ingredient-list label {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 0.5rem;
   cursor: pointer;
+  line-height: 1.4;
 }
-.cooking-ingredient-list input[type='checkbox'] { flex-shrink: 0; }
+.cooking-ingredient-list input[type='checkbox'] {
+  flex-shrink: 0;
+  margin-top: 0.2em;
+}
 .cooking-ingredient-text { min-width: 0; }
 .cooking-ingredient-list li.is-checked .cooking-ingredient-text {
   text-decoration: line-through;
@@ -1405,14 +1427,16 @@ label.import-field-review,
     grid-template-columns: 1fr;
   }
 }
-.cooking-dialog { width: min(100%, 36rem); }
+.cooking-dialog {
+  width: min(100%, 64rem);
+  max-height: calc(100dvh - 2rem);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
 .cooking-dialog .cooking-instructions {
   white-space: pre-wrap;
   font: inherit;
   line-height: 1.5;
-  max-height: min(60vh, 28rem);
-  overflow: auto;
-  margin: 0 0 1rem;
+  margin: 0;
 }
 .recipe-ingredient:last-child { border-bottom: 0; }
 .recipe-ingredient-name {
@@ -1490,13 +1514,6 @@ label.import-field-review,
 .add-log-toolbar { margin-bottom: 4px; }
 .add-log-toolbar .linkish { margin-left: auto; flex-shrink: 0; }
 .slot-tabs { margin-bottom: 4px; }
-.plan-meal-servings {
-  width: 3.4rem;
-  min-height: 1.75rem;
-  padding: 0 0.3rem;
-  font-size: 0.82rem;
-  text-align: center;
-}
 .recipe-line { flex-wrap: wrap; align-items: center; }
 .recipe-qty { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.85rem; }
 .recipe-qty input { width: 4.5rem; min-height: 36px; }
@@ -1632,6 +1649,7 @@ label.import-field-review,
   background: color-mix(in srgb, var(--bg) 50%, transparent);
   border: 1px solid var(--line);
   cursor: grab;
+  flex-wrap: wrap;
 }
 .plan-meal-row:active { cursor: grabbing; }
 .plan-meal-dragging { opacity: 0.45; }
@@ -1645,8 +1663,7 @@ label.import-field-review,
   /* Compact fields drop below 16px for density — restore iOS-safe size + touch targets. */
   .shop-edit-name, .shop-edit-qty, .shop-edit-unit,
   .recipe-ingredient-fields input, .recipe-ingredient-fields select,
-  .recipe-ingredient-qty input, .recipe-ingredient-role select,
-  .plan-meal-servings {
+  .recipe-ingredient-qty input, .recipe-ingredient-role select {
     font-size: 16px;
     min-height: 2.5rem;
   }
@@ -1680,6 +1697,7 @@ label.import-field-review,
   display: grid;
   place-items: center;
   padding: 16px;
+  overflow: auto;
 }
 .plan-dialog { width: min(100%, 22rem); display: grid; gap: 8px; }
 .shop-panel { padding: 10px; display: grid; gap: 8px; max-width: min(100%, 72rem); }
@@ -1725,7 +1743,7 @@ label.import-field-review,
 }
 .shop-mode-btn:hover { color: var(--accent-soft); }
 .shop-mode-btn.is-active {
-  background: var(--surface);
+  background: var(--raise);
   color: var(--text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
@@ -1734,6 +1752,31 @@ label.import-field-review,
 .shop-unit-select { appearance: auto; }
 .shop-row-done .shop-item-name { text-decoration: line-through; color: var(--muted); }
 .shop-text { margin: 0; max-height: min(60vh, 36rem); overflow: auto; }
+.shop-unsaved {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-soft);
+  white-space: nowrap;
+}
+.plan-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  color: var(--text);
+  font-size: 0.88rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+@media (max-width: 899px) {
+  /* Clear the bottom tab bar on phones/tablets. */
+  .plan-toast { bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+}
 .shop-main { display: grid; gap: 8px; align-content: start; min-width: 0; }
 .shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .shop-row {

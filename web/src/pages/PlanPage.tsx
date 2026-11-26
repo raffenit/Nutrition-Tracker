@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { RemoveButton } from '../components/RemoveButton';
 import { IconCopy, IconSave } from '../components/NavIcons';
@@ -71,6 +71,9 @@ export function PlanPage() {
   const [dragEntryId, setDragEntryId] = useState<string | null>(null);
   const [dropDay, setDropDay] = useState<string | null>(null);
   const [moveEntry, setMoveEntry] = useState<PlanEntry | null>(null);
+  const [editEntry, setEditEntry] = useState<PlanEntry | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -101,6 +104,12 @@ export function PlanPage() {
   useEffect(() => {
     if (view === 'shop') void loadGrocery().catch(() => setError('Could not load grocery list'));
   }, [view, weekStart]);
+
+  function showToast(message: string): void {
+    setToast(message);
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
+  }
 
   function persistChecks(next: Record<string, boolean>): void {
     setChecks(next);
@@ -165,6 +174,7 @@ export function PlanPage() {
       setGrocery(result);
       setShopItems(result.lineItems);
       setShopDirty(false);
+      showToast('Shopping list saved');
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : 'Could not save grocery list');
     } finally {
@@ -183,6 +193,7 @@ export function PlanPage() {
       setGrocery(result);
       setShopItems(result.lineItems);
       setShopDirty(false);
+      showToast('Shopping list regenerated from plan');
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : 'Could not regenerate grocery list');
     } finally {
@@ -203,6 +214,7 @@ export function PlanPage() {
       });
       setEntries(result.entries);
       if (view === 'shop') await loadGrocery();
+      showToast('Plan saved');
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : 'Could not save plan');
     } finally {
@@ -289,7 +301,9 @@ export function PlanPage() {
                     }}
                   >
                     <div className="plan-meal-main">
-                      <span className="plan-meal-slot">{slotLabel(entry.slot)}</span>
+                      <span className="plan-meal-slot">
+                        {slotLabel(entry.slot)} · {formatServingsText(entry.servings)}
+                      </span>
                       <button
                         type="button"
                         className="linkish plan-meal-name"
@@ -298,28 +312,15 @@ export function PlanPage() {
                       >
                         {entry.foodName}
                       </button>
-                      <input
-                        type="number"
-                        className="plan-meal-servings muted"
-                        defaultValue={entry.servings}
-                        min={0.25}
-                        step={0.25}
-                        aria-label={`Servings of ${entry.foodName}`}
-                        title="Servings to cook"
-                        onBlur={(event) => {
-                          const next = Number(event.target.value);
-                          if (!Number.isFinite(next) || next <= 0 || next === entry.servings) {
-                            event.target.value = String(entry.servings);
-                            return;
-                          }
-                          void saveEntries(entries.map((row) => (row.id === entry.id ? { ...row, servings: next } : row)));
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') event.currentTarget.blur();
-                        }}
-                      />
                     </div>
                     <div className="plan-meal-actions">
+                      <button
+                        type="button"
+                        className="library-action"
+                        onClick={() => setEditEntry(entry)}
+                      >
+                        Edit
+                      </button>
                       <button
                         type="button"
                         className="library-action plan-move-btn"
@@ -417,6 +418,9 @@ export function PlanPage() {
             <span className="muted shop-count">
               {shopItems.length} items{shopDirty ? ' · unsaved' : ''}
             </span>
+            {shopDirty && (
+              <span className="shop-unsaved">Unsaved changes — hit Save to keep them</span>
+            )}
           </div>
           <div className="shop-main">
           {shopMode === 'text' || shopMode === 'markdown' ? (
@@ -564,6 +568,18 @@ export function PlanPage() {
         </div>
       )}
 
+      {editEntry && (
+        <EditPlanEntryDialog
+          entry={editEntry}
+          saving={busy}
+          onClose={() => setEditEntry(null)}
+          onSave={(slot, servings) => {
+            void saveEntries(entries.map((row) => (row.id === editEntry.id ? { ...row, slot, servings } : row)));
+            setEditEntry(null);
+          }}
+        />
+      )}
+
       {cooking && <CookingDialog session={cooking} onClose={() => setCooking(null)} />}
 
       {generateOpen && (
@@ -614,6 +630,8 @@ export function PlanPage() {
           }}
         />
       )}
+
+      {toast && <div className="plan-toast" role="status">{toast}</div>}
     </div>
   );
 }
@@ -935,6 +953,7 @@ function CookingDialog({ session, onClose }: { session: CookingSession; onClose:
     <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
       <div className="card plan-dialog cooking-dialog" onClick={(event) => event.stopPropagation()}>
         <h2>{session.title}</h2>
+        <div className="cooking-columns">
         {session.ingredients.length > 0 && (
           <section className="cooking-ingredients">
             <h3 className="form-section-title">Ingredients</h3>
@@ -972,6 +991,7 @@ function CookingDialog({ session, onClose }: { session: CookingSession; onClose:
             <pre className="cooking-instructions">{session.instructions}</pre>
           </section>
         )}
+        </div>
         <button type="button" className="primary" onClick={onClose}>Done</button>
       </div>
     </div>
@@ -1003,6 +1023,65 @@ function checkKey(weekStart: string): string {
 function dayLabel(day: string, today: string): string {
   if (day === today) return `Today · ${day}`;
   return day;
+}
+
+function formatServingsText(servings: number): string {
+  const rounded = Math.round(servings * 100) / 100;
+  return `${rounded} serving${rounded === 1 ? '' : 's'}`;
+}
+
+function EditPlanEntryDialog({
+  entry,
+  saving,
+  onClose,
+  onSave,
+}: {
+  entry: PlanEntry;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (slot: PlanEntry['slot'], servings: number) => void;
+}) {
+  const [slot, setSlot] = useState<PlanEntry['slot']>(entry.slot);
+  const [servings, setServings] = useState(String(entry.servings));
+  const quantity = Number(servings);
+  const valid = Number.isFinite(quantity) && quantity > 0;
+  return (
+    <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
+      <div className="card plan-dialog" onClick={(event) => event.stopPropagation()}>
+        <h2>Edit {entry.foodName}</h2>
+        <label>
+          Slot
+          <select value={slot} onChange={(event) => setSlot(event.target.value as PlanEntry['slot'])}>
+            <option value="meal">Meal</option>
+            <option value="snack">Snack</option>
+            <option value="dessert">Dessert</option>
+            <option value="drink">Drink</option>
+          </select>
+        </label>
+        <label>
+          Servings
+          <input
+            type="number"
+            min={0.25}
+            step={0.25}
+            value={servings}
+            onChange={(event) => setServings(event.target.value)}
+          />
+        </label>
+        <div className="row plan-edit-actions">
+          <button
+            type="button"
+            className="primary"
+            disabled={!valid || saving}
+            onClick={() => onSave(slot, quantity)}
+          >
+            Save
+          </button>
+          <button type="button" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function slotLabel(slot: PlanEntry['slot']): string {
