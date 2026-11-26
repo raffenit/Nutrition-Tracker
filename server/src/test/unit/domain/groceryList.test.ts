@@ -221,6 +221,38 @@ test('aggregateGroceryLineItems keeps different units on separate lines', () => 
   assert.deepEqual(broccoli.map((item) => item.unit).sort(), ['cup', 'oz']);
 });
 
+test('aggregateGroceryLineItems converts compatible units into one line', () => {
+  const map = new Map<string, Food>([
+    ['rA', recipeWithLines('rA', [{ name: '1 cup avocado oil' }])],
+    ['rB', recipeWithLines('rB', [{ name: '2 tbsp avocado oil' }])],
+  ]);
+  const items = aggregateGroceryLineItems(
+    [{ foodId: 'rA', servings: 1 }, { foodId: 'rB', servings: 1 }],
+    (id) => map.get(id) ?? null,
+  );
+  const oil = items.filter((item) => item.name.toLowerCase() === 'avocado oil');
+  assert.equal(oil.length, 1);
+  assert.equal(oil[0]?.unit, 'cup');
+  assert.equal(oil[0]?.quantity, 1.125);
+});
+
+test('aggregateGroceryLineItems honors metric display units', () => {
+  const map = new Map<string, Food>([
+    ['rA', recipeWithLines('rA', [{ name: '1 cup avocado oil' }])],
+    ['rB', recipeWithLines('rB', [{ name: '2 tbsp avocado oil' }])],
+  ]);
+  const items = aggregateGroceryLineItems(
+    [{ foodId: 'rA', servings: 1 }, { foodId: 'rB', servings: 1 }],
+    (id) => map.get(id) ?? null,
+    undefined,
+    { units: 'metric' },
+  );
+  const oil = items.filter((item) => item.name.toLowerCase() === 'avocado oil');
+  assert.equal(oil.length, 1);
+  assert.equal(oil[0]?.unit, 'ml');
+  assert.equal(oil[0]?.quantity, 266.162);
+});
+
 test('formatGroceryMarkdown lists recipe names before shopping items', () => {
   const markdown = formatGroceryMarkdown('2026-01-05', '2026-01-11', [], [], ['Turkey chili', 'Steak kit']);
   const recipesAt = markdown.indexOf('## Recipes');

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getFood, listFoodsWithIngredients } from '../db/foods.js';
 import { deleteStoredGroceryList, getStoredGroceryList, putStoredGroceryList } from '../db/groceryList.js';
+import { getTargets } from '../db/users.js';
 import { insertMeal } from '../db/logs.js';
 import { getMealPlanEntry, listMealPlanEntries, replaceMealPlanEntries } from '../db/mealPlan.js';
 import { drinkVolume } from '../domain/drinks.js';
@@ -79,6 +80,7 @@ function groceryPayload(ctx: Ctx, weekStart: string): {
   const weekEnd = weekEndSunday(weekStart);
   const entries = listMealPlanEntries(ctx.db, weekStart);
   const stored = getStoredGroceryList(ctx.db, weekStart);
+  const units = getTargets(ctx.db, requireUser(ctx.auth).id)?.units ?? 'imperial';
   const lineItems = stored ?? aggregateGroceryLineItems(
     entries.map((entry) => ({ foodId: entry.foodId, servings: entry.servings })),
     (id) => getFood(ctx.db, id),
@@ -87,6 +89,7 @@ function groceryPayload(ctx: Ctx, weekStart: string): {
       if (!key) return null;
       return getKitMappingByKey(ctx.db, ecosystemId, key);
     },
+    { units },
   );
   const recipeNames = [...new Set(
     entries

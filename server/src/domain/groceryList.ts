@@ -22,12 +22,60 @@ export type PlannedMeal = {
   foodName: string;
 };
 
+/**
+ * Unit conversion for merging shopping lines. Volume and weight families
+ * convert to a common base (ml / g) so "2 cups" + "2 tbsp" of the same
+ * ingredient collapse into one line. Count-ish units (clove, can, unit,
+ * serving, …) never convert — they bucket per unit as before. Volume and
+ * weight never mix (no density), so "1 cup flour" + "8 oz flour" stays split.
+ */
+const VOLUME_TO_ML: Record<string, number> = {
+  tsp: 4.92892, tbsp: 14.7868, cup: 236.588, ml: 1, l: 1000,
+};
+const WEIGHT_TO_G: Record<string, number> = {
+  oz: 28.3495, lb: 453.592, g: 1, kg: 1000,
+};
+
+type UnitSpec = { family: string; toBase: number };
+
+function unitSpec(unit: string): UnitSpec {
+  const lower = unit.toLowerCase();
+  if (lower in VOLUME_TO_ML) return { family: 'volume', toBase: VOLUME_TO_ML[lower]! };
+  if (lower in WEIGHT_TO_G) return { family: 'weight', toBase: WEIGHT_TO_G[lower]! };
+  return { family: `unit:${lower}`, toBase: 1 };
+}
+
+/** Pick a readable display unit for a merged total, honoring metric/imperial preference. */
+function displayUnitFor(family: string, base: number, units: 'metric' | 'imperial'): { unit: string; factor: number } {
+  if (family === 'volume') {
+    if (units === 'metric') return base < 1000 ? { unit: 'ml', factor: 1 } : { unit: 'L', factor: 1000 };
+    if (base >= 118) return { unit: 'cup', factor: 236.588 };
+    if (base >= 7) return { unit: 'tbsp', factor: 14.7868 };
+    return { unit: 'tsp', factor: 4.92892 };
+  }
+  if (family === 'weight') {
+    if (units === 'metric') return base < 1000 ? { unit: 'g', factor: 1 } : { unit: 'kg', factor: 1000 };
+    // Stay in oz until the total is at least ~2 lb — "24 oz" reads better than "1.5 lb".
+    return base < 907.184 ? { unit: 'oz', factor: 28.3495 } : { unit: 'lb', factor: 453.592 };
+  }
+  return { unit: family.slice('unit:'.length), factor: 1 };
+}
+
 export function aggregateGroceryLineItems(
   plans: Array<{ foodId: string; servings: number }>,
   foodById: (id: string) => Food | null,
   kitMapping?: KitMappingLookup,
+  options?: { units?: 'metric' | 'imperial' },
 ): GroceryLineItem[] {
-  const buckets = new Map<string, GroceryLineItem>();
+  const units = options?.units ?? 'imperial';
+  const buckets = new Map<string, {
+    key: string;
+    name: string;
+    family: string;
+    base: number;
+    foodId: string | null;
+    recipeLineName: string | null;
+  }>();
   for (const plan of plans) {
     const food = foodById(plan.foodId);
     if (!food || plan.servings <= 0) continue;
@@ -47,7 +95,19 @@ export function aggregateGroceryLineItems(
     }
     mergeLine(buckets, `name:${normalizeKitLineKey(food.name)}`, food.name, plan.servings, 'serving', food.id, null);
   }
-  return [...buckets.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return [...buckets.values()]
+    .map((bucket) => {
+      const display = displayUnitFor(bucket.family, bucket.base, units);
+      return {
+        key: bucket.key,
+        name: bucket.name,
+        quantity: Math.round((bucket.base / display.factor) * 1000) / 1000,
+        unit: display.unit,
+        foodId: bucket.foodId,
+        recipeLineName: bucket.recipeLineName,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
 
 export function groceryQtyAndUnit(line: IngredientLine, batchFactor: number): { quantity: number; unit: string } {
@@ -144,8 +204,18 @@ function mealsSorted(meals: PlannedMeal[]): PlannedMeal[] {
   return [...meals].sort((a, b) => a.localDate.localeCompare(b.localDate) || a.slot.localeCompare(b.slot));
 }
 
+type GroceryBucket = {
+  key: string;
+  name: string;
+  family: string;
+  /** Quantity accumulated in the family's base unit (ml / g / each). */
+  base: number;
+  foodId: string | null;
+  recipeLineName: string | null;
+};
+
 function mergeLine(
-  buckets: Map<string, GroceryLineItem>,
+  buckets: Map<string, GroceryBucket>,
   key: string,
   name: string,
   quantity: number,
@@ -153,15 +223,15 @@ function mergeLine(
   foodId: string | null,
   recipeLineName: string | null,
 ): void {
-  // Same ingredient in different units can't be summed ("1 cup" + "8 oz") —
-  // bucket per unit so they stay separate lines.
-  const bucketKey = `${key}|${unit}`;
+  const spec = unitSpec(unit);
+  const bucketKey = `${key}|${spec.family}`;
+  const base = quantity * spec.toBase;
   const prev = buckets.get(bucketKey);
   if (!prev) {
-    buckets.set(bucketKey, { key: bucketKey, name, quantity, unit, foodId, recipeLineName });
+    buckets.set(bucketKey, { key: bucketKey, name, family: spec.family, base, foodId, recipeLineName });
     return;
   }
-  prev.quantity += quantity;
+  prev.base += base;
   if (!prev.recipeLineName && recipeLineName) prev.recipeLineName = recipeLineName;
 }
 
