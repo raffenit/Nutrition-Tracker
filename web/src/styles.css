@@ -1649,6 +1649,7 @@ label.import-field-review,
   background: color-mix(in srgb, var(--bg) 50%, transparent);
   border: 1px solid var(--line);
   cursor: grab;
+  flex-wrap: wrap;
 }
 .plan-meal-row:active { cursor: grabbing; }
 .plan-meal-dragging { opacity: 0.45; }
@@ -1771,6 +1772,10 @@ label.import-field-review,
   font-size: 0.88rem;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
   pointer-events: none;
+}
+@media (max-width: 899px) {
+  /* Clear the bottom tab bar on phones/tablets. */
+  .plan-toast { bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
 }
 .shop-main { display: grid; gap: 8px; align-content: start; min-width: 0; }
 .shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
