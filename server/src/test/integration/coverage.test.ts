@@ -156,17 +156,21 @@ test('meal plan save, grocery list, and log-from-entry', async () => {
     });
     assert.equal(food.status, 201);
 
-    const saved = await api<{ entries: Array<{ id: string }> }>(port, '/api/meal-plan', {
+    const saved = await api<{ entries: Array<{ id: string; slot: string }> }>(port, '/api/meal-plan', {
       method: 'PUT',
       cookie,
       body: {
         weekStart,
-        entries: [{ localDate: day, slot: 'meal', foodId: food.body.food.id, servings: 1 }],
+        entries: [
+          { localDate: day, slot: 'meal', foodId: food.body.food.id, servings: 1 },
+          { localDate: day, slot: 'side', foodId: food.body.food.id, servings: 1 },
+        ],
       },
     });
     assert.equal(saved.status, 200);
-    assert.equal(saved.body.entries.length, 1);
-    const entryId = saved.body.entries[0]?.id;
+    assert.equal(saved.body.entries.length, 2);
+    assert.ok(saved.body.entries.some((entry) => entry.slot === 'side'));
+    const entryId = saved.body.entries.find((entry) => entry.slot === 'meal')?.id;
     assert.ok(entryId);
 
     const grocery = await api<{ lineItems: unknown[]; markdown: string }>(

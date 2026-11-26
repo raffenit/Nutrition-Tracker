@@ -37,7 +37,7 @@ export type DietPresetPublic = {
 
 export type User = { id: string; name: string; role: 'admin' | 'member' };
 
-export type MealSlot = 'meal' | 'snack' | 'dessert' | 'drink';
+export type MealSlot = 'meal' | 'side' | 'snack' | 'dessert' | 'drink';
 
 export type MealLog = {
   id: string;

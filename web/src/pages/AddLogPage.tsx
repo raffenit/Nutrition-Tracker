@@ -9,7 +9,7 @@ import { CORE_NUTRIENT_FIELDS, setCoreNutrient, setExtraAt } from '../nutrientFi
 import { DecimalInput } from '../components/DecimalInput';
 import { EMPTY_NUTRIENTS, type Food, type MealLog, type Nutrients, type Targets } from '../types';
 
-const SLOTS: MealLog['slot'][] = ['meal', 'snack', 'dessert', 'drink'];
+const SLOTS: MealLog['slot'][] = ['meal', 'side', 'snack', 'dessert', 'drink'];
 type LogMode = 'library' | 'quick';
 
 export function AddLogPage() {

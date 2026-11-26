@@ -20,6 +20,7 @@ type FamilySummaryProps = {
 
 const SLOT_LABEL: Record<MealSlot, string> = {
   meal: 'Meals',
+  side: 'Sides',
   snack: 'Snacks',
   dessert: 'Desserts',
   drink: 'Drinks',

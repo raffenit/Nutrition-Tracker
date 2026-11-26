@@ -37,6 +37,7 @@ export function DayLog({ logs, onRemove, isToday = true }: DayLogProps) {
 
 function label(slot: MealLog['slot']): string {
   if (slot === 'meal') return 'Meal';
+  if (slot === 'side') return 'Side';
   if (slot === 'snack') return 'Snack';
   if (slot === 'dessert') return 'Dessert';
   return 'Drink';

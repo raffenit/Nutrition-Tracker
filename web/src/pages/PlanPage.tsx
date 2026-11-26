@@ -12,7 +12,7 @@ import { weekDays, weekEndSunday, weekStartMonday } from '../weekPlan';
 type PlanEntry = {
   id: string;
   localDate: string;
-  slot: 'meal' | 'snack' | 'dessert' | 'drink';
+  slot: 'meal' | 'side' | 'snack' | 'dessert' | 'drink';
   foodId: string;
   foodName: string;
   servings: number;
@@ -620,6 +620,7 @@ function AddPlanMealDialog({
               Slot
               <select value={slot} onChange={(event) => setSlot(event.target.value as PlanEntry['slot'])}>
                 <option value="meal">Meal</option>
+                <option value="side">Side</option>
                 <option value="snack">Snack</option>
                 <option value="dessert">Dessert</option>
                 <option value="drink">Drink</option>
@@ -733,6 +734,7 @@ function GeneratePlanDialog({
             Slot
             <select value={slot} onChange={(event) => setSlot(event.target.value as PlanEntry['slot'])}>
               <option value="meal">Meal</option>
+              <option value="side">Side</option>
               <option value="snack">Snack</option>
               <option value="dessert">Dessert</option>
               <option value="drink">Drink</option>
@@ -937,6 +939,7 @@ function dayLabel(day: string, today: string): string {
 
 function slotLabel(slot: PlanEntry['slot']): string {
   if (slot === 'meal') return 'Meal';
+  if (slot === 'side') return 'Side';
   if (slot === 'snack') return 'Snack';
   if (slot === 'dessert') return 'Dessert';
   return 'Drink';

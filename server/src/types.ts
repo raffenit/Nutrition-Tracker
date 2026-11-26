@@ -1,6 +1,6 @@
 export type Role = 'admin' | 'member';
 
-export type MealSlot = 'meal' | 'snack' | 'dessert' | 'drink';
+export type MealSlot = 'meal' | 'side' | 'snack' | 'dessert' | 'drink';
 
 export type FoodKind = 'packaged' | 'ingredient' | 'restaurant' | 'custom';
 

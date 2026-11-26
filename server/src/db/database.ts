@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS meal_logs (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   food_id TEXT REFERENCES foods(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
-  slot TEXT NOT NULL CHECK (slot IN ('meal', 'snack', 'dessert', 'drink')),
+  slot TEXT NOT NULL CHECK (slot IN ('meal', 'side', 'snack', 'dessert', 'drink')),
   eaten_at TEXT NOT NULL,
   local_date TEXT NOT NULL,
   servings REAL NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS meal_plan_entries (
   id TEXT PRIMARY KEY,
   week_start TEXT NOT NULL,
   local_date TEXT NOT NULL,
-  slot TEXT NOT NULL CHECK (slot IN ('meal', 'snack', 'dessert', 'drink')),
+  slot TEXT NOT NULL CHECK (slot IN ('meal', 'side', 'snack', 'dessert', 'drink')),
   food_id TEXT NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
   servings REAL NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0
@@ -294,5 +294,77 @@ function migrate(db: AppDatabase): void {
   const householdColumns = db.prepare('PRAGMA table_info(household)').all() as Array<{ name: string }>;
   if (!householdColumns.some((column) => column.name === 'multi_label_import_default')) {
     db.exec(`ALTER TABLE household ADD COLUMN multi_label_import_default TEXT CHECK (multi_label_import_default IN ('pick_one', 'import_all'))`);
+  }
+  rebuildSlotCheckTable(db, 'meal_plan_entries');
+  rebuildSlotCheckTable(db, 'meal_logs');
+}
+
+/**
+ * SQLite can't ALTER a CHECK constraint, so tables created before the 'side'
+ * slot existed are rebuilt in place. Foreign keys are suspended while
+ * meal_logs is dropped — hydration_logs references it — and the rename
+ * restores the table name those FKs point at.
+ */
+function rebuildSlotCheckTable(db: AppDatabase, table: 'meal_logs' | 'meal_plan_entries'): void {
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table) as { sql: string } | undefined;
+  if (!row || row.sql.includes("'side'")) return;
+  const temp = `${table}__side_slot`;
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec('BEGIN');
+    db.exec(`DROP TABLE IF EXISTS ${temp}`);
+    if (table === 'meal_logs') {
+      db.exec(`
+        CREATE TABLE ${temp} (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          food_id TEXT REFERENCES foods(id) ON DELETE SET NULL,
+          name TEXT NOT NULL,
+          slot TEXT NOT NULL CHECK (slot IN ('meal', 'side', 'snack', 'dessert', 'drink')),
+          eaten_at TEXT NOT NULL,
+          local_date TEXT NOT NULL,
+          servings REAL NOT NULL,
+          calories REAL NOT NULL,
+          protein REAL NOT NULL,
+          fiber REAL NOT NULL,
+          fat REAL NOT NULL,
+          carbs REAL NOT NULL,
+          sodium REAL NOT NULL,
+          extras_json TEXT NOT NULL,
+          drink_ml REAL,
+          created_at TEXT NOT NULL,
+          client_mutation_id TEXT
+        );
+        INSERT INTO ${temp} (id, user_id, food_id, name, slot, eaten_at, local_date, servings, calories, protein, fiber, fat, carbs, sodium, extras_json, drink_ml, created_at, client_mutation_id)
+        SELECT id, user_id, food_id, name, slot, eaten_at, local_date, servings, calories, protein, fiber, fat, carbs, sodium, extras_json, drink_ml, created_at, client_mutation_id FROM meal_logs;
+        DROP TABLE meal_logs;
+        ALTER TABLE ${temp} RENAME TO meal_logs;
+        CREATE INDEX IF NOT EXISTS meal_logs_user_date ON meal_logs(user_id, local_date);
+        CREATE UNIQUE INDEX IF NOT EXISTS meal_logs_client_mutation ON meal_logs(user_id, client_mutation_id) WHERE client_mutation_id IS NOT NULL;
+      `);
+    } else {
+      db.exec(`
+        CREATE TABLE ${temp} (
+          id TEXT PRIMARY KEY,
+          week_start TEXT NOT NULL,
+          local_date TEXT NOT NULL,
+          slot TEXT NOT NULL CHECK (slot IN ('meal', 'side', 'snack', 'dessert', 'drink')),
+          food_id TEXT NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+          servings REAL NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO ${temp} (id, week_start, local_date, slot, food_id, servings, sort_order)
+        SELECT id, week_start, local_date, slot, food_id, servings, sort_order FROM meal_plan_entries;
+        DROP TABLE meal_plan_entries;
+        ALTER TABLE ${temp} RENAME TO meal_plan_entries;
+        CREATE INDEX IF NOT EXISTS meal_plan_week ON meal_plan_entries(week_start);
+      `);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
 }
