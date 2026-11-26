@@ -97,7 +97,7 @@ export function DashboardPage() {
 
   if (view === 'family') {
     return (
-      <div className="page family-page">
+      <div className="page family-page home-page">
         <FamilyBoard kiosk={false} datePath="/" query="view=family" leading={<HomeViewToggle view="family" />} />
       </div>
     );
@@ -122,7 +122,7 @@ export function DashboardPage() {
 
   return (
     <>
-    <div className="page dashboard-page">
+    <div className="page dashboard-page home-page">
       <div className="page-layout-span stack">
         {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
         <DateBar

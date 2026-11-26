@@ -26,7 +26,7 @@ type Family = {
 
 export function FamilyPage({ kiosk }: { kiosk: boolean }) {
   return (
-    <div className="page family-page">
+    <div className="page family-page home-page">
       <FamilyBoard kiosk={kiosk} datePath="/family" />
     </div>
   );
