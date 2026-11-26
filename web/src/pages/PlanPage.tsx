@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { RemoveButton } from '../components/RemoveButton';
 import { IconCopy, IconSave } from '../components/NavIcons';
@@ -72,6 +72,8 @@ export function PlanPage() {
   const [dropDay, setDropDay] = useState<string | null>(null);
   const [moveEntry, setMoveEntry] = useState<PlanEntry | null>(null);
   const [editEntry, setEditEntry] = useState<PlanEntry | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -102,6 +104,12 @@ export function PlanPage() {
   useEffect(() => {
     if (view === 'shop') void loadGrocery().catch(() => setError('Could not load grocery list'));
   }, [view, weekStart]);
+
+  function showToast(message: string): void {
+    setToast(message);
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
+  }
 
   function persistChecks(next: Record<string, boolean>): void {
     setChecks(next);
@@ -166,6 +174,7 @@ export function PlanPage() {
       setGrocery(result);
       setShopItems(result.lineItems);
       setShopDirty(false);
+      showToast('Shopping list saved');
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : 'Could not save grocery list');
     } finally {
@@ -184,6 +193,7 @@ export function PlanPage() {
       setGrocery(result);
       setShopItems(result.lineItems);
       setShopDirty(false);
+      showToast('Shopping list regenerated from plan');
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : 'Could not regenerate grocery list');
     } finally {
@@ -204,6 +214,7 @@ export function PlanPage() {
       });
       setEntries(result.entries);
       if (view === 'shop') await loadGrocery();
+      showToast('Plan saved');
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : 'Could not save plan');
     } finally {
@@ -407,6 +418,9 @@ export function PlanPage() {
             <span className="muted shop-count">
               {shopItems.length} items{shopDirty ? ' · unsaved' : ''}
             </span>
+            {shopDirty && (
+              <span className="shop-unsaved">Unsaved changes — hit Save to keep them</span>
+            )}
           </div>
           <div className="shop-main">
           {shopMode === 'text' || shopMode === 'markdown' ? (
@@ -616,6 +630,8 @@ export function PlanPage() {
           }}
         />
       )}
+
+      {toast && <div className="plan-toast" role="status">{toast}</div>}
     </div>
   );
 }
