@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { DateBar } from '../components/DateBar';
 import { DayLog } from '../components/DayLog';
@@ -33,7 +33,7 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
 }
 
 /** Family board content — also embedded as the home screen's Family mode. */
-export function FamilyBoard({ kiosk, datePath, query }: { kiosk: boolean; datePath: string; query?: string }) {
+export function FamilyBoard({ kiosk, datePath, query, leading }: { kiosk: boolean; datePath: string; query?: string; leading?: ReactNode }) {
   const [board, setBoard] = useState<Family | null>(null);
   const date = new URLSearchParams(window.location.search).get('date');
   useEffect(() => {
@@ -47,7 +47,7 @@ export function FamilyBoard({ kiosk, datePath, query }: { kiosk: boolean; datePa
 
   return (
     <>
-      <DateBar path={datePath} query={query} date={board.date} today={board.today} dateFormat={board.dateFormat} />
+      <DateBar path={datePath} query={query} leading={leading} date={board.date} today={board.today} dateFormat={board.dateFormat} />
       <h1 className="page-title">{familyPageTitle(board.householdName, monthLabel)}</h1>
       <FamilySummary members={board.members} />
       <div className="grid family-member-grid">
