@@ -138,6 +138,7 @@ Shell / nav: `web/src/components/AppShell.tsx`.
 | Day totals from logs | `server/src/domain/day.ts` |
 | Nutrients, targets, scaling | `server/src/domain/nutrients.ts` |
 | Custom meal math | `server/src/domain/compose.ts` |
+| Ingredient notes + alt measures | `web/src/lib/ingredientLine.ts` (`parseIngredientParts`, `scaledIngredientDisplay`), `server/src/domain/foodInput.ts` (`readIngredientExtras`), `food_ingredients.notes` / `alt_measurements_json` |
 | Trends series | `server/src/domain/trends.ts`, `server/src/db/trends.ts` |
 | Family board (no weight) | `server/src/domain/familyView.ts` |
 | Per-member insights | `server/src/domain/familyInsights.ts` |

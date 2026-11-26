@@ -256,6 +256,12 @@ function migrate(db: AppDatabase): void {
   if (!ingredientColumns.some((column) => column.name === 'component_role')) {
     db.exec(`ALTER TABLE food_ingredients ADD COLUMN component_role TEXT`);
   }
+  if (!ingredientColumns.some((column) => column.name === 'notes')) {
+    db.exec(`ALTER TABLE food_ingredients ADD COLUMN notes TEXT`);
+  }
+  if (!ingredientColumns.some((column) => column.name === 'alt_measurements_json')) {
+    db.exec(`ALTER TABLE food_ingredients ADD COLUMN alt_measurements_json TEXT NOT NULL DEFAULT '[]'`);
+  }
   foodColumns = db.prepare('PRAGMA table_info(foods)').all() as Array<{ name: string }>;
   if (!foodColumns.some((column) => column.name === 'protein_tags_json')) {
     db.exec(`ALTER TABLE foods ADD COLUMN protein_tags_json TEXT NOT NULL DEFAULT '[]'`);

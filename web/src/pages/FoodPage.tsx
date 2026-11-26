@@ -37,7 +37,7 @@ import {
 } from '../nutrientUnits';
 import { supportsNativeLabelCamera } from '../lib/cameraCapture';
 import { DecimalInput } from '../components/DecimalInput';
-import { EMPTY_NUTRIENTS, PROTEIN_TAGS, type Food, type MultiLabelImportDefault, type Nutrients, type ProteinTag, type Session } from '../types';
+import { EMPTY_NUTRIENTS, PROTEIN_TAGS, type Food, type IngredientMeasure, type MultiLabelImportDefault, type Nutrients, type ProteinTag, type Session } from '../types';
 
 type FoodPageProps = { custom?: boolean; editId?: string | null };
 
@@ -639,6 +639,10 @@ type RecipeEditorLine = {
   componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string;
+  /** Prep note shown small ("melted", "divided"). */
+  notes: string;
+  /** Alternate measures ("470 g" next to "2 cups"). */
+  altMeasurements: IngredientMeasure[];
 };
 
 /** Stored line text: recompose editable qty+unit+name (linked lines keep their fields too, so nothing is lost on unlink). */
@@ -759,13 +763,19 @@ function RecipeEditor({ editId }: { editId: string | null }) {
           const equiv = await api<{ food: Food }>(`/api/foods/${line.shopEquivalentFoodId}`);
           if (!shopLabel) shopLabel = equiv.food.name;
         }
+        // Legacy rows may still carry "(melted)"/"(470 g)" inside the stored
+        // name — split them into the notes/alternates fields on load.
+        const parts = parseIngredientParts(line.name);
+        const mergedNotes = (line.notes ?? '').trim() || parts.notes;
+        const mergedAlts = (line.altMeasurements ?? []).length > 0 ? line.altMeasurements! : parts.alternates;
         const base = {
           servings: line.servings,
           componentRole: line.componentRole ?? null,
           shopEquivalentFoodId: line.shopEquivalentFoodId,
           shopEquivalentLabel: shopLabel,
+          notes: mergedNotes,
+          altMeasurements: mergedAlts,
         };
-        const parts = parseIngredientParts(line.name);
         if (line.childFoodId) {
           const hit = await api<{ food: Food }>(`/api/foods/${line.childFoodId}`);
           return { foodId: line.childFoodId, name: parts.name, quantity: parts.quantity, unit: parts.unit, servingLabel: hit.food.servingLabel, ...base };
@@ -797,6 +807,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         componentRole: null,
         shopEquivalentFoodId: null,
         shopEquivalentLabel: '',
+        notes: '',
+        altMeasurements: [],
       }];
     });
   }
@@ -814,6 +826,8 @@ function RecipeEditor({ editId }: { editId: string | null }) {
         componentRole: null,
         shopEquivalentFoodId: null,
         shopEquivalentLabel: '',
+        notes: parts.notes,
+        altMeasurements: parts.alternates,
       };
     });
   }
@@ -1214,6 +1228,80 @@ function RecipeEditor({ editId }: { editId: string | null }) {
                 </label>
                 <RemoveButton label={`Remove ${line.name}`} onClick={() => setLines(lines.filter((_, i) => i !== index))} />
               </div>
+              <div className="recipe-ingredient-extras">
+                <input
+                  className="recipe-ingredient-note-input"
+                  value={line.notes}
+                  placeholder="note (e.g. melted, diced)"
+                  aria-label={`Note for ${line.name || 'ingredient'}`}
+                  onChange={(event) => {
+                    const next = [...lines];
+                    next[index] = { ...line, notes: event.target.value };
+                    setLines(next);
+                  }}
+                />
+                {!line.foodId && (
+                  <div className="recipe-ingredient-alts">
+                    {line.altMeasurements.map((measure, altIndex) => (
+                      <span key={altIndex} className="recipe-ingredient-alt">
+                        <span className="muted">or</span>
+                        <input
+                          className="recipe-ingredient-qty-input"
+                          value={measure.quantity}
+                          placeholder="qty"
+                          inputMode="text"
+                          aria-label={`Alternate quantity ${altIndex + 1} for ${line.name || 'ingredient'}`}
+                          onChange={(event) => {
+                            const next = [...lines];
+                            const alts = [...next[index]!.altMeasurements];
+                            alts[altIndex] = { ...alts[altIndex]!, quantity: event.target.value };
+                            next[index] = { ...next[index]!, altMeasurements: alts };
+                            setLines(next);
+                          }}
+                        />
+                        <select
+                          className="recipe-ingredient-unit"
+                          value={measure.unit}
+                          aria-label={`Alternate unit ${altIndex + 1} for ${line.name || 'ingredient'}`}
+                          onChange={(event) => {
+                            const next = [...lines];
+                            const alts = [...next[index]!.altMeasurements];
+                            alts[altIndex] = { ...alts[altIndex]!, unit: event.target.value };
+                            next[index] = { ...next[index]!, altMeasurements: alts };
+                            setLines(next);
+                          }}
+                        >
+                          {ingredientUnitOptions(measure.unit).map((unit) => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                        <RemoveButton
+                          label={`Remove alternate measure ${altIndex + 1}`}
+                          onClick={() => {
+                            const next = [...lines];
+                            const alts = next[index]!.altMeasurements.filter((_, i) => i !== altIndex);
+                            next[index] = { ...next[index]!, altMeasurements: alts };
+                            setLines(next);
+                          }}
+                        />
+                      </span>
+                    ))}
+                    {line.altMeasurements.length < 6 && (
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() => {
+                          const next = [...lines];
+                          next[index] = { ...next[index]!, altMeasurements: [...next[index]!.altMeasurements, { quantity: '', unit: 'unit' }] };
+                          setLines(next);
+                        }}
+                      >
+                        + measure
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               {kitSuggestion && (
                 <p className="kit-rename-hint">
                   Kit sheet will rename this to <strong>{kitSuggestion}</strong> on save.{' '}
@@ -1357,14 +1445,30 @@ function recipeComposePayload(fields: {
     isDrink: false,
     drinkMl: null,
     source: 'composed' as const,
-    ingredients: fields.lines.map((line) => ({
-      name: fullLineName(line),
-      servings: line.servings,
-      foodId: line.foodId,
-      componentRole: line.componentRole,
-      shopEquivalentFoodId: line.shopEquivalentFoodId,
-      shopEquivalentLabel: line.shopEquivalentLabel.trim() || null,
-    })),
+    ingredients: fields.lines.map((line) => {
+      // Parenthetical asides typed into the name ("butter (melted)", "flour (470 g)")
+      // are moved into the notes / alternate-measures fields on save.
+      const parts = parseIngredientParts(fullLineName(line));
+      const name = composeIngredientName({ name: parts.name, quantity: parts.quantity, unit: parts.unit });
+      const notes = [line.notes.trim(), parts.notes].filter(Boolean).join('; ') || null;
+      const seen = new Set<string>();
+      const altMeasurements = [...line.altMeasurements, ...parts.alternates].filter((measure) => {
+        const key = `${measure.quantity} ${measure.unit}`.toLowerCase();
+        if (!measure.quantity.trim() || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return {
+        name,
+        servings: line.servings,
+        foodId: line.foodId,
+        componentRole: line.componentRole,
+        shopEquivalentFoodId: line.shopEquivalentFoodId,
+        shopEquivalentLabel: line.shopEquivalentLabel.trim() || null,
+        notes,
+        altMeasurements,
+      };
+    }),
   };
 }
 

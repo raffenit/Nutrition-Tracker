@@ -51,6 +51,8 @@ const chili: Food = {
     componentRole: null,
     shopEquivalentFoodId: null,
     shopEquivalentLabel: null,
+    notes: null,
+    altMeasurements: [],
   }],
 };
 
@@ -62,6 +64,8 @@ const kitSauceLine = {
   componentRole: null as 'main' | 'side' | null,
   shopEquivalentFoodId: 'y1',
   shopEquivalentLabel: null as string | null,
+  notes: null,
+  altMeasurements: [],
 };
 
 const mealKit: Food = {
@@ -97,6 +101,8 @@ test('aggregateGroceryLineItems parses oz quantities from ingredient text', () =
       componentRole: null,
       shopEquivalentFoodId: null,
       shopEquivalentLabel: null,
+      notes: null,
+      altMeasurements: [],
     }],
   };
   const map = new Map<string, Food>([['chicken', chicken]]);
@@ -120,6 +126,8 @@ test('aggregateGroceryLineItems resolves ecosystem sheet without per-recipe equi
       componentRole: null,
       shopEquivalentFoodId: null,
       shopEquivalentLabel: null,
+      notes: null,
+      altMeasurements: [],
     }],
   };
   const map = new Map<string, Food>([['y1', yogurt], ['r3', mealKit]]);
@@ -132,6 +140,8 @@ test('aggregateGroceryLineItems resolves ecosystem sheet without per-recipe equi
       nameKey: 'garlic & herb butter',
       shopEquivalentFoodId: 'y1',
       shopEquivalentLabel: null,
+      notes: null,
+      altMeasurements: [],
       nutritionFoodId: null,
     },
   ]]);
@@ -173,6 +183,8 @@ function recipeWithLines(id: string, lines: Array<{ name: string; servings?: num
       componentRole: null,
       shopEquivalentFoodId: null,
       shopEquivalentLabel: null,
+      notes: null,
+      altMeasurements: [],
     })),
   };
 }

@@ -22,6 +22,8 @@ export function effectiveIngredientLine(line: IngredientLine, mapping: KitIngred
     componentRole: line.componentRole,
     shopEquivalentFoodId: line.shopEquivalentFoodId ?? mapping.shopEquivalentFoodId,
     shopEquivalentLabel: line.shopEquivalentLabel ?? mapping.shopEquivalentLabel,
+    notes: line.notes,
+    altMeasurements: line.altMeasurements,
   };
 }
 

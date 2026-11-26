@@ -12,6 +12,8 @@ function line(name: string, extra: Partial<IngredientLine> = {}): IngredientLine
     componentRole: null,
     shopEquivalentFoodId: null,
     shopEquivalentLabel: null,
+    notes: null,
+    altMeasurements: [],
     ...extra,
   };
 }
@@ -23,6 +25,8 @@ const mapping = {
   kitLineName: 'Broccoli florets',
   shopEquivalentFoodId: null,
   shopEquivalentLabel: null,
+  notes: null,
+  altMeasurements: [],
   nutritionFoodId: null,
 };
 

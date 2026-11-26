@@ -74,6 +74,11 @@ export const PROTEIN_TAGS = [
 
 export type ProteinTag = (typeof PROTEIN_TAGS)[number];
 
+export type IngredientMeasure = {
+  quantity: string;
+  unit: string;
+};
+
 export type IngredientLine = {
   name: string;
   servings: number;
@@ -82,6 +87,8 @@ export type IngredientLine = {
   componentRole: 'main' | 'side' | null;
   shopEquivalentFoodId: string | null;
   shopEquivalentLabel: string | null;
+  notes: string | null;
+  altMeasurements: IngredientMeasure[];
 };
 
 export type CoreNutrientUnits = {

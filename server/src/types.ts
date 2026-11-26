@@ -93,6 +93,14 @@ export type Food = {
   ingredients: IngredientLine[];
 };
 
+/** One alternate way to measure an ingredient line ("2 cups" ↔ "470 g"). */
+export type IngredientMeasure = {
+  /** Raw quantity text as written ("470", "1/2", "½"). */
+  quantity: string;
+  /** Unit token ('g', 'cup', 'unit', …). */
+  unit: string;
+};
+
 export type IngredientLine = {
   name: string;
   servings: number;
@@ -104,6 +112,10 @@ export type IngredientLine = {
   shopEquivalentFoodId: string | null;
   /** Free-text shopping name when there is no library equivalent. */
   shopEquivalentLabel: string | null;
+  /** Prep note for the line ("melted", "divided") — kept out of the shoppable name. */
+  notes: string | null;
+  /** Alternate quantity/unit measures for the same line ("470 g" next to "2 cups"). */
+  altMeasurements: IngredientMeasure[];
 };
 
 export type MealLog = {
