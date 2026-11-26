@@ -1743,7 +1743,7 @@ label.import-field-review,
 }
 .shop-mode-btn:hover { color: var(--accent-soft); }
 .shop-mode-btn.is-active {
-  background: var(--surface);
+  background: var(--raise);
   color: var(--text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
