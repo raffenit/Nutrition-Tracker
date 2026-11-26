@@ -32,14 +32,37 @@ export function FamilyPage({ kiosk }: { kiosk: boolean }) {
   );
 }
 
+/** Last fetched board per date param — keeps Me/Family toggles instant. */
+let familyCache: { key: string; board: Family } | null = null;
+
 /** Family board content — also embedded as the home screen's Family mode. */
 export function FamilyBoard({ kiosk, datePath, query, leading }: { kiosk: boolean; datePath: string; query?: string; leading?: ReactNode }) {
-  const [board, setBoard] = useState<Family | null>(null);
   const date = new URLSearchParams(window.location.search).get('date');
+  const cacheKey = date ?? '';
+  const [board, setBoard] = useState<Family | null>(() =>
+    familyCache?.key === cacheKey ? familyCache.board : null,
+  );
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    void api<Family>(`/api/family${date ? `?date=${date}` : ''}`).then(setBoard);
-  }, [date]);
-  if (!board) return <p>Loading the household…</p>;
+    const cached = familyCache?.key === cacheKey ? familyCache.board : null;
+    if (cached) setBoard(cached);
+    setError(null);
+    let cancelled = false;
+    void api<Family>(`/api/family${date ? `?date=${date}` : ''}`)
+      .then((next) => {
+        familyCache = { key: cacheKey, board: next };
+        if (!cancelled) setBoard(next);
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load family');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, date]);
+  if (!board) {
+    return error ? <p className="notice">{error}</p> : <p>Loading the household…</p>;
+  }
 
   const monthLabel =
     board.members.find((member) => member.insights.goalDays.monthLabel)?.insights.goalDays.monthLabel

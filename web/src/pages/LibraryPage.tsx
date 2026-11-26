@@ -78,6 +78,7 @@ export function LibraryPage() {
 
   return (
     <div className="page library-page">
+      <h1 className="page-title">Library</h1>
       <div className="library-page-head">
         <div className="library-toolbar-top">
           <div className="segmented compact shelf-tabs" role="tablist" aria-label="Library shelf">

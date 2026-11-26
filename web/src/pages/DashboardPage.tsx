@@ -98,7 +98,7 @@ export function DashboardPage() {
   if (view === 'family') {
     return (
       <div className="page family-page home-page">
-        <FamilyBoard kiosk={false} datePath="/" query="view=family" leading={<HomeViewToggle view="family" />} />
+        <FamilyBoard kiosk={false} datePath="/" query="view=family" leading={<HomeViewToggle view="family" date={date} />} />
       </div>
     );
   }
@@ -130,8 +130,9 @@ export function DashboardPage() {
           date={day.date}
           today={day.today}
           dateFormat={day.targets.dateFormat ?? 'mdy_long'}
-          leading={<HomeViewToggle view="me" />}
+          leading={<HomeViewToggle view="me" date={date} />}
         />
+        <h1 className="page-title">Log</h1>
         {error && <p className="notice">{error}</p>}
         {day.weight.enabled && day.weight.reminderDue && !offline && (
           <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />
@@ -168,10 +169,11 @@ export function DashboardPage() {
   );
 }
 
-function HomeViewToggle({ view }: { view: 'me' | 'family' }) {
+function HomeViewToggle({ view, date }: { view: 'me' | 'family'; date: string | null }) {
+  const dateQuery = date ? `date=${encodeURIComponent(date)}` : '';
   const options = [
-    { value: 'me' as const, label: 'My log', Icon: IconPerson, href: '/' },
-    { value: 'family' as const, label: 'Family view', Icon: IconGroup, href: '/?view=family' },
+    { value: 'me' as const, label: 'My log', Icon: IconPerson, href: dateQuery ? `/?${dateQuery}` : '/' },
+    { value: 'family' as const, label: 'Family view', Icon: IconGroup, href: `/?view=family${dateQuery ? `&${dateQuery}` : ''}` },
   ];
   return (
     <div className="home-view-toggle" role="group" aria-label="Home view">

@@ -237,18 +237,14 @@ export function PlanPage() {
 
   return (
     <div className="page plan-page">
-      <header className="plan-head card">
+      <header className="plan-head">
         <div className="plan-head-row">
           <button type="button" className="datebar-arrow" aria-label="Previous week" onClick={() => shiftWeek(-1)}>‹</button>
           <div className="plan-head-title">
-            <h1 className="page-title">Meal plan</h1>
+            <h1 className="page-title">{view === 'shop' ? 'Shopping List' : 'Meal plan'}</h1>
             <p className="muted plan-range">{formatDisplayDate(weekStart, 'mdy_long')} – {formatDisplayDate(weekEndSunday(weekStart), 'mdy_long')}</p>
           </div>
           <button type="button" className="datebar-arrow" aria-label="Next week" onClick={() => shiftWeek(1)}>›</button>
-        </div>
-        <div className="segmented compact" role="tablist" aria-label="Plan views">
-          <button type="button" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'active' : ''} onClick={() => navigate(`/plan?week=${weekStart}`)}>Week</button>
-          <button type="button" role="tab" aria-selected={view === 'shop'} className={view === 'shop' ? 'active' : ''} onClick={() => navigate(`/shop?week=${weekStart}`)}>Shopping list</button>
         </div>
         {view === 'week' && (
           <button type="button" className="settings-secondary-btn plan-generate-btn" onClick={() => setGenerateOpen(true)}>
@@ -361,6 +357,8 @@ export function PlanPage() {
           ))}
         </div>
       )}
+
+      {view === 'shop' && !grocery && <p className="muted">Loading shopping list…</p>}
 
       {view === 'shop' && grocery && (
         <section className="card shop-panel shop-layout">
