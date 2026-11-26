@@ -7,6 +7,7 @@ import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
 import type { Food, ProteinTag } from '../types';
 import { PROTEIN_TAGS } from '../types';
 import { scaledIngredientDisplay } from '../lib/ingredientLine';
+import { convertMeasure, convertibleUnitOptions, formatMeasureQty } from '../lib/measureUnits';
 import { weekDays, weekEndSunday, weekStartMonday } from '../weekPlan';
 
 type PlanEntry = {
@@ -57,6 +58,7 @@ export function PlanPage() {
   const [cooking, setCooking] = useState<CookingSession | null>(null);
   const [grocery, setGrocery] = useState<{ weekStart: string; customized: boolean; lineItems: GroceryLineItem[]; markdown: string } | null>(null);
   const [shopItems, setShopItems] = useState<GroceryLineItem[]>([]);
+  const [shopMode, setShopMode] = useState<'shop' | 'edit' | 'text' | 'markdown'>('shop');
   const [shopDirty, setShopDirty] = useState(false);
   const [shopBusy, setShopBusy] = useState(false);
   const [shopCopied, setShopCopied] = useState(false);
@@ -109,6 +111,21 @@ export function PlanPage() {
     setShopItems((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
     setShopDirty(true);
   }
+
+  /** Shopping mode lets shoppers re-express a line in another unit ("2 cup" → "470 g"). */
+  function patchShopUnit(item: GroceryLineItem, unit: string): void {
+    const converted = convertMeasure(item.quantity, item.unit, unit);
+    patchShopItem(item.key, { unit, quantity: converted ?? item.quantity });
+  }
+
+  // Checked-off items sink to the bottom; stable sort keeps list order otherwise.
+  const orderedShopItems = useMemo(
+    () => [...shopItems].sort((a, b) => Number(Boolean(checks[a.key])) - Number(Boolean(checks[b.key]))),
+    [shopItems, checks],
+  );
+  const shopText = orderedShopItems
+    .map((item) => `- [${checks[item.key] ? 'x' : ' '}] ${item.name} — ${formatMeasureQty(item.quantity)} ${item.unit}`)
+    .join('\n');
 
   function addShopItem(): void {
     const name = newShopItem.name.trim();
@@ -384,22 +401,76 @@ export function PlanPage() {
                 </button>
               )}
             </div>
+            <div className="shop-mode-switch" role="group" aria-label="List mode">
+              {(['shop', 'edit', 'text', 'markdown'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={shopMode === mode ? 'shop-mode-btn is-active' : 'shop-mode-btn'}
+                  aria-pressed={shopMode === mode}
+                  onClick={() => setShopMode(mode)}
+                >
+                  {mode === 'shop' ? 'Shop' : mode === 'edit' ? 'Edit' : mode === 'text' ? 'Text' : 'Markdown'}
+                </button>
+              ))}
+            </div>
             <span className="muted shop-count">
               {shopItems.length} items{shopDirty ? ' · unsaved' : ''}
             </span>
           </div>
           <div className="shop-main">
+          {shopMode === 'text' || shopMode === 'markdown' ? (
+            <pre className="shop-markdown shop-text">
+              {shopMode === 'markdown'
+                ? (shopDirty ? `${grocery.markdown}\n\n_(unsaved changes not reflected)_` : grocery.markdown)
+                : (shopText || 'List is empty.')}
+            </pre>
+          ) : (
           <ul className="shop-list">
-            {shopItems.map((item) => {
+            {orderedShopItems.map((item) => {
               const done = Boolean(checks[item.key]);
+              const checkbox = (
+                <input
+                  type="checkbox"
+                  className="shop-check"
+                  checked={done}
+                  onChange={(event) => persistChecks({ ...checks, [item.key]: event.target.checked })}
+                />
+              );
+              const kitLine = item.recipeLineName && (
+                <span className="muted shop-kit-line">recipe: {item.recipeLineName}</span>
+              );
+              if (shopMode === 'shop') {
+                const unitOptions = convertibleUnitOptions(item.unit);
+                return (
+                  <li key={item.key} className={done ? 'shop-row shop-row-done' : 'shop-row'}>
+                    {checkbox}
+                    <span className="shop-item-name">{item.name}</span>
+                    <span className="shop-item-qty">{formatMeasureQty(item.quantity)}</span>
+                    {unitOptions.length > 1 ? (
+                      <select
+                        className="shop-edit-unit shop-unit-select"
+                        value={item.unit}
+                        aria-label={`Unit for ${item.name}`}
+                        onChange={(event) => patchShopUnit(item, event.target.value)}
+                      >
+                        {unitOptions.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        className="shop-edit-unit"
+                        value={item.unit}
+                        aria-label="Unit"
+                        onChange={(event) => patchShopItem(item.key, { unit: event.target.value })}
+                      />
+                    )}
+                    {kitLine}
+                  </li>
+                );
+              }
               return (
                 <li key={item.key} className={done ? 'shop-row shop-row-done' : 'shop-row'}>
-                  <input
-                    type="checkbox"
-                    className="shop-check"
-                    checked={done}
-                    onChange={(event) => persistChecks({ ...checks, [item.key]: event.target.checked })}
-                  />
+                  {checkbox}
                   <input
                     className="shop-edit-name"
                     value={item.name}
@@ -430,14 +501,14 @@ export function PlanPage() {
                       setShopDirty(true);
                     }}
                   />
-                  {item.recipeLineName && (
-                    <span className="muted shop-kit-line">recipe: {item.recipeLineName}</span>
-                  )}
+                  {kitLine}
                 </li>
               );
             })}
-            {shopItems.length === 0 && <li className="muted">List is empty — add items below or regenerate from the plan.</li>}
+            {orderedShopItems.length === 0 && <li className="muted">List is empty — add items below or regenerate from the plan.</li>}
           </ul>
+          )}
+          {shopMode === 'edit' && (
           <div className="shop-add-row">
             <input
               className="shop-edit-name"
@@ -463,11 +534,8 @@ export function PlanPage() {
             />
             <button type="button" className="settings-secondary-btn" onClick={addShopItem}>Add</button>
           </div>
+          )}
           </div>
-          <details className="shop-markdown-preview">
-            <summary>Markdown preview</summary>
-            <pre className="shop-markdown">{grocery.markdown}</pre>
-          </details>
         </section>
       )}
 
