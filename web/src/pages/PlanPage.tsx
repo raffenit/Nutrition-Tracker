@@ -243,7 +243,7 @@ export function PlanPage() {
         <div className="plan-head-row">
           <button type="button" className="datebar-arrow" aria-label="Previous week" onClick={() => shiftWeek(-1)}>‹</button>
           <div className="plan-head-title">
-            <h1 className="page-title">{view === 'shop' ? 'Shopping List' : 'Meal plan'}</h1>
+            <h1 className="page-title">{view === 'shop' ? 'Shopping List' : 'Meal Plan'}</h1>
             <p className="muted plan-range">{formatDisplayDate(weekStart, 'mdy_long')} – {formatDisplayDate(weekEndSunday(weekStart), 'mdy_long')}</p>
           </div>
           <button type="button" className="datebar-arrow" aria-label="Next week" onClick={() => shiftWeek(1)}>›</button>

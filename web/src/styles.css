@@ -1589,8 +1589,9 @@ label.import-field-review,
   text-align: center;
 }
 .datebar-label {
-  font-size: 1rem;
-  font-weight: 650;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--muted);
   line-height: 1.25;
 }
 .datebar-badge {
@@ -1912,7 +1913,7 @@ label.import-field-review,
   .dashboard-page > .trends-panel {
     margin-top: clamp(0.75rem, 2vh, 1.75rem);
   }
-  .dashboard-page .page-layout-span.stack {
+  .home-page .page-layout-span.stack {
     gap: clamp(4px, 0.6vh, 8px);
   }
   .home-page .datebar {
