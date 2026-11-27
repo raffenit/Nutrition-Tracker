@@ -1573,10 +1573,16 @@ label.import-field-review,
   width: 44px;
   min-height: 44px;
   padding: 0;
-  font-size: 1.75rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--raise);
   border: 1px solid var(--line);
+}
+.datebar-arrow svg {
+  width: 1.4rem;
+  height: 1.4rem;
+  display: block;
 }
 .datebar-center {
   flex: 1;

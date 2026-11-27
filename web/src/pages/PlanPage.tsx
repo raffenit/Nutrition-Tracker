@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { RemoveButton } from '../components/RemoveButton';
-import { IconCopy, IconSave } from '../components/NavIcons';
+import { IconChevronLeft, IconChevronRight, IconCopy, IconSave } from '../components/NavIcons';
 import { formatDisplayDate } from '../dateFormat';
 import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
 import type { Food, ProteinTag } from '../types';
@@ -241,12 +241,12 @@ export function PlanPage() {
     <div className="page plan-page">
       <header className="plan-head">
         <div className="plan-head-row">
-          <button type="button" className="datebar-arrow" aria-label="Previous week" onClick={() => shiftWeek(-1)}>‹</button>
+          <button type="button" className="datebar-arrow" aria-label="Previous week" onClick={() => shiftWeek(-1)}><IconChevronLeft /></button>
           <div className="plan-head-title">
             <h1 className="page-title">{view === 'shop' ? 'Shopping List' : 'Meal Plan'}</h1>
             <p className="muted plan-range">{formatDisplayDate(weekStart, 'mdy_long')} – {formatDisplayDate(weekEndSunday(weekStart), 'mdy_long')}</p>
           </div>
-          <button type="button" className="datebar-arrow" aria-label="Next week" onClick={() => shiftWeek(1)}>›</button>
+          <button type="button" className="datebar-arrow" aria-label="Next week" onClick={() => shiftWeek(1)}><IconChevronRight /></button>
         </div>
         {view === 'week' && (
           <button type="button" className="settings-secondary-btn plan-generate-btn" onClick={() => setGenerateOpen(true)}>
