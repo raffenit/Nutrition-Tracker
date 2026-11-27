@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { DateFormat } from '../dateFormat';
 import { formatDisplayDate } from '../dateFormat';
 import { navigate, shiftDate } from '../nav';
+import { IconChevronLeft, IconChevronRight } from './NavIcons';
 
 type DateBarProps = { path: string; date: string; today: string; dateFormat: DateFormat; query?: string; leading?: ReactNode };
 
@@ -14,7 +15,7 @@ export function DateBar({ path, date, today, dateFormat, query, leading }: DateB
       {leading && <div className="datebar-leading">{leading}</div>}
       <div className="datebar-nav" role="group" aria-label="Choose day">
         <button type="button" className="datebar-arrow" aria-label="Previous day" onClick={() => navigate(`${base}${query ? '&' : '?'}date=${shiftDate(date, -1)}`)}>
-          ‹
+          <IconChevronLeft />
         </button>
         <div className="datebar-center">
           <time className="datebar-label" dateTime={date}>{label}</time>
@@ -27,7 +28,7 @@ export function DateBar({ path, date, today, dateFormat, query, leading }: DateB
           )}
         </div>
         <button type="button" className="datebar-arrow" aria-label="Next day" onClick={() => navigate(`${base}${query ? '&' : '?'}date=${shiftDate(date, 1)}`)}>
-          ›
+          <IconChevronRight />
         </button>
       </div>
     </header>

@@ -161,6 +161,24 @@ export function IconSave({ className }: IconProps) {
   );
 }
 
+/** Previous / back chevron */
+export function IconChevronLeft({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path {...stroke} d="M14.5 5.5 8 12l6.5 6.5" />
+    </svg>
+  );
+}
+
+/** Next / forward chevron */
+export function IconChevronRight({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path {...stroke} d="M9.5 5.5 16 12l-6.5 6.5" />
+    </svg>
+  );
+}
+
 export function IconTrash({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
