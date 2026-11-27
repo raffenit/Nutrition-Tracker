@@ -173,16 +173,24 @@ async function logFromEntry(ctx: Ctx): Promise<void> {
   if (!entry) throw new HttpError(404, 'Planned meal not found');
   const food = getFood(ctx.db, entry.foodId);
   if (!food) throw new HttpError(404, 'Food not found');
-  let eatenLocal = `${entry.localDate}T12:00`;
+  let body: unknown = null;
   try {
-    const body = await readJson(ctx.req);
-    if (isRecord(body) && typeof body.eatenAt === 'string') eatenLocal = body.eatenAt;
+    body = await readJson(ctx.req);
   } catch {
     /* empty body is fine */
   }
+  const record = isRecord(body) ? body : {};
+  let eatenLocal = `${entry.localDate}T12:00`;
+  if (typeof record.eatenAt === 'string') eatenLocal = record.eatenAt;
+  let servings = entry.servings;
+  if (record.servings !== undefined && record.servings !== null) {
+    const value = requiredNumber(record.servings, 'Servings');
+    if (value <= 0) throw new HttpError(400, 'Servings must be greater than zero');
+    servings = value;
+  }
   const zone = householdZone(ctx);
   const eatenAt = zonedToUtc(eatenLocal, zone);
-  const volume = drinkVolume(food, entry.slot, entry.servings, null);
+  const volume = drinkVolume(food, entry.slot, servings, null);
   insertMeal(ctx.db, {
     userId: user.id,
     foodId: food.id,
@@ -190,8 +198,8 @@ async function logFromEntry(ctx: Ctx): Promise<void> {
     slot: entry.slot,
     eatenAt,
     localDate: entry.localDate,
-    servings: entry.servings,
-    nutrients: roundNutrients(scaleNutrients(food.nutrients, entry.servings)),
+    servings,
+    nutrients: roundNutrients(scaleNutrients(food.nutrients, servings)),
     drinkMl: volume,
   });
   sendJson(ctx.res, 201, { ok: true, localDate: entry.localDate });

@@ -74,6 +74,7 @@ export function PlanPage() {
   const [dropDay, setDropDay] = useState<string | null>(null);
   const [moveEntry, setMoveEntry] = useState<PlanEntry | null>(null);
   const [editEntry, setEditEntry] = useState<PlanEntry | null>(null);
+  const [logEntry, setLogEntry] = useState<PlanEntry | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -337,7 +338,7 @@ export function PlanPage() {
                       <button
                         type="button"
                         className="library-action"
-                        onClick={() => void logFromPlan(entry, setError)}
+                        onClick={() => setLogEntry(entry)}
                       >
                         Log
                       </button>
@@ -576,6 +577,19 @@ export function PlanPage() {
           onSave={(slot, servings) => {
             void saveEntries(entries.map((row) => (row.id === editEntry.id ? { ...row, slot, servings } : row)));
             setEditEntry(null);
+          }}
+        />
+      )}
+
+      {logEntry && (
+        <LogPlanEntryDialog
+          entry={logEntry}
+          food={planFoods.find((item) => item.id === logEntry.foodId) ?? null}
+          saving={busy}
+          onClose={() => setLogEntry(null)}
+          onLog={(servings) => {
+            setLogEntry(null);
+            void logFromPlan(logEntry, servings, setError);
           }}
         />
       )}
@@ -1053,11 +1067,11 @@ function CookingDialog({ session, onClose }: { session: CookingSession; onClose:
   );
 }
 
-async function logFromPlan(entry: PlanEntry, setError: (value: string | null) => void): Promise<void> {
+async function logFromPlan(entry: PlanEntry, servings: number, setError: (value: string | null) => void): Promise<void> {
   try {
     await api(`/api/meal-plan/entries/${entry.id}/log`, {
       method: 'POST',
-      body: JSON.stringify({ eatenAt: nowLocalInput() }),
+      body: JSON.stringify({ eatenAt: nowLocalInput(), servings }),
     });
     navigate(`/?date=${entry.localDate}`);
   } catch (caught: unknown) {
@@ -1083,6 +1097,56 @@ function dayLabel(day: string, today: string): string {
 function formatServingsText(servings: number): string {
   const rounded = Math.round(servings * 100) / 100;
   return `${rounded} serving${rounded === 1 ? '' : 's'}`;
+}
+
+function LogPlanEntryDialog({
+  entry,
+  food,
+  saving,
+  onClose,
+  onLog,
+}: {
+  entry: PlanEntry;
+  food: Food | null;
+  saving: boolean;
+  onClose: () => void;
+  onLog: (servings: number) => void;
+}) {
+  const [servings, setServings] = useState(String(entry.servings));
+  const quantity = Number(servings);
+  const valid = Number.isFinite(quantity) && quantity > 0;
+  return (
+    <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
+      <div className="card plan-dialog" onClick={(event) => event.stopPropagation()}>
+        <h2>Log {entry.foodName}</h2>
+        <p className="muted">
+          Planned {formatServingsText(entry.servings)}
+          {food?.servingLabel ? ` · 1 serving ≈ ${food.servingLabel}` : ''}
+        </p>
+        <label>
+          Servings eaten
+          <input
+            type="number"
+            min={0.25}
+            step={0.25}
+            value={servings}
+            onChange={(event) => setServings(event.target.value)}
+          />
+        </label>
+        <div className="row plan-edit-actions">
+          <button
+            type="button"
+            className="primary"
+            disabled={!valid || saving}
+            onClick={() => onLog(quantity)}
+          >
+            Log
+          </button>
+          <button type="button" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function EditPlanEntryDialog({
