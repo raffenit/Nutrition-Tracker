@@ -190,6 +190,22 @@ test('meal plan save, grocery list, and log-from-entry', async () => {
     assert.equal(logged.status, 201);
     const dashboard = await api<{ totals: { calories: number } }>(port, `/api/dashboard?date=${day}`, { cookie });
     assert.equal(dashboard.body.totals.calories, 180);
+
+    const badServings = await api(port, `/api/meal-plan/entries/${entryId}/log`, {
+      method: 'POST',
+      cookie,
+      body: { eatenAt: `${day}T08:30`, servings: 0 },
+    });
+    assert.equal(badServings.status, 400);
+
+    const half = await api(port, `/api/meal-plan/entries/${entryId}/log`, {
+      method: 'POST',
+      cookie,
+      body: { eatenAt: `${day}T09:00`, servings: 0.5 },
+    });
+    assert.equal(half.status, 201);
+    const afterHalf = await api<{ totals: { calories: number } }>(port, `/api/dashboard?date=${day}`, { cookie });
+    assert.equal(afterHalf.body.totals.calories, 270);
   });
 });
 
