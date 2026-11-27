@@ -124,6 +124,7 @@ export function DashboardPage() {
     <>
     <div className="page dashboard-page home-page">
       <div className="page-layout-span stack">
+        <h1 className="page-title">Log</h1>
         {staleLabel && offline && <p className="muted">Cached dashboard · {staleLabel}</p>}
         <DateBar
           path="/"
@@ -132,7 +133,6 @@ export function DashboardPage() {
           dateFormat={day.targets.dateFormat ?? 'mdy_long'}
           leading={<HomeViewToggle view="me" date={date} />}
         />
-        <h1 className="page-title">Log</h1>
         {error && <p className="notice">{error}</p>}
         {day.weight.enabled && day.weight.reminderDue && !offline && (
           <WeightReminder unit={day.weight.unit} today={day.today} onDone={() => void load()} />

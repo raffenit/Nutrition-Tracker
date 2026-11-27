@@ -1902,6 +1902,7 @@ label.import-field-review,
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-gutter: stable;
+    align-content: start;
   }
   .dashboard-page {
     display: grid;
