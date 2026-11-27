@@ -323,7 +323,8 @@ a:hover { color: var(--accent-warm); }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .row.tight { gap: 6px; }
 label { display: grid; gap: 6px; margin: 8px 0; font-size: 0.9rem; }
-input, select {
+input:not([type="checkbox"]):not([type="radio"]),
+select {
   min-height: 44px;
   border-radius: 12px;
   border: 1px solid var(--line);
@@ -1308,14 +1309,18 @@ label.import-field-review,
 .cooking-ingredients,
 .cooking-steps { display: grid; gap: 0.5rem; align-content: start; }
 .cooking-scale-note { margin: 0; font-size: 0.82rem; }
-.cooking-ingredient-list {
+.cooking-ingredient-list,
+.cooking-step-list,
+.cooking-sub-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: 0;
 }
-.cooking-ingredient-list label {
+.cooking-sub-list { padding-left: 2.4rem; }
+.cooking-ingredient-list label,
+.cooking-step-row {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -1324,12 +1329,24 @@ label.import-field-review,
   cursor: pointer;
   line-height: 1.4;
 }
-.cooking-ingredient-list input[type='checkbox'] {
+.cooking-ingredient-list input[type='checkbox'],
+.cooking-step-list input[type='checkbox'] {
   flex-shrink: 0;
-  margin: 0.3em 0 0;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15em 0 0;
+  accent-color: var(--accent);
 }
+.cooking-step-num {
+  flex-shrink: 0;
+  min-width: 1.6em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cooking-step-text,
 .cooking-ingredient-text { min-width: 0; }
-.cooking-ingredient-list li.is-checked .cooking-ingredient-text {
+.cooking-ingredient-list li.is-checked .cooking-ingredient-text,
+.cooking-step-list li.is-checked .cooking-step-text {
   text-decoration: line-through;
   color: var(--muted);
 }

@@ -7,6 +7,7 @@ import { navigate, nowLocalInput, shiftDate, usePath } from '../nav';
 import type { Food, ProteinTag } from '../types';
 import { PROTEIN_TAGS } from '../types';
 import { scaledIngredientDisplay } from '../lib/ingredientLine';
+import { parseCookSteps } from '../lib/cookSteps';
 import { convertMeasure, convertibleUnitOptions, formatMeasureQty } from '../lib/measureUnits';
 import { weekDays, weekEndSunday, weekStartMonday } from '../weekPlan';
 
@@ -944,10 +945,25 @@ async function openCooking(
 
 function CookingDialog({ session, onClose }: { session: CookingSession; onClose: () => void }) {
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [checkedSteps, setCheckedSteps] = useState<Set<string>>(new Set());
+  const steps = useMemo(() => parseCookSteps(session.instructions), [session.instructions]);
   const scaled = session.ingredients.map((line) => scaledIngredientDisplay(line, session.factor));
+  // Checked ingredients sink to the bottom, preserving order within each group.
+  const orderedIngredients = scaled
+    .map((line, index) => ({ line, index }))
+    .sort((a, b) => Number(checked.has(a.index)) - Number(checked.has(b.index)));
   const scaledNote = session.plannedServings !== session.makesServings
     ? `Amounts shown for ${session.plannedServings} serving${session.plannedServings === 1 ? '' : 's'} (recipe makes ${session.makesServings}).`
     : null;
+
+  function toggleStep(key: string, on: boolean): void {
+    setCheckedSteps((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }
   return (
     <div className="plan-dialog-backdrop" role="presentation" onClick={onClose}>
       <div className="card plan-dialog cooking-dialog" onClick={(event) => event.stopPropagation()}>
@@ -958,7 +974,7 @@ function CookingDialog({ session, onClose }: { session: CookingSession; onClose:
             <h3 className="form-section-title">Ingredients</h3>
             {scaledNote && <p className="muted cooking-scale-note">{scaledNote}</p>}
             <ul className="cooking-ingredient-list">
-              {scaled.map((line, index) => (
+              {orderedIngredients.map(({ line, index }) => (
                 <li key={index} className={checked.has(index) ? 'is-checked' : undefined}>
                   <label>
                     <input
@@ -984,10 +1000,50 @@ function CookingDialog({ session, onClose }: { session: CookingSession; onClose:
             </ul>
           </section>
         )}
-        {session.instructions && (
+        {steps.length > 0 && (
           <section className="cooking-steps">
             <h3 className="form-section-title">Instructions</h3>
-            <pre className="cooking-instructions">{session.instructions}</pre>
+            <ol className="cooking-step-list">
+              {steps.map((step, stepIndex) => {
+                const stepKey = `step-${stepIndex}`;
+                const done = checkedSteps.has(stepKey);
+                return (
+                  <li key={stepKey} className={done ? 'is-checked' : undefined}>
+                    <label className="cooking-step-row">
+                      <input
+                        type="checkbox"
+                        checked={done}
+                        onChange={(event) => toggleStep(stepKey, event.target.checked)}
+                      />
+                      <span className="cooking-step-num">{stepIndex + 1}.</span>
+                      <span className="cooking-step-text">{step.text}</span>
+                    </label>
+                    {step.subs.length > 0 && (
+                      <ul className="cooking-sub-list">
+                        {step.subs.map((sub, subIndex) => {
+                          const subKey = `${stepKey}-${subIndex}`;
+                          const subDone = checkedSteps.has(subKey);
+                          const letter = subIndex < 26 ? String.fromCharCode(97 + subIndex) : String(subIndex + 1);
+                          return (
+                            <li key={subKey} className={subDone ? 'is-checked' : undefined}>
+                              <label className="cooking-step-row">
+                                <input
+                                  type="checkbox"
+                                  checked={subDone}
+                                  onChange={(event) => toggleStep(subKey, event.target.checked)}
+                                />
+                                <span className="cooking-step-num">{stepIndex + 1}{letter}</span>
+                                <span className="cooking-step-text">{sub}</span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
           </section>
         )}
         </div>
