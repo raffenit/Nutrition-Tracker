@@ -70,8 +70,10 @@ export function FamilyBoard({ kiosk, datePath, query, leading }: { kiosk: boolea
 
   return (
     <>
-      <h1 className="page-title">{familyPageTitle(board.householdName, monthLabel)}</h1>
-      <DateBar path={datePath} query={query} leading={leading} date={board.date} today={board.today} dateFormat={board.dateFormat} />
+      <div className="page-layout-span stack">
+        <h1 className="page-title">{familyPageTitle(board.householdName, monthLabel)}</h1>
+        <DateBar path={datePath} query={query} leading={leading} date={board.date} today={board.today} dateFormat={board.dateFormat} />
+      </div>
       <FamilySummary members={board.members} />
       <div className="grid family-member-grid">
         {board.members.map((member) => {
